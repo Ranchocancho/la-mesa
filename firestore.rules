@@ -72,6 +72,19 @@ service cloud.firestore {
         allow update: if isEditor(c) || (isMember(c) && resource.data.owner == request.auth.uid
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['c', 'r', 'init', 'conds', 'fx']));
       }
+      // Crónica: todos la leen; cada uno escribe y corrige sus notas; el máster puede corregir todas.
+      match /chronicle/{e} {
+        allow read: if isMember(c);
+        allow create: if isMember(c) && request.resource.data.by == request.auth.uid;
+        allow update, delete: if isEditor(c) || (isMember(c) && resource.data.by == request.auth.uid);
+      }
+      // Tiradas: todos las ven; cada uno publica las suyas; el máster las confirma, cambia o anula.
+      match /rolls/{r} {
+        allow read: if isMember(c);
+        allow create: if isMember(c) && request.resource.data.who == request.auth.uid;
+        allow update: if isEditor(c);
+        allow delete: if isEditor(c) || (isMember(c) && resource.data.who == request.auth.uid);
+      }
       match /secrets/{s} {
         allow read, write: if isEditor(c);
       }

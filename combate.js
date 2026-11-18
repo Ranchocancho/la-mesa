@@ -1,0 +1,69 @@
+// Combate: ataques contra un objetivo, daño y la decisión del máster (confirmar, cambiar o anular).
+import { store } from "./store.js";
+import { isDM } from "./session.js";
+import { publish } from "./dados.js";
+import { charOf, applyHP } from "./mesa.js";
+import { findSpell } from "./srd.js";
+import { classInfo, prof } from "../data/dnd.js";
+
+const num = s => { const m = String(s || "").match(/[+-−]?\s*\d+/); return m ? +m[0].replace(/\s|−/g, s => s === "−" ? "-" : "") : 0; };
+/** "1d8+4 perforante" → { expr: "1d8+4", type: "perforante" } */
+export function splitDamage(s) {
+  const m = String(s || "").trim().match(/^([0-9d+\-−\s]+)(.*)$/i);
+  return m ? { expr: m[1].replace(/\s/g, "").replace(/−/g, "-"), type: m[2].trim() } : { expr: "", type: String(s || "") };
+}
+export const nameOf = (s, t) => t ? (charOf(s, t) || t).name : "";
+export const acOf = (s, t) => { const c = charOf(s, t); return c ? +c.ac : +t.ac || 10; };
+
+/** Ataques disponibles para una ficha: armas del personaje o ataques del enemigo. */
+export function attacksOf(s, t) {
+  const c = charOf(s, t);
+  const list = c ? (c.weapons || []) : (t.attacks || []);
+  const out = list.filter(w => w.name || w.atk || w.dmg).map(w => ({ name: w.name || "Ataque", atk: num(w.atk), ...splitDamage(w.dmg) }));
+  // Conjuros preparados con tirada de ataque (del compendio): ataque = competencia + característica de lanzamiento
+  if (c) {
+    const ab = classInfo(c.cls).cast, bonus = ab ? prof(c.level) + Math.floor(((+c.abilities[ab] || 10) - 10) / 2) : 0;
+    for (const s of (c.spells && c.spells.list) || []) {
+      const d = s.prepared !== false && findSpell(s.name);
+      if (d && d.atk && d.dmg) out.push({ name: "✨ " + d.n, atk: bonus, expr: d.dmg, type: d.dt, spell: true });
+    }
+  }
+  return out;
+}
+
+export function attack(attackerId, targetId, weapon, adv = 0) {
+  const s = store.get(), a = s.tokens.find(t => t.id === attackerId), t = s.tokens.find(x => x.id === targetId);
+  if (!a || !t) return null;
+  return publish({
+    kind: "attack", label: `${nameOf(s, a)} ataca a ${nameOf(s, t)} · ${weapon.name}`, expr: `1d20${weapon.atk >= 0 ? "+" : ""}${weapon.atk}`,
+    adv, by: a.id, target: t.id, ac: acOf(s, t), dmg: weapon.expr, dtype: weapon.type
+  });
+}
+
+/** Tira el daño de un ataque que ha impactado (crítico: dados dobles). */
+export function damageFor(rollId) {
+  const s = store.get(), r = (s.rolls || []).find(x => x.id === rollId);
+  if (!r || !r.dmg) return null;
+  const a = s.tokens.find(t => t.id === r.tok), t = s.tokens.find(x => x.id === r.target);
+  return publish({ kind: "damage", label: `Daño a ${nameOf(s, t)}${r.dtype ? " · " + r.dtype : ""}`, expr: r.dmg, crit: r.result === "crit", by: r.tok, target: r.target, link: r.id, dtype: r.dtype });
+}
+
+/** El máster decide sobre una tirada. action: "ok" | "void" | "flip" (impacto↔fallo) | {total} | "half" (daño a la mitad) */
+export function decide(rollId, action) {
+  if (!isDM(store.get())) return;
+  let apply = null;
+  store.commit("roll", s => {
+    const r = (s.rolls || []).find(x => x.id === rollId); if (!r) return;
+    if (action === "void") { r.status = "void"; return; }
+    if (action === "flip") { r.result = r.result === "miss" ? "hit" : "miss"; r.status = "mod"; r.note = "El máster cambia el resultado"; return; }
+    if (typeof action === "object" && action.total != null) { r.note = `El máster cambia ${r.total} → ${action.total}`; r.total = action.total; r.status = "mod"; if (r.kind === "attack" && r.ac != null) r.result = r.nat === 20 ? "crit" : r.total >= r.ac ? "hit" : "miss"; return; }
+    if (r.kind === "damage" && !r.applied) {
+      const amt = action === "half" ? Math.floor(r.total / 2) : r.total;
+      r.applied = amt; r.status = action === "half" ? "mod" : "ok"; if (action === "half") r.note = "Mitad de daño";
+      apply = { target: r.target, amt };
+      return;
+    }
+    r.status = r.status === "pending" ? "ok" : r.status;
+  });
+  if (apply) applyHP(apply.target, -apply.amt);
+}

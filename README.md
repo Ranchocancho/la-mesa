@@ -99,3 +99,23 @@ js/views/             una vista por sección (acceso.js: entrar y elegir campañ
 - **Estados (reglas 2024):** agarrado, apresado, asustado, aturdido, cegado, derribado, ensordecido, envenenado, hechizado, incapacitado, inconsciente, invisible, paralizado, petrificado, agotamiento (con nivel 1–6) y concentración. Cada uno con su **anillo de color en la peana** (como los anillos de estado de las mesas reales), **etiqueta escrita** sobre la figura, punto de color en la iniciativa y su explicación en la mini-ficha. Derribado tumba la figura, invisible la vuelve translúcida y petrificado la vuelve gris. Los pone el máster o el propio jugador en su personaje.
 - **Efectos de conjuro:** bola de fuego, proyectil mágico, relámpago, rayo de escarcha, llama sagrada, curar heridas, escudo y onda atronadora. Se lanzan desde la mini-ficha eligiendo el objetivo en la mesa (con el área marcada); los ven todos y las figuras hacen la animación de lanzar. Con efectos de área, el máster recibe la lista de afectados para aplicar el daño completo o la mitad.
 - **Niebla de guerra y oscuridad** (botón «Niebla» del máster): el grupo ve lo que alcanzan sus personajes en pie; los muros tapan la visión. De noche solo se ve lo iluminado (antorchas, hogueras, velas) o lo que alcanza la visión en la oscuridad de cada personaje (nuevo campo en la ficha, con valor por defecto según la especie). Lo ya explorado queda en penumbra; lo no explorado, oculto. Funciona también en la vista 2D.
+
+## Hito 6 · Puertas, sonido y crónica
+
+- **Puertas:** cerradas tapan la visión (y la luz) y los jugadores no pueden entrar en su casilla; el máster las abre o cierra con un clic en la mesa 3D.
+- **Sonido generado en el navegador** (sin archivos): ambientes de lluvia, viento, hoguera, mazmorra, bosque y taberna, que elige el máster y suenan a todos; golpes, caídas, puertas y un sonido para cada conjuro. Cada uno controla su volumen o lo silencia. Cada escena de ejemplo trae su ambiente.
+- **Crónica:** durante la partida cualquiera anota lo que pasa (barra inferior de la Partida o pestaña Crónica). Al cerrar la sesión, el resumen se rellena con esas notas y el máster **reparte la experiencia** a cada personaje con su motivo («A todos» para ir rápido). La crónica guarda resúmenes, notas y PX de cada sesión, y todo se puede corregir después.
+
+## Hito 7 · Reglas en español, dados y combate
+
+- **Reglas (nueva pestaña):** el SRD 5.2.1 oficial en español completo.
+  - **Libro de reglas** por capítulos (Cómo jugar, Creación de personajes, Clases, Trasfondos y especies, Dotes, Equipo, Conjuros, Glosario, Herramientas del máster, Objetos mágicos, Monstruos, Animales) con buscador en las 398 páginas.
+  - **Conjuros** (339) con filtros por nivel y clase.
+  - **Monstruos** (320) con su perfil: CA, PG, velocidad, características, ataques y perfil completo. El máster los pone en la mesa con un clic (o en una escena preparada desde el editor de Escenas).
+- **Medidas en metros**, como el manual en español: 1,5 m por casilla.
+- **Dados 3D** que ruedan sobre la mesa junto a quien tira (d4, d6, d8, d10, d12, d20 y d100), con sonido.
+- **Tabla de tiradas compartida** (pestaña 🎲 Tiradas junto a la iniciativa, o botón en la Partida): todos ven cada tirada con sus dados; los ataques y el daño quedan **pendientes del máster**, que puede confirmar, cambiar impacto↔fallo, corregir el total o anular. Bandeja de dados con modificador, ventaja/desventaja, expresiones libres y tiradas secretas del máster.
+- **Combate:** el jugador toca un enemigo (objetivo) y pulsa ⚔️ Atacar con su arma o conjuro de ataque preparado; la app tira contra la CA (20 natural = crítico, 1 = fallo), el máster confirma, el jugador tira el daño (dados dobles en crítico) y al confirmarlo se resta de los PG. Los enemigos atacan con sus ataques del manual eligiendo objetivo.
+- **Desde la ficha:** pulsar en una característica, salvación o habilidad tira el dado. Los conjuros se eligen del compendio (📖 para leerlos). Iniciativa con 🎲 en la columna de iniciativa.
+
+Los datos de `js/data/srd/` se generan con `tools/srd_pages.py` y `tools/srd_parse.py` a partir del PDF oficial del SRD 5.2.1 en español.
