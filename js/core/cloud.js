@@ -232,7 +232,8 @@ function push(state) {
   const me = cloud.user.uid;
   const all = docsOf(state, true);
   // El administrador y los másteres guardan todo; un jugador solo puede tocar su propia ficha.
-  const allowed = (k, v) => cloud.isEditor || ((k.startsWith("characters/") || k.startsWith("tokens/")) && v && v.owner === me) || (k.startsWith("chronicle/") && v && v.by === me) || (k.startsWith("rolls/") && v && v.who === me);
+  const lb = last.get("board/live"), lastTurn = lb ? (o => JSON.stringify([o.turn, o.round, o.seq]))(JSON.parse(lb)) : "";
+  const allowed = (k, v) => cloud.isEditor || ((k.startsWith("characters/") || k.startsWith("tokens/")) && v && v.owner === me) || (k.startsWith("chronicle/") && v && v.by === me) || (k.startsWith("rolls/") && v && v.who === me) || (k === "board/live" && lastTurn !== JSON.stringify([v.turn, v.round, v.seq]));
   const ref = k => k === "C" ? fb.doc(db, "campaigns", cloud.cid) : fb.doc(db, "campaigns", cloud.cid, ...k.split("/"));
   const batch = fb.writeBatch(db);
   let n = 0;

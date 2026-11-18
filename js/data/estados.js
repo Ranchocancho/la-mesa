@@ -16,6 +16,8 @@ export const ESTADOS = [
   { id: "paralizado", n: "Paralizado", c: "#3a8ad6", t: "Incapacitado y velocidad 0. Fallas salvaciones de Fuerza y Destreza. Ataques contra ti con ventaja; crítico a 1,5 m." },
   { id: "petrificado", n: "Petrificado", c: "#8c8c8c", t: "Convertido en piedra: incapacitado, velocidad 0, resistencia a todo el daño, inmune a veneno. Ataques contra ti con ventaja." },
   { id: "agotamiento", n: "Agotamiento", c: "#b33a2e", t: "Por cada nivel: −2 a las tiradas d20 y −1,5 m de velocidad. A nivel 6 mueres. Un descanso largo quita un nivel.", levels: 6 },
+  { id: "esquivando", n: "Esquivando", c: "#e8e2d0", t: "Acción de Esquivar: los ataques contra ti tienen desventaja y tienes ventaja en las salvaciones de Destreza, hasta el principio de tu siguiente turno." },
+  { id: "destrabado", n: "Destrabado", c: "#a0d0c0", t: "Acción de Destrabarse: tu movimiento no provoca ataques de oportunidad durante el resto del turno." },
   { id: "concentracion", n: "Concentración", c: "#d6aa4e", t: "Mantiene un conjuro. Al recibir daño, salvación de Constitución (CD 10 o la mitad del daño, la mayor) o se pierde." }
 ];
 export const estado = id => ESTADOS.find(e => e.id === id);

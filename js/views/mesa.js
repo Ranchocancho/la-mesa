@@ -2,7 +2,7 @@
 import { store } from "../core/store.js";
 import { isDM, currentUser } from "../core/session.js";
 import { createBoard, healthWord } from "./tablero.js";
-import { hpOf, charOf, order, rollFoes, startCombat, nextTurn, endCombat, applyHP } from "../core/mesa.js";
+import { hpOf, charOf, order, applyHP } from "../core/mesa.js";
 import { $, $$, esc, pickFile, toast } from "../core/ui.js";
 import { putImage, readImageFile } from "../core/images.js";
 import { SILUETAS } from "../data/siluetas.js";
@@ -11,19 +11,22 @@ import { EFECTOS } from "../data/efectos.js";
 import { computeVision, explored } from "../core/vision.js";
 import { renderRolls, visibleRolls } from "./tiradas.js";
 import { attacksOf, attack, acOf, nameOf } from "../core/combate.js";
+import { phase, current, pending, beginCombat, rollInit, startRounds, endTurn, stopCombat, eco, moveBudget, speedOf, spend, toggle, ACCIONES, rangeOf, inRange, cover, modifiers, dist, metres } from "../core/turnos.js";
+import { srd } from "../core/srd.js";
 import { publish } from "../core/dados.js";
 
 // Nombres de las miniaturas 3D (los modelos están en assets/kaykit/minis)
 export const MINI_NAMES = { peana: "Peana de cartón", Skeleton_Minion: "Esqueleto", Skeleton_Warrior: "Esqueleto guerrero", Skeleton_Rogue: "Esqueleto pícaro", Skeleton_Mage: "Esqueleto mago", Knight: "Caballero", Barbarian: "Bárbaro", Mage: "Mago", Rogue: "Pícaro", Rogue_Hooded: "Encapuchado" };
 
 let want3d = true;
-let editOpen = false, condPick = null, lastArea = null, sideTab = "ini", atkAdv = 0, dmTarget = null;
+let editOpen = false, condPick = null, lastArea = null, sideTab = "ini", atkAdv = null, dmTarget = null, atkIdx = 0, ruleOpen = null, lastTurnSeen = null;
+let GLOS = null; srd("glosario").then(g => (GLOS = g));
 let hudOpen = !(window.matchMedia && window.matchMedia("(max-width: 900px)").matches);
 
 export function mountTactical(host, opts = {}) {
   host.innerHTML = `<div class="tactical"><div class="boardwrap"></div><aside class="sidecol"><div class="sidetabs" role="tablist"><button role="tab" data-side="ini">Iniciativa</button><button role="tab" data-side="tir">🎲 Tiradas</button></div><div class="initcol" aria-label="Iniciativa"></div><div class="rollcol" hidden></div></aside><div class="hud"></div>
-    <button class="btn small viewtoggle" id="v3d" title="Cambiar entre la mesa en 3D y el plano en 2D"></button></div>`;
-  const bw = $(".boardwrap", host), ini = $(".initcol", host), hud = $(".hud", host), rc = $(".rollcol", host);
+    <button class="btn small viewtoggle" id="v3d" title="Cambiar entre la mesa en 3D y el plano en 2D"></button><div class="turnbar" hidden></div><div class="turnbanner" hidden></div></div>`;
+  const bw = $(".boardwrap", host), ini = $(".initcol", host), hud = $(".hud", host), rc = $(".rollcol", host), tb = $(".turnbar", host), banner = $(".turnbanner", host);
   const sideShow = () => { $$("[data-side]", host).forEach(b => b.setAttribute("aria-selected", b.dataset.side === sideTab)); ini.hidden = sideTab !== "ini"; rc.hidden = sideTab !== "tir"; if (sideTab === "tir") renderRolls(rc); };
   $$("[data-side]", host).forEach(b => b.onclick = () => { sideTab = b.dataset.side; sideShow(); });
   let rollsSeen = (store.get().rolls || []).length;
@@ -33,8 +36,22 @@ export function mountTactical(host, opts = {}) {
   const bopts = {
     model: () => ({ grid: S().board, tokens: S().tokens }),
     dm: isDM(S()), edit: !!opts.edit && isDM(S()),
-    canMove: t => isDM(S()) || (!!t.owner && t.owner === me()),
-    mutate: (label, fn) => store.commit(label === "token" ? "token" : "board", s => fn({ grid: s.board, tokens: s.tokens })),
+    // En combate, cada uno mueve su figura solo en su turno; el máster, siempre
+    canMove: t => isDM(S()) || (!!t.owner && t.owner === me() && (phase(S()) !== "live" || S().board.turn === t.id)),
+    mutate: (label, fn) => {
+      let warn = null;
+      store.commit(label === "token" ? "token" : "board", s => {
+        const before = new Map(s.tokens.map(t => [t.id, { c: t.c, r: t.r }]));
+        fn({ grid: s.board, tokens: s.tokens });
+        // Movimiento en combate: se descuenta de la velocidad de quien tiene el turno
+        if (phase(s) === "live") for (const t of s.tokens) {
+          const o = before.get(t.id); if (!o || (o.c === t.c && o.r === t.r) || s.board.turn !== t.id) continue;
+          const e = eco(s, t); e.mov = Math.round((e.mov + dist(o, t) * 1.5) * 10) / 10; t.eco = e;
+          if (e.mov > moveBudget(s, t) + 0.01) warn = `${nameOf(s, t)} se ha movido ${metres(e.mov / 1.5)} de ${metres(moveBudget(s, t) / 1.5)}: supera su velocidad`;
+        }
+      });
+      if (warn) toast(warn);
+    },
     decorate: t => { const c = charOf(S(), t); return { ...(c ? { name: c.name, color: c.color, portrait: c.portrait } : {}), isTurn: S().board.turn === t.id }; },
     hpOf: t => hpOf(S(), t),
     onSelect: id => { sel = id; drawHud(); },
@@ -43,6 +60,7 @@ export function mountTactical(host, opts = {}) {
     setFog: v => store.commit("board", st => { st.board.fog = v; }),
     setSound: v => store.commit("board", st => { st.board.sound = v; }),
     rolls: () => visibleRolls(S()),
+    aim: () => aimInfo(),
     rollColor: r => { const t = S().tokens.find(x => x.id === r.tok), c = t && charOf(S(), t); const u = S().users.find(x => x.id === r.who); return (c && c.color) || (u && u.role !== "player" ? "#6a3fb0" : (u && u.color) || "#8a2be2"); },
     fogState: () => { const s = S(); if (isDM(s) || !s.board.fog) return null; const vis = computeVision(s.board, s.tokens, s.characters); return { vis, exp: explored((s.board.scene || "mesa") + "", vis) }; },
     setAmbient: k => store.commit("board", st => { st.board.ambient = k; })
@@ -59,34 +77,84 @@ export function mountTactical(host, opts = {}) {
   $("#v3d", host).onclick = () => { want3d = !want3d; mountBoard(); };
   mountBoard();
 
+  // Quién actúa: el jugador, su personaje; el máster, la criatura del turno (o el enemigo que tenga seleccionado)
+  function actorTok() {
+    const s = S(), dm = isDM(s), cur = current(s);
+    if (!dm) return s.tokens.find(t => t.kind === "pc" && t.owner === me());
+    if (cur && cur.kind !== "pc") return cur;
+    const st = s.tokens.find(t => t.id === sel); return st && st.kind !== "pc" ? st : cur;
+  }
+  function aimInfo() {
+    const s = S(), a = actorTok(), t = s.tokens.find(x => x.id === (isDM(s) && a && a.kind !== "pc" ? dmTarget || sel : sel));
+    if (!a || !t || a.id === t.id) return null;
+    const list = attacksOf(s, a), w = list[Math.min(atkIdx, list.length - 1)];
+    const rng = w ? w.rng : { n: 1.5, l: 1.5 }, st = inRange(rng, a, t), cv = cover(s, a, t);
+    const col = cv.level === "total" || st === "out" ? "#c4513f" : st === "long" || cv.level ? "#d6aa4e" : "#7ec850";
+    const txt = `${metres(dist(a, t))}${w ? ` · ${w.name.replace("✨ ", "")}: ${st === "ok" ? "al alcance" : st === "long" ? "alcance largo" : "fuera de alcance"}` : ""}${cv.level ? ` · ${cv.level === "total" ? "cobertura total" : "cobertura " + cv.level}` : ""}`;
+    return { from: a.id, to: t.id, color: col, label: txt };
+  }
+
   function drawInit() {
-    const s = S(), dm = isDM(s), b = s.board;
+    const s = S(), dm = isDM(s), b = s.board, ph = phase(s), cur = current(s);
     const vis = t => dm || !t.hidden;
     const o = order(s).filter(vis), rest = s.tokens.filter(t => vis(t) && !o.includes(t));
     const name = t => esc((charOf(s, t) || t).name);
     const row = t => {
       const h = hpOf(s, t), mine = t.owner && t.owner === me(), turn = b.turn === t.id;
       const state = !h ? "" : (dm || t.kind === "pc") ? `${h.cur}/${h.max}` : healthWord(h.cur, h.max);
-      const editable = dm || mine;
+      const showInit = dm || t.kind === "pc" || ph === "live";
       return `<div class="inirow ${turn ? "turn" : ""} ${h && h.cur <= 0 ? "down" : ""} ${t.kind}" data-sel="${t.id}">
-        ${mine && t.init == null ? `<button class="ininum inibtn" data-iroll="${t.id}" title="Tirar iniciativa">🎲</button>` : editable ? `<input type="number" class="ininum" data-init="${t.id}" value="${t.init ?? ""}" placeholder="–" aria-label="Iniciativa de ${name(t)}">` : `<b class="ininum">${t.init ?? "–"}</b>`}
+        ${mine && t.init == null && ph ? `<button class="ininum inibtn" data-iroll="${t.id}" title="Tirar iniciativa">🎲</button>` : dm ? `<input type="number" class="ininum" data-init="${t.id}" value="${t.init ?? ""}" placeholder="–" aria-label="Iniciativa de ${name(t)}">` : `<b class="ininum">${showInit ? t.init ?? "–" : "?"}</b>`}
         <span class="ininame">${turn ? "▶ " : ""}${name(t)}${t.hidden ? ` <small>(oculto)</small>` : ""}</span><small class="inistate">${state}${(t.conds || []).map(cd => { const e = estado(cd.id); return e ? ` <i class="cdot" style="background:${e.c}" title="${esc(etiqueta(cd.id, cd.lvl))}"></i>` : ""; }).join("")}</small></div>`;
     };
-    ini.innerHTML = `<h2 class="sec">Iniciativa${b.round ? ` · ronda ${b.round}` : ""}</h2>
-      <div class="inilist">${o.map(row).join("")}${rest.length ? `<div class="inisep">Sin tirar</div>${rest.map(row).join("")}` : ""}</div>
-      ${dm ? `<div class="inibtns">
-        <button class="btn small" id="iroll">Tirar enemigos</button>
-        ${b.turn ? `<button class="btn gold small" id="inext">Siguiente turno</button><button class="btn small" id="iend">Terminar combate</button>` : `<button class="btn gold small" id="istart" ${o.length ? "" : "disabled"}>Empezar combate</button>`}
-      </div>` : `<p class="note" style="margin:8px 0 0">Escribe tu tirada de iniciativa junto a tu personaje.</p>`}`;
+    const missing = pending(s);
+    const step = !ph ? `<div class="phase"><b>Fuera de combate</b><span>Movimiento libre. Cuando empiece la pelea, el máster inicia el combate.</span></div>`
+      : ph === "init" ? `<div class="phase init"><b>⚔️ ¡Combate! Tirad iniciativa</b><span>${missing.length ? `Faltan: ${missing.map(t => esc(nameOf(s, t))).join(", ")}` : "Todos han tirado. El máster empieza la ronda 1."}</span></div>`
+      : `<div class="phase live"><b>Ronda ${b.round}</b><span>Turno de <strong>${esc(cur ? nameOf(s, cur) : "")}</strong></span></div>`;
+    ini.innerHTML = `${step}
+      <div class="inilist">${o.map(row).join("")}${rest.length ? `<div class="inisep">${ph ? "Sin iniciativa" : "En la mesa"}</div>${rest.map(row).join("")}` : ""}</div>
+      <div class="inibtns">
+        ${dm && !ph ? `<button class="btn gold" id="cbegin">⚔️ Iniciar combate</button>` : ""}
+        ${dm && ph === "init" ? `<button class="btn gold" id="cstart">${missing.length ? "Empezar igualmente" : "▶ Empezar ronda 1"}</button>` : ""}
+        ${ph === "live" && cur && (dm || cur.owner === me()) ? `<button class="btn gold" id="cnext">Terminar turno ▶</button>` : ""}
+        ${dm && ph ? `<button class="btn small" id="cstop">Terminar combate</button>` : ""}
+      </div>`;
     $$("[data-init]", ini).forEach(i => i.onchange = () => store.commit("token", st => { const t = st.tokens.find(x => x.id === i.dataset.init); if (t) t.init = i.value === "" ? null : +i.value; }));
-    $$("[data-iroll]", ini).forEach(b => b.onclick = e => {
-      e.stopPropagation(); const t = S().tokens.find(x => x.id === b.dataset.iroll), c = charOf(S(), t), m = c ? Math.floor(((+c.abilities.des || 10) - 10) / 2) : 0;
-      const r = publish({ kind: "init", expr: `1d20${m >= 0 ? "+" : ""}${m}`, label: `Iniciativa de ${c ? c.name : t.name}`, by: t.id });
-      store.commit("token", st => { const k = st.tokens.find(x => x.id === t.id); if (k) k.init = r.total; });
-    });
-    $$("[data-sel]", ini).forEach(r => r.onclick = e => { if (e.target.tagName !== "INPUT" && board) board.select(r.dataset.sel); });
+    $$("[data-iroll]", ini).forEach(b => b.onclick = e => { e.stopPropagation(); rollInit(b.dataset.iroll); });
+    $$("[data-sel]", ini).forEach(r => r.onclick = e => { if (e.target.tagName !== "INPUT" && e.target.tagName !== "BUTTON" && board) board.select(r.dataset.sel); });
     const on = (id, fn) => { const x = $("#" + id, ini); if (x) x.onclick = fn; };
-    on("iroll", rollFoes); on("istart", startCombat); on("inext", nextTurn); on("iend", endCombat);
+    on("cbegin", () => { beginCombat(); toast("¡Combate! Todos tiran iniciativa"); });
+    on("cstart", startRounds); on("cnext", endTurn);
+    on("cstop", () => { const x = $("#cstop", ini); if (!x.dataset.sure) { x.dataset.sure = 1; x.textContent = "¿Seguro? Pulsa otra vez"; return; } stopCombat(); });
+    drawTurnBar();
+  }
+
+  // Cola de turnos sobre la mesa y aviso de cambio de turno
+  function drawTurnBar() {
+    const s = S(), ph = phase(s), cur = current(s), dm = isDM(s);
+    const mine = s.tokens.find(t => t.kind === "pc" && t.owner === me());
+    if (ph === "init" && mine && mine.init == null) {
+      tb.hidden = false;
+      tb.innerHTML = `<div class="tbinit"><b>⚔️ ¡Combate!</b> Tira tu iniciativa <button class="btn gold" data-iroll2="${mine.id}">🎲 Tirar iniciativa</button></div>`;
+      $("[data-iroll2]", tb).onclick = () => rollInit(mine.id);
+      return;
+    }
+    if (ph !== "live" || !cur) { tb.hidden = true; return; }
+    const o = order(s).filter(t => (dm || !t.hidden) && !(hpOf(s, t) && hpOf(s, t).cur <= 0 && t.kind !== "pc"));
+    const i = Math.max(0, o.findIndex(t => t.id === cur.id)), seq = [...o.slice(i), ...o.slice(0, i)];
+    tb.hidden = false;
+    tb.innerHTML = `<span class="tbround">Ronda ${s.board.round}</span>${seq.map((t, k) => { const c = charOf(s, t); return `<span class="tbchip ${t.kind} ${k === 0 ? "now" : ""}" title="${esc(nameOf(s, t))}"><i style="background:${(c || t).color || "#777"}">${esc(((c || t).name || "?").split(/\s+/).map(w => w[0]).slice(0, 2).join("").toUpperCase())}</i>${k === 0 ? `<em>${esc(nameOf(s, t))}</em>` : ""}</span>`; }).join("")}`;
+    if (s.board.seq !== lastTurnSeen) {
+      const first = lastTurnSeen === null; lastTurnSeen = s.board.seq;
+      if (!first) {
+        const mineNow = cur.owner === me();
+        banner.textContent = mineNow ? "¡Es tu turno!" : `Turno de ${nameOf(s, cur)}`;
+        banner.className = "turnbanner" + (mineNow ? " mine" : ""); banner.hidden = false;
+        clearTimeout(banner._h); banner._h = setTimeout(() => (banner.hidden = true), 2200);
+        if (mineNow) import("../core/sonido.js").then(m => m.sound.play("holy"));
+        if (board && board.select && mineNow) { sel = null; }
+      }
+    }
   }
 
   function drawHud() {
@@ -102,13 +170,14 @@ export function mountTactical(host, opts = {}) {
         <div class="hudmeta">${exact ? `CA ${c ? c.ac : t.ac}` : ""}${c ? ` · ${esc(c.cls)} ${c.level}` : ""}</div>
         ${canHurt && h ? `<div class="hpquick"><input type="number" min="0" placeholder="0" data-amt="${t.id}" aria-label="Cantidad"><button class="btn small danger" data-hurt="${t.id}">Daño</button><button class="btn small" data-heal="${t.id}">Curar</button></div>` : ""}
         ${condBlock(t, canHurt)}
-        ${atkBlock(s, t, canHurt)}
+        ${atkBlock(s, t, canHurt, sel)}
         ${canHurt && board && board.pick ? `<details class="castbox"><summary>✨ Lanzar efecto</summary><div class="castlist">${Object.entries(EFECTOS).map(([k, e]) => `<button class="btn small" data-cast="${t.id}|${k}" title="${e.hint || ""}">${e.n}</button>`).join("")}</div></details>` : ""}
         ${dm && t.kind !== "pc" ? `<details class="tkdetails" ${editOpen ? "open" : ""}><summary>Editar ${t.kind === "npc" ? "PNJ" : "enemigo"}</summary>${tokenEditor(t)}</details>` : ""}</div>`;
     };
     hud.classList.toggle("open", hudOpen);
+    const act = actorTok(), cur = current(s), myTurn = phase(s) === "live" && cur && (cur.owner === me() || (dm && cur.kind !== "pc"));
     hud.innerHTML = `<button class="hudtoggle" id="hudt" aria-expanded="${hudOpen}">${hudOpen ? "▾ Ocultar" : "▸ Ficha y objetivo"}</button>
-      ${hudOpen ? `<div class="hudbody">${areaBlock(s)}${mineT ? card(mineT, "Tu personaje") : ""}${target && target !== mineT ? card(target, "Objetivo") : ""}${!mineT && !target ? `<p class="empty">Toca una ficha para ver sus datos.</p>` : ""}</div>` : ""}`;
+      ${hudOpen ? `<div class="hudbody">${myTurn ? turnCard(s, cur) : ""}${areaBlock(s)}${mineT ? card(mineT, "Tu personaje") : ""}${target && target !== mineT ? card(target, "Objetivo") : ""}${!mineT && !target ? `<p class="empty">Toca una ficha para ver sus datos.</p>` : ""}</div>` : ""}`;
     $("#hudt", hud).onclick = () => { hudOpen = !hudOpen; drawHud(); };
     $$(".tkdetails", hud).forEach(d => d.ontoggle = () => { editOpen = d.open; });
     const amt = id => Math.max(0, +($(`[data-amt="${id}"]`, hud) || {}).value || 0);
@@ -121,12 +190,26 @@ export function mountTactical(host, opts = {}) {
     $$("[data-condlvl]", hud).forEach(b => b.onclick = () => { const [id, cid, d] = b.dataset.condlvl.split("|"); T(id, t => { const c = (t.conds || []).find(x => x.id === cid); if (c) { c.lvl = Math.max(1, Math.min(6, (c.lvl || 1) + +d)); } }); });
     $$("[data-atk]", hud).forEach(b => b.onclick = () => {
       const [aid, i] = b.dataset.atk.split("|"), st = S(), a = st.tokens.find(x => x.id === aid);
-      const tgt = isDM(st) && a.kind !== "pc" ? dmTarget : sel;
+      const tgt = isDM(st) && a.kind !== "pc" ? dmTarget || sel : sel;
       if (!tgt || tgt === aid) { toast("Elige primero el objetivo: toca un enemigo en la mesa"); return; }
-      attack(aid, tgt, attacksOf(st, a)[+i], atkAdv); atkAdv = 0;
-      sideTab = "tir"; sideShow(); drawHud();
+      if (phase(st) === "live" && st.board.turn !== aid && !isDM(st)) { toast("No es tu turno (los ataques fuera de turno son reacciones: márcala y avisa al máster)"); }
+      atkIdx = +i;
+      const r = attack(aid, tgt, attacksOf(st, a)[+i], atkAdv); atkAdv = null;
+      if (r) { sideTab = "tir"; sideShow(); }
+      drawHud();
     });
-    $$("[data-atkadv]", hud).forEach(b => b.onclick = () => { const v = +b.dataset.atkadv; atkAdv = atkAdv === v ? 0 : v; drawHud(); });
+    $$("[data-atkpick]", hud).forEach(b => b.onmouseenter = () => { atkIdx = +b.dataset.atkpick; if (board) board.render(); });
+    $$("[data-atkadv]", hud).forEach(b => b.onclick = () => { const v = +b.dataset.atkadv; atkAdv = atkAdv === v ? null : v; drawHud(); });
+    $$("[data-eco]", hud).forEach(b => b.onclick = () => toggle(b.dataset.eco.split("|")[0], b.dataset.eco.split("|")[1]));
+    $$("[data-acc]", hud).forEach(b => b.onclick = () => {
+      const [tid, nm] = b.dataset.acc.split("|"); ruleOpen = nm;
+      if (nm === "Correr") spend(tid, "dash");
+      else if (nm === "Esquivar" || nm === "Destrabarse") { spend(tid, "act"); store.commit("token", st => { const t = st.tokens.find(x => x.id === tid); t.conds = (t.conds || []).filter(c => c.id !== (nm === "Esquivar" ? "esquivando" : "destrabado")); t.conds.push({ id: nm === "Esquivar" ? "esquivando" : "destrabado", seq: st.board.seq }); }); }
+      else if (nm !== "Atacar" && nm !== "Magia") spend(tid, "act");
+      drawHud();
+    });
+    $$("[data-rule]", hud).forEach(b => b.onclick = () => { ruleOpen = ruleOpen === b.dataset.rule ? null : b.dataset.rule; drawHud(); });
+    const et = $("#endturn", hud); if (et) et.onclick = endTurn;
     const dt = $("#dmtarget", hud); if (dt) dt.onchange = () => { dmTarget = dt.value || null; };
     $$("[data-cast]", hud).forEach(b => b.onclick = () => {
       const [id, k] = b.dataset.cast.split("|"), e = EFECTOS[k], t = S().tokens.find(x => x.id === id);
@@ -161,6 +244,7 @@ export function mountTactical(host, opts = {}) {
       if (board) board.render();
       drawInit();
       if (sideTab === "tir") renderRolls(rc);
+      if (s.board.seq !== lastTurnSeen) { sel = sel; drawHud(); }
       const n = (s.rolls || []).length; if (n > rollsSeen && sideTab !== "tir") { const b = $('[data-side="tir"]', host); if (b) b.classList.add("ping"); } rollsSeen = n;
       if (!host.querySelector(".hud input:focus")) drawHud();
     }
@@ -176,16 +260,33 @@ function condBlock(t, canEdit) {
     ${condPick === t.id ? `<div class="condpick">${ESTADOS.map(e => `<button class="cond ${conds.some(c => c.id === e.id) ? "on" : ""}" style="--c:${e.c}" data-cond="${t.id}|${e.id}" title="${esc(e.t)}">${e.n}</button>`).join("")}</div>` : ""}
     ${conds.length ? `<ul class="condtxt">${conds.map(cd => { const e = estado(cd.id); return e ? `<li><b style="color:${e.c}">${esc(etiqueta(cd.id, cd.lvl))}:</b> ${esc(e.t)}</li>` : ""; }).join("")}</ul>` : ""}`;
 }
+/* Tarjeta del turno: movimiento, acción, acción adicional, reacción y acciones del manual */
+function turnCard(s, t) {
+  const e = eco(s, t), max = moveBudget(s, t), pct = Math.min(100, e.mov / Math.max(1, max) * 100);
+  const chip = (k, n, on) => `<button class="eco ${on ? "used" : ""}" data-eco="${t.id}|${k}" title="${on ? "Gastada (pulsa para devolverla)" : "Disponible (pulsa para marcarla)"}">${n}</button>`;
+  const rule = ruleOpen && GLOS && GLOS[ruleOpen];
+  return `<div class="hudcard turncard"><small>Turno de ${esc(nameOf(s, t))} · ronda ${s.board.round}</small>
+    <div class="movebar ${e.mov > max ? "over" : ""}"><i style="width:${pct}%"></i><em>🦶 Movimiento ${e.mov.toLocaleString("es-ES")} / ${max.toLocaleString("es-ES")} m${e.dash ? " (corriendo)" : ""}</em></div>
+    <div class="ecos">${chip("act", "⚡ Acción", e.act)}${chip("bonus", "✦ Acción adicional", e.bonus)}${chip("react", "↺ Reacción", !!e.react)}</div>
+    <div class="accs">${ACCIONES.map(([n, d]) => `<button class="btn small" data-acc="${t.id}|${n}" title="${esc(d)}" ${e.act && n !== "Atacar" && n !== "Magia" ? "disabled" : ""}>${n}</button>`).join("")}</div>
+    ${rule ? `<div class="rulebox"><b>${esc(ruleOpen)}</b> <small>[${esc(rule.tipo || "regla")}]</small>${rule.txt.split("\n").slice(0, 4).map(p => `<p>${esc(p)}</p>`).join("")}<button class="btn small" data-rule="${esc(ruleOpen)}">Cerrar</button></div>` : ""}
+    <button class="btn gold" id="endturn">Terminar turno ▶</button></div>`;
+}
+
 /* Ataques: el jugador ataca al objetivo que tenga seleccionado; el máster elige objetivo para sus enemigos */
-function atkBlock(s, t, canAct) {
+function atkBlock(s, t, canAct, sel) {
   if (!canAct) return "";
   const list = attacksOf(s, t), dm = isDM(s);
   if (!list.length) return dm && t.kind !== "pc" ? `<p class="note" style="margin:0">Añade sus ataques en «Editar enemigo».</p>` : "";
   const targets = s.tokens.filter(x => x.id !== t.id && (dm || !x.hidden));
   return `<details class="atkbox" open><summary>⚔️ Atacar</summary>
     ${dm && t.kind !== "pc" ? `<label class="field">Objetivo<select id="dmtarget"><option value="">Elige…</option>${targets.map(x => `<option value="${x.id}" ${dmTarget === x.id ? "selected" : ""}>${esc(nameOf(s, x))}</option>`).join("")}</select></label>` : ""}
-    <div class="castlist">${list.map((w, i) => `<button class="btn small" data-atk="${t.id}|${i}" title="${esc(w.expr + " " + w.type)}">${esc(w.name)} <b>${w.atk >= 0 ? "+" : ""}${w.atk}</b></button>`).join("")}</div>
-    <div class="row" style="margin-top:4px"><button class="btn small" data-atkadv="1" aria-pressed="${atkAdv === 1}">Ventaja</button><button class="btn small" data-atkadv="-1" aria-pressed="${atkAdv === -1}">Desventaja</button></div>
+    ${(() => { const tg = s.tokens.find(x => x.id === (dm && t.kind !== "pc" ? dmTarget || sel : sel)); if (!tg || tg.id === t.id) return `<p class="note" style="margin:0 0 4px">Toca un objetivo en la mesa para ver alcance, cobertura y modificadores.</p>`;
+      const m = modifiers(s, t, tg, (list[atkIdx] || list[0]).rng), cv = cover(s, t, tg);
+      return `<div class="aimbox">🎯 <b>${esc(nameOf(s, tg))}</b> a ${metres(dist(t, tg))}${cv.txt ? ` · ${esc(cv.txt)}` : ""}${m.adv.length ? `<div class="adv">▲ Ventaja: ${esc(m.adv.join(", "))}</div>` : ""}${m.dis.length ? `<div class="dis">▼ Desventaja: ${esc(m.dis.join(", "))}</div>` : ""}${m.autoCrit ? `<div class="adv">Si impacta, es crítico</div>` : ""}</div>`; })()}
+    <div class="castlist">${list.map((w, i) => { const tg = s.tokens.find(x => x.id === (dm && t.kind !== "pc" ? dmTarget || sel : sel)); const st = tg && tg.id !== t.id ? inRange(w.rng, t, tg) : null;
+      return `<button class="btn small rng-${st || "na"}" data-atk="${t.id}|${i}" data-atkpick="${i}" title="${esc(w.expr + " " + w.type)} · alcance ${w.rng.n === w.rng.l ? w.rng.n + " m" : w.rng.n + "/" + w.rng.l + " m"}">${esc(w.name)} <b>${w.atk >= 0 ? "+" : ""}${w.atk}</b>${st === "out" ? " ✗" : st === "long" ? " ⚠" : st === "ok" ? " ✓" : ""}</button>`; }).join("")}</div>
+    <div class="row" style="margin-top:4px"><small class="note" style="margin:0;border:0;padding:0">Forzar:</small><button class="btn small" data-atkadv="1" aria-pressed="${atkAdv === 1}">Ventaja</button><button class="btn small" data-atkadv="-1" aria-pressed="${atkAdv === -1}">Desventaja</button><button class="btn small" data-atkadv="0" aria-pressed="${atkAdv === 0}">Normal</button></div>
   </details>`;
 }
 function areaBlock(s) {

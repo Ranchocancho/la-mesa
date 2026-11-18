@@ -22,5 +22,5 @@ export { norm };
 export function monsterToken(m, c, r) {
   const size = /Enorme/.test(m.tipo) ? 2.4 : /Gargantu/.test(m.tipo) ? 3 : /Grande/.test(m.tipo) ? 1.6 : /Pequeñ|Diminut/.test(m.tipo) ? 0.7 : 1;
   return { id: "t" + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), kind: "foe", name: m.n, srd: m.n, c, r, hp: m.pg, maxhp: m.pg, ac: m.ca,
-    initBonus: parseInt(m.ini) || 0, size, color: "#7a2a22", attacks: m.atk.map(a => ({ name: a.name, atk: a.atk, dmg: a.dmg })) };
+    initBonus: parseInt(m.ini) || 0, size, color: "#7a2a22", speed: parseFloat(String(m.vel).replace(",", ".")) || 9, attacks: m.atk.map(a => ({ name: a.name, atk: a.atk, dmg: a.dmg, rng: a.rng })) };
 }

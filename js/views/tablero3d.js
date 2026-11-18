@@ -545,6 +545,7 @@ export function createBoard3D(host, opts) {
     if (snd) snd.value = G.sound || "";
     const fb = host.querySelector('[data-cam="fog"]'); if (fb) { fb.setAttribute("aria-pressed", !!G.fog); fb.textContent = G.fog ? "Niebla: sí" : "Niebla: no"; }
     syncTokens(m.tokens).then(() => updateFog(m));
+    updateAim(m);
     // Efectos lanzados (en la mesa o en la ficha de quien lanza). Los ve todo el mundo; no se repiten al entrar más tarde.
     const all = [G.fx, ...m.tokens.map(t => t.fx && { ...t.fx, caster: t.id })].filter(Boolean);
     for (const fx of all) {
@@ -570,6 +571,34 @@ export function createBoard3D(host, opts) {
       sound.play("dice");
     }
     fxReady = true;
+  }
+
+  // ---------- Línea de puntería: distancia, alcance y cobertura hasta el objetivo ----------
+  const aimLine = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 1, 8, 1, true), new THREE.MeshBasicMaterial({ color: 0x7ec850, transparent: true, opacity: 0.85, depthTest: false }));
+  aimLine.renderOrder = 9; aimLine.visible = false; scene.add(aimLine);
+  const aimRing = new THREE.Mesh(new THREE.RingGeometry(1.9, 2.2, 40), new THREE.MeshBasicMaterial({ color: 0x7ec850, transparent: true, opacity: 0.9, side: THREE.DoubleSide, depthWrite: false }));
+  aimRing.rotation.x = -Math.PI / 2; aimRing.position.y = 0.08; aimRing.visible = false; scene.add(aimRing);
+  let aimLabel = null, aimKey = "";
+  function updateAim(m) {
+    const a = opts.aim ? opts.aim() : null;
+    const A = a && m.tokens.find(t => t.id === a.from), B = a && m.tokens.find(t => t.id === a.to);
+    if (!A || !B || (!opts.dm && B.hidden)) { aimLine.visible = aimRing.visible = false; if (aimLabel) aimLabel.visible = false; return; }
+    const p0 = new THREE.Vector3(cx(A.c), 1.6, cz(A.r)), p1 = new THREE.Vector3(cx(B.c), 1.6, cz(B.r)), d = p1.clone().sub(p0), len = d.length();
+    aimLine.visible = aimRing.visible = true;
+    aimLine.position.copy(p0).add(p1).multiplyScalar(0.5); aimLine.scale.set(1, len, 1);
+    aimLine.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), d.normalize());
+    aimLine.material.color.set(a.color); aimRing.material.color.set(a.color); aimRing.position.x = p1.x; aimRing.position.z = p1.z;
+    const key = a.label + a.color;
+    if (key !== aimKey) {
+      aimKey = key; if (aimLabel) scene.remove(aimLabel);
+      const c = document.createElement("canvas"), g = c.getContext("2d"); g.font = "bold 26px Georgia";
+      const w = Math.min(1000, g.measureText(a.label).width + 40); c.width = w; c.height = 50;
+      g.font = "bold 26px Georgia"; g.fillStyle = "rgba(15,12,10,.88)"; g.beginPath(); g.roundRect(2, 2, w - 4, 46, 12); g.fill();
+      g.strokeStyle = a.color; g.lineWidth = 3; g.stroke(); g.fillStyle = "#fff"; g.textAlign = "center"; g.fillText(a.label, w / 2, 34);
+      aimLabel = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(c), depthTest: false, transparent: true }));
+      aimLabel.scale.set(w / 50 * 1.1, 1.1, 1); aimLabel.renderOrder = 12; scene.add(aimLabel);
+    }
+    aimLabel.visible = true; aimLabel.position.copy(p0).add(p1).multiplyScalar(0.5).setY(3.2);
   }
 
   // ---------- Niebla de guerra (solo para los jugadores) ----------

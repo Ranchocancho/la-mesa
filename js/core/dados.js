@@ -60,9 +60,9 @@ export function publish(r) {
   const e = {
     id: uid("tir"), at: Date.now(), who: me ? me.id : null, whoName: me ? me.name : "", label: r.label || r.expr, expr: r.expr,
     kind: r.kind || "free", adv: r.adv || 0, crit: !!r.crit, tok: r.by || null, target: r.target || null, link: r.link || null,
-    dice: out.dice, total: out.total, nat: out.nat, secret: !!r.secret, status: "pending", dmg: r.dmg || null, dtype: r.dtype || null, ac: r.ac ?? null
+    dice: out.dice, total: out.total, nat: out.nat, secret: !!r.secret, status: "pending", dmg: r.dmg || null, dtype: r.dtype || null, ac: r.ac ?? null, why: r.why || null, cov: r.cov || null, auto: r.auto || null
   };
-  if (e.kind === "attack" && r.ac != null) e.result = out.nat === 20 ? "crit" : out.nat === 1 ? "miss" : out.total >= r.ac ? "hit" : "miss";
+  if (e.kind === "attack" && r.ac != null) e.result = out.nat === 20 ? "crit" : out.nat === 1 ? "miss" : out.total >= r.ac ? (r.auto ? "crit" : "hit") : "miss";
   // Las tiradas sin consecuencias (pruebas libres) no necesitan confirmación
   if (e.kind === "free" || e.kind === "check" || e.kind === "init") e.status = "ok";
   if (isDM(s) && e.kind !== "attack" && e.kind !== "damage") e.status = "ok";
