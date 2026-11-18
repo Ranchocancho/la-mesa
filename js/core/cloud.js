@@ -5,7 +5,8 @@
 //   campaigns/{cid}                el mundo: nombre, dueño, másteres, miembros, sesiones, presentación, mapa, personajes
 //   campaigns/{cid}/places/{id}    lugares del mapa (los jugadores solo reciben los visibles)
 //   campaigns/{cid}/items/{id}     contenido de los lugares (los jugadores solo reciben lo revelado)
-//   campaigns/{cid}/secrets/{id}   notas secretas del máster (solo el máster)
+//   campaigns/{cid}/secrets/{id}   notas secretas del máster (solo el máster), de lugares y de entradas del lore
+//   campaigns/{cid}/lore/{id}      Lore: personajes, facciones, eventos, galería, notas (los jugadores solo reciben lo revelado)
 //   campaigns/{cid}/characters/{id} fichas de personaje (todos las leen; cada jugador edita la suya)
 //   campaigns/{cid}/scenes/{id}    escenas tácticas preparadas (solo el máster)
 //   campaigns/{cid}/board/live     la mesa táctica en directo
@@ -27,7 +28,7 @@ const COLORS = ["#79a85a", "#c97a3d", "#7d8fe0", "#e0d6b0", "#b4583a", "#8a9a4a"
 
 let fb, auth, db;
 const unsubs = [];
-const cache = { campaign: null, places: new Map(), items: new Map(), secrets: new Map(), characters: new Map(), scenes: new Map(), tokens: new Map(), chronicle: new Map(), rolls: new Map(), board: null, got: new Set() };
+const cache = { campaign: null, places: new Map(), items: new Map(), secrets: new Map(), characters: new Map(), scenes: new Map(), tokens: new Map(), chronicle: new Map(), rolls: new Map(), lore: new Map(), board: null, got: new Set() };
 let last = new Map();       // lo último sincronizado, para enviar solo lo que cambia
 let beatTimer = null;
 
@@ -125,7 +126,7 @@ export async function createCampaign(name, withExample) {
   s.users = [{ id: u.uid, ...me }];
   s.dms = []; s.live = null; s.presentation = null;
   s.characters = withExample ? s.characters.map(c => ({ ...c, owner: null })) : [];
-  if (!withExample) { s.world.places = []; s.sessions = []; s.scenes = s.scenes.filter(x => !x.place); } // la biblioteca de escenas genéricas se queda
+  if (!withExample) { s.world.places = []; s.sessions = []; s.lore = []; s.clock = null; s.scenes = s.scenes.filter(x => !x.place); } // la biblioteca de escenas genéricas se queda
   const docs = docsOf(s, true);
   const batch = fb.writeBatch(db);
   batch.set(ref, { ...clean(docs.get("C")), owner: u.uid, memberIds: [u.uid], createdAt: Date.now() });
@@ -138,13 +139,14 @@ export async function createCampaign(name, withExample) {
 function listen(cid) {
   const dm = cloud.isEditor;
   const col = n => fb.collection(db, "campaigns", cid, n);
-  const need = dm ? ["campaign", "places", "items", "secrets", "characters", "board", "tokens", "scenes", "chronicle", "rolls"] : ["campaign", "places", "items", "characters", "board", "tokens", "chronicle", "rolls"];
+  const need = dm ? ["campaign", "places", "items", "secrets", "characters", "board", "tokens", "scenes", "chronicle", "rolls", "lore"] : ["campaign", "places", "items", "characters", "board", "tokens", "chronicle", "rolls", "lore"];
   cache.got.clear();
   const done = k => { cache.got.add(k); if (need.every(n => cache.got.has(n))) refresh(); };
   const fail = e => { console.error(e); cloud.error = "Se perdió la conexión con la campaña. Recarga la página."; ping(); };
   unsubs.push(fb.onSnapshot(fb.doc(db, "campaigns", cid), d => { cache.campaign = d.data(); done("campaign"); }, fail));
   unsubs.push(fb.onSnapshot(dm ? col("places") : fb.query(col("places"), fb.where("visible", "==", true)), s => { cache.places = new Map(s.docs.map(d => [d.id, d.data()])); done("places"); }, fail));
   unsubs.push(fb.onSnapshot(dm ? col("items") : fb.query(col("items"), fb.where("revealed", "==", true)), s => { cache.items = new Map(s.docs.map(d => [d.id, d.data()])); done("items"); }, fail));
+  unsubs.push(fb.onSnapshot(dm ? col("lore") : fb.query(col("lore"), fb.where("revealed", "==", true)), s => { cache.lore = new Map(s.docs.map(d => [d.id, d.data()])); done("lore"); }, fail));
   unsubs.push(fb.onSnapshot(col("characters"), s => { cache.characters = new Map(s.docs.map(d => [d.id, d.data()])); done("characters"); }, fail));
   unsubs.push(fb.onSnapshot(fb.doc(db, "campaigns", cid, "board", "live"), d => { cache.board = d.exists() ? d.data() : null; done("board"); }, fail));
   unsubs.push(fb.onSnapshot(col("rolls"), s => { cache.rolls = new Map(s.docs.map(d => [d.id, d.data()])); done("rolls"); }, fail));
@@ -160,7 +162,7 @@ function listen(cid) {
 function stopCampaign() {
   unsubs.splice(0).forEach(u => u());
   clearInterval(beatTimer); beatTimer = null;
-  cache.campaign = null; cache.places.clear(); cache.items.clear(); cache.secrets.clear(); cache.characters.clear(); cache.scenes.clear(); cache.tokens.clear(); cache.chronicle.clear(); cache.rolls.clear(); cache.board = null; cache.got.clear();
+  cache.campaign = null; cache.places.clear(); cache.items.clear(); cache.secrets.clear(); cache.characters.clear(); cache.scenes.clear(); cache.tokens.clear(); cache.chronicle.clear(); cache.rolls.clear(); cache.lore.clear(); cache.board = null; cache.got.clear();
   last = new Map(); cloud.cid = null; cloud.isEditor = false;
 }
 
@@ -187,7 +189,8 @@ function refresh() {
     dms: c.dms || [], live: c.live || null,
     users, characters: [...cache.characters.entries()].map(([id, x]) => ({ id, ...x })).sort((a, b) => (a.order || 0) - (b.order || 0)).map(x => strip(x, "order")),
     world: { map: c.map ? c.map.key : null, mapW: c.map ? c.map.w : null, mapH: c.map ? c.map.h : null, places },
-    sessions: c.sessions || [], presentation: c.presentation || null,
+    sessions: c.sessions || [], presentation: c.presentation || null, clock: c.clock || null, backdrop: c.backdrop || null,
+    lore: [...cache.lore.entries()].map(([id, x]) => ({ id, ...x, secret: (cache.secrets.get(id) || {}).secret || "" })).sort((a, b) => (a.order ?? 0) - (b.order ?? 0) || (a.at || 0) - (b.at || 0)),
     scenes: [...cache.scenes.entries()].map(([id, x]) => ({ id, ...x })).sort((a, b) => (a.order || 0) - (b.order || 0)).map(x => strip(x, "order")),
     rolls: [...cache.rolls.entries()].map(([id, x]) => ({ id, ...x })).sort((a, b) => a.at - b.at),
     chronicle: [...cache.chronicle.entries()].map(([id, x]) => ({ id, ...x })).sort((a, b) => a.at - b.at),
@@ -208,7 +211,7 @@ function docsOf(s, dm) {
   out.set("C", {
     name: s.campaign.name, rules: s.campaign.rules,
     dms: s.dms || [], live: s.live || null,
-    sessions: s.sessions, presentation: s.presentation || null,
+    sessions: s.sessions, presentation: s.presentation || null, clock: s.clock || null, backdrop: s.backdrop || null,
     map: s.world.map ? { key: s.world.map, w: s.world.mapW, h: s.world.mapH } : null,
     members
   });
@@ -218,6 +221,7 @@ function docsOf(s, dm) {
   (s.chronicle || []).forEach(e => { const { id, ...rest } = e; out.set("chronicle/" + id, rest); });
   (s.rolls || []).forEach(e => { const { id, ...rest } = e; out.set("rolls/" + id, rest); });
   (s.tokens || []).forEach(t => { const { id, ...rest } = t; out.set("tokens/" + id, rest); });
+  (s.lore || []).forEach(e => { const { id, secret, ...rest } = e; out.set("lore/" + id, rest); if (dm) out.set("secrets/" + id, { secret: secret || "" }); });
   s.world.places.forEach((p, i) => {
     const { items, secret, id, ...rest } = p;
     out.set("places/" + id, { ...rest, order: i });

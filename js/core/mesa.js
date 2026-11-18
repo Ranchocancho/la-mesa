@@ -1,6 +1,7 @@
 // La mesa táctica en directo: cargar escenas, iniciativa y turnos.
 import { store } from "./store.js";
 import { sceneToBoard, blankScene } from "../data/escenas.js";
+import { presence } from "./presence.js";
 
 export const hpOf = (s, t) => {
   if (t.kind === "pc") { const c = s.characters.find(x => x.id === t.char); return c ? { cur: c.hp.cur, max: c.hp.max, temp: c.hp.temp } : null; }
@@ -9,13 +10,31 @@ export const hpOf = (s, t) => {
 export const charOf = (s, t) => t.kind === "pc" ? s.characters.find(x => x.id === t.char) : null;
 export const order = s => (s.tokens || []).filter(t => t.init != null && t.init !== "").sort((a, b) => b.init - a.init || (a.kind === "pc" ? -1 : 1));
 
+/** Por defecto solo bajan a la mesa los personajes de quien está conectado (y los que ya estaban en ella). */
+export const onlineChars = s => s.characters.filter(c => (c.owner && presence.online(c.owner)) || (s.tokens || []).some(t => t.kind === "pc" && t.char === c.id));
 function place(s, scene) {
-  const { board, tokens } = sceneToBoard(scene, s.characters, s.tokens);
+  const { board, tokens } = sceneToBoard(scene, onlineChars(s), s.tokens);
   s.board = board; s.tokens = tokens; s.presentation = { type: "tactical" };
 }
 export const loadScene = sceneId => store.commit("board", s => { const sc = s.scenes.find(x => x.id === sceneId); if (sc) place(s, sc); });
 export const blankBoard = () => store.commit("board", s => place(s, blankScene("Mesa improvisada", null, 16, 11, "piedra")));
 export const clearBoard = () => store.commit("board", s => { s.board = null; s.tokens = []; if (s.presentation && s.presentation.type === "tactical") s.presentation = null; });
+/** El máster añade o retira personajes de la situación táctica. */
+export const addPC = charId => store.commit("board", s => {
+  const ch = s.characters.find(c => c.id === charId); if (!s.board || !ch || s.tokens.some(t => t.kind === "pc" && t.char === charId)) return;
+  const b = s.board, busy = (c, r) => b.terrain[c + "," + r] === "muro" || s.tokens.some(t => t.c === c && t.r === r) || (b.props || []).some(p => p.c === c && p.r === r && p.block);
+  const near = s.tokens.find(t => t.kind === "pc") || { c: 1, r: 1 };
+  let at = null;
+  for (let d = 0; d < Math.max(b.cols, b.rows) && !at; d++) for (let r = near.r - d; r <= near.r + d && !at; r++) for (let c = near.c - d; c <= near.c + d && !at; c++)
+    if (c >= 0 && r >= 0 && c < b.cols && r < b.rows && !busy(c, r)) at = { c, r };
+  at = at || { c: 0, r: 0 };
+  s.tokens.push({ id: "t" + Math.random().toString(36).slice(2, 9), kind: "pc", char: ch.id, owner: ch.owner || null, name: ch.name, c: at.c, r: at.r, size: 1, init: null, conds: [] });
+});
+export const removePC = charId => store.commit("board", s => {
+  const t = s.tokens.find(x => x.kind === "pc" && x.char === charId); if (!t) return;
+  s.tokens = s.tokens.filter(x => x !== t);
+  if (s.board && s.board.turn === t.id) s.board.turn = null;
+});
 /** Guarda la mesa actual (con sus enemigos) como escena para reutilizarla. */
 export const saveBoardAsScene = (name, placeId) => store.commit("board", s => {
   const b = s.board; if (!b) return;

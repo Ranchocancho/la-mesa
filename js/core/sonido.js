@@ -80,6 +80,10 @@ const SFX = {
   holy() { [523, 659, 784, 1046].forEach((f, i) => setTimeout(() => blip(f, 0.9, 0.08, "sine"), i * 60)); },
   heal() { [784, 988, 1175, 1568].forEach((f, i) => setTimeout(() => blip(f, 0.7, 0.07, "sine"), i * 110)); },
   dice() { for (let i = 0; i < 6; i++) setTimeout(() => burst(2500 + Math.random() * 2500, 3, 0.03, 0.25 - i * 0.03, "bandpass"), 60 + i * 90 + Math.random() * 60); },
+  clack() { burst(3500 + Math.random() * 2000, 4, 0.025, 0.18, "bandpass"); blip(900 + Math.random() * 600, 0.04, 0.05, "triangle"); },
+  fanfare() { [523, 659, 784, 1046, 1318].forEach((f, i) => setTimeout(() => { blip(f, 0.6, 0.1, "triangle"); blip(f * 2, 0.4, 0.03, "sine"); }, i * 90)); setTimeout(() => burst(6000, 2, 0.6, 0.06), 400); },
+  fail() { [392, 330, 262, 196].forEach((f, i) => setTimeout(() => blip(f, 0.45, 0.1, "sawtooth", master, f * 0.95), i * 160)); },
+  none() {},
   sword() { [2300, 3700, 5200].forEach(f => blip(f, 0.4, 0.05, "square")); burst(5000, 2, 0.1, 0.15); }
 };
 const FX_SOUND = { bola: "fireball", proyectil: "magic", rayo: "thunder", escarcha: "magic", llama: "holy", curar: "heal", escudo: "magic", trueno: "thunder" };

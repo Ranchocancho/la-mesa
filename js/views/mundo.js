@@ -5,7 +5,7 @@ import { getImage, putImage, readImageFile } from "../core/images.js";
 import { exampleMap } from "../data/worldmap.js";
 import { $, $$, esc, toast, debounce, pickFile } from "../core/ui.js";
 
-const KINDS = ["Ciudad", "Pueblo", "Región", "Mazmorra", "Punto de interés"];
+const KINDS = ["Región", "Ciudad", "Pueblo", "Distrito", "Localización", "Mazmorra", "Punto de interés"];
 const PIN = (fill) => `<svg viewBox="0 0 30 38" aria-hidden="true"><path d="M15 1C7.3 1 1 7 1 14.6 1 25 15 37 15 37s14-12 14-22.4C29 7 22.7 1 15 1z" fill="${fill}" stroke="#2b1d10" stroke-width="2"/><circle cx="15" cy="14" r="5" fill="#2b1d10"/></svg>`;
 
 let el, vp, stage, img, pinsEl, side;
@@ -140,7 +140,8 @@ function drawTools() {
 function drawPins() {
   const state = store.get();
   const live = state.presentation && (state.presentation.place);
-  pinsEl.innerHTML = state.world.places.filter(p => can.seePlace(state, p)).map(p =>
+  // En el mapa del mundo solo van los lugares de primer nivel; los de dentro (distritos, posadas…) viven en el Lore
+  pinsEl.innerHTML = state.world.places.filter(p => !p.parent && can.seePlace(state, p)).map(p =>
     `<button class="pin ${p.visible ? "" : "hidden"} ${p.id === sel ? "sel" : ""} ${p.id === live ? "live" : ""}" data-id="${p.id}" style="left:${p.x * imgW}px;top:${p.y * imgH}px" aria-label="${esc(p.name)}">
       ${PIN(p.visible ? "#d6aa4e" : "#9aa0c8")}<span>${esc(p.name)}</span></button>`).join("");
   $$(".pin", pinsEl).forEach(b => {
@@ -178,7 +179,7 @@ function drawSide() {
 
 function drawList(state) {
   const dm = isDM(state);
-  const list = state.world.places.filter(p => can.seePlace(state, p));
+  const list = state.world.places.filter(p => !p.parent && can.seePlace(state, p));
   side.innerHTML = `<div><h3>${esc(state.campaign.name)}</h3><div class="kind">${dm ? "Elige un lugar para editarlo o mostrarlo al grupo." : "Lugares que conocéis. El máster os irá revelando más."}</div></div>
     <div class="places">${list.map(p => `<button class="place" data-id="${p.id}">${PIN(p.visible ? "#d6aa4e" : "#9aa0c8").replace("<svg", '<svg width="16" height="20"')}<span>${esc(p.name)}</span><small>${esc(p.kind)}${dm && !p.visible ? " · oculto" : ""}</small></button>`).join("") || `<p class="empty">Todavía no hay lugares.</p>`}</div>
     ${dm ? `<p class="note" style="margin:0">Los lugares ocultos (en azul) solo los ves tú. Arrastra un marcador para moverlo.</p>` : ""}`;
@@ -198,6 +199,7 @@ function drawReader(state, place) {
   side.innerHTML = `<button class="btn small" id="back">← Todos los lugares</button>
     <div><h3>${esc(place.name)}</h3><div class="kind">${esc(place.kind)}</div></div>
     ${place.summary ? `<p style="margin:0">${esc(place.summary)}</p>` : ""}
+    <a class="btn small" href="#lore/${place.id}">📖 Ver en el Lore</a>
     <h2 class="sec" style="margin:4px 0 0">Lo que sabéis</h2>
     <div class="items">${items.map(it => `<div class="item"><div class="head"><b>${esc(it.title)}</b></div>${it.type === "image" ? `<div data-imgfor="${it.id}"><p class="empty">Cargando imagen…</p></div>${it.text ? `<p>${esc(it.text)}</p>` : ""}` : `<p>${esc(it.text)}</p>`}</div>`).join("") || `<p class="empty">El máster aún no os ha revelado nada de este lugar.</p>`}</div>`;
   $("#back", side).onclick = () => { sel = null; drawPins(); drawSide(); };
@@ -205,7 +207,7 @@ function drawReader(state, place) {
 }
 
 function drawEditor(state, place) {
-  side.innerHTML = `<button class="btn small" id="back">← Todos los lugares</button>
+  side.innerHTML = `<div class="row"><button class="btn small" id="back">← Todos los lugares</button><a class="btn small gold" href="#lore/${place.id}">📖 Abrir en el Lore</a></div>
     <label class="field">Nombre<input id="f-name" data-f="name" value="${esc(place.name)}"></label>
     <label class="field">Tipo<select data-f="kind">${KINDS.map(k => `<option ${k === place.kind ? "selected" : ""}>${k}</option>`).join("")}</select></label>
     <label class="switch"><input type="checkbox" id="f-vis" ${place.visible ? "checked" : ""}> Visible para los jugadores</label>

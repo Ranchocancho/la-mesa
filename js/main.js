@@ -12,7 +12,9 @@ import * as escenas from "./views/escenas.js";
 import * as cronica from "./views/cronica.js";
 import * as reglas from "./views/reglas.js";
 import { preload } from "./core/srd.js";
-import * as soon from "./views/soon.js";
+import { visibleRolls } from "./views/tiradas.js";
+import * as lore from "./views/lore.js";
+import { clockOf, clockShort } from "./core/lore.js";
 
 const ROUTES = [
   { id: "inicio", label: "Inicio", view: inicio },
@@ -21,7 +23,7 @@ const ROUTES = [
   { id: "escenas", label: "Escenas", view: escenas, dmOnly: true },
   { id: "personajes", label: "Personajes", view: personajes },
   { id: "reglas", label: "Reglas", view: reglas },
-  { id: "lore", label: "Lore", view: soon, soon: 4 },
+  { id: "lore", label: "Lore", view: lore },
   { id: "cronica", label: "Crónica", view: cronica }
 ];
 
@@ -36,7 +38,7 @@ function ready() {
 }
 
 function route() {
-  const h = (location.hash || "").slice(1);
+  const h = (location.hash || "").slice(1).split("/")[0];
   if (!currentUser(store.get())) return "inicio";
   return ROUTES.some(r => r.id === h) ? h : "inicio";
 }
@@ -48,7 +50,7 @@ function topbar(state) {
   const live = visibleLive(state);
   const players = state.users.filter(u => u.role === "player");
   return `<header class="top">
-    <div class="brand"><b>La Mesa</b><span>${esc(state.campaign.name)} · ${live ? `${esc(sessionName(live))} en curso` : "sin partida"}${cloudMode ? "" : " · demostración"}</span></div>
+    <div class="brand"><b>La Mesa</b><span>${esc(state.campaign.name)} · ${live ? `${esc(sessionName(live))} en curso · ${esc(clockShort(clockOf(state)))}` : "sin partida"}${cloudMode ? "" : " · demostración"}</span></div>
     ${me ? `<nav class="nav" aria-label="Secciones">${ROUTES.filter(x => !x.dmOnly || isDM(state)).map(x => `<a href="#${x.id}" ${x.id === r ? 'aria-current="page"' : ""}>${x.label}${x.id === "partida" && live ? ` <i class="livedot" title="Partida en curso"></i>` : ""}${x.soon ? ` <span class="soon">· hito ${x.soon}</span>` : ""}</a>`).join("")}</nav>
     <span class="sync" title="Conectados ahora"><i></i>${presence.count()} conectado${presence.count() === 1 ? "" : "s"}</span>
     ${isEditor(state) && players.length ? `<label class="viewas">Ver como<select id="viewas" class="btn small"><option value="">${esc(ROLE[real.role])}</option>${players.map(p => `<option value="${p.id}" ${va && va.id === p.id ? "selected" : ""}>${esc(p.name)}</option>`).join("")}</select></label>` : ""}
@@ -108,6 +110,17 @@ store.subscribe((state, label, remote) => {
 presence.subscribe(() => {
   const s = $(".sync"); if (s) { const n = presence.count(); s.innerHTML = `<i></i>${n} conectado${n === 1 ? "" : "s"}`; }
   if (mounted && mounted.presence) mounted.presence();
+});
+// Cajetilla de dados: cada tirada nueva (que puedas ver) sube desde abajo, estés en la sección que estés
+const rollSeen = new Set(); let rollBoot = false, diceCam = null;
+store.subscribe(state => {
+  if (!ready() || !currentUser(state)) return;
+  const fresh = visibleRolls(state).filter(r => !rollSeen.has(r.id));
+  fresh.forEach(r => rollSeen.add(r.id));
+  const show = fresh.filter(r => r.dice && r.dice.length && (rollBoot || Date.now() - r.at < 6000));
+  rollBoot = true;
+  if (!show.length) return;
+  (diceCam || (diceCam = import("./views/dicecam.js"))).then(m => show.forEach(r => m.showRoll(r, store.get())));
 });
 window.addEventListener("hashchange", render);
 window.addEventListener("lamesa:login", () => { presence.beat(); current = null; render(); });

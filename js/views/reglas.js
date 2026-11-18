@@ -30,12 +30,54 @@ const paras = t => {
   const ls = t.replace(/([a-záéíóúñ])-\n+([a-záéíóúñ])/g, "$1$2").split(/\n+/).map(l => l.trim()).filter(Boolean), out = [];
   let cur = "";
   for (const l of ls) {
-    if (cur && /[.:!?)»]$/.test(cur) && /^[A-ZÁÉÍÓÚÑ¿¡«•|0-9]/.test(l)) { out.push(cur); cur = l; }
+    if (cur && /[.:!?)»”]$/.test(cur) && /^[A-ZÁÉÍÓÚÑ¿¡«“•|0-9]/.test(l)) { out.push(cur); cur = l; }
     else cur = cur ? cur + " " + l : l;
   }
   if (cur) out.push(cur);
   return out;
 };
+
+// Maqueta de libro: títulos, términos con etiqueta [acción], tablas, viñetas y negritas de entrada
+const UP = /^[A-ZÁÉÍÓÚÑ¿¡«“0-9]/, END = /[.:!?)»”]$/;
+const isRow = l => l.split(/\s{3,}/).filter(Boolean).length >= 2;
+function blocks(t) {
+  const L = (t || "").replace(/([a-záéíóúñ])-\n+([a-záéíóúñ])/g, "$1$2").replace(/^([A-ZÁÉÍÓÚÑ]) ([a-záéíóúñ]+)/gm, "$1$2").split(/\n+/).filter(l => !/^\s*\d*\s*Documento de referencia del sistema/.test(l)).map(l => l.replace(/\s+$/, "")).filter(l => l.trim());
+  const out = []; let par = null, tbl = null, list = null;
+  const flush = () => { if (par) out.push({ k: "p", t: par }); if (tbl) out.push({ k: "t", rows: tbl }); if (list) out.push({ k: "ul", items: list }); par = tbl = list = null; };
+  L.forEach((raw, i) => {
+    const l = raw.trim(), next = (L[i + 1] || "").trim();
+    if (isRow(raw) && !/[.,;]$/.test(l)) { if (!tbl) { flush(); tbl = []; } tbl.push(l.split(/\s{3,}/)); return; }
+    if (tbl) flush();
+    if (/^[•●▪]/.test(l)) { if (par && !list) flush(); if (par && list) { list.push(par); par = null; } list = list || []; par = l.replace(/^[•●▪]\s*/, ""); return; }
+    const free = !par || END.test(par);
+    const tag = l.match(/^(.{2,50}?)\s*\[([^\]]{3,30})\]$/);
+    if (free && tag) { if (list) { list.push(par); par = null; } flush(); out.push({ k: "h", t: tag[1], tag: tag[2], lvl: 3 }); return; }
+    if (free && UP.test(l) && l.length <= 58 && !/[.,;:]$/.test(l) && !/\. /.test(l) && l.split(" ").length <= 8 && (!next || UP.test(next) || isRow(L[i + 1]))) {
+      if (list && par) { list.push(par); par = null; } flush();
+      out.push({ k: "h", t: l, lvl: l === l.toUpperCase() || l.length < 22 && /^[A-ZÁÉÍÓÚÑ][a-záéíóúñ]+$/.test(l) ? 2 : 3 }); return;
+    }
+    if (par && END.test(par) && UP.test(l)) { if (list) { list.push(par); par = l; flush(); par = null; list = null; par = l; return; } out.push({ k: "p", t: par }); par = l; return; }
+    par = par ? par + " " + l : l;
+  });
+  if (list && par) { list.push(par); par = null; }
+  flush();
+  return out;
+}
+// Detalles finos: negrita de entrada («Término. Texto…»), tiradas de dados y CD
+const rich = (txt, term) => {
+  let h = esc(txt);
+  const m = h.match(/^([A-ZÁÉÍÓÚÑ¿][^.:!?]{2,60}?[.:])(\s)/);
+  if (m && m[1].split(" ").length <= 7 && h.length > m[1].length + 25) h = `<b class="runin">${m[1]}</b>` + h.slice(m[1].length);
+  h = h.replace(/\b(\d*d\d+(?:\s?[+−-]\s?\d+)?)\b/g, '<span class="dx">$1</span>').replace(/\bCD (\d+)/g, '<span class="cd">CD $1</span>')
+    .replace(/(^|[\s.])(Acierto|Fallo|Éxito|Fallo o éxito|Desencadenante|Respuesta|Usando un espacio de conjuro de nivel superior|Mejora de truco):/g, '$1<b class="kw">$2:</b>');
+  return term ? mark(h, term) : h;
+};
+export function bookHTML(t, term) {
+  return blocks(t).map(b => b.k === "h" ? `<h${b.lvl} class="bh">${esc(b.t)}${b.tag ? ` <span class="btag">${esc(b.tag)}</span>` : ""}</h${b.lvl}>`
+    : b.k === "t" ? `<div class="btbl"><table>${b.rows.map((r, i) => `<tr>${r.map(c => i === 0 && b.rows.length > 1 ? `<th>${esc(c)}</th>` : `<td>${rich(c, term)}</td>`).join("")}</tr>`).join("")}</table></div>`
+    : b.k === "ul" ? `<ul class="bul">${b.items.map(x => `<li>${rich(x, term)}</li>`).join("")}</ul>`
+    : `<p>${rich(b.t, term)}</p>`).join("");
+}
 const mark = (html, term) => term ? html.replace(new RegExp(`(${term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")})`, "gi"), "<mark>$1</mark>") : html;
 
 function libro(body, P) {
@@ -46,18 +88,19 @@ function libro(body, P) {
       ${q.length > 2 ? `<div class="rres">${results.map(x => { const k = norm(x.t).indexOf(norm(q)); return `<button class="place" data-p="${x.i + 1}"><span>${esc(x.t.slice(Math.max(0, k - 40), k + 70).replace(/\n/g, " "))}…</span><small>p. ${x.i + 1}</small></button>`; }).join("") || `<p class="empty">Nada encontrado.</p>`}</div>`
       : `<div class="places">${CAPITULOS.map(([n, a]) => `<button class="place ${chap && chap[0] === n ? "on" : ""}" data-p="${a}"><span>${n}</span><small>p. ${a}</small></button>`).join("")}</div>`}
     </aside>
-    <article class="rpage"><div class="pnav"><button class="btn small" data-go="-1">◀</button><span>${chap ? esc(chap[0]) + " · " : ""}página ${page} de ${P.length}</span><button class="btn small" data-go="1">▶</button></div>
-      ${paras(P[page - 1] || "").map(p => `<p>${mark(esc(p), q.length > 2 ? esc(q) : "")}</p>`).join("")}</article>`;
+    <article class="rpage book"><div class="pnav"><button class="btn small" data-go="-1">◀</button><span>${chap ? esc(chap[0]) + " · " : ""}página ${page} de ${P.length}</span><button class="btn small" data-go="1">▶</button></div>
+      <div class="bookpage">${bookHTML(P[page - 1] || "", q.length > 2 ? esc(q) : "")}<div class="folio">— ${page} —</div></div>
+      <div class="pnav bottom"><button class="btn small" data-go="-1">◀ Anterior</button><button class="btn small" data-go="1">Siguiente ▶</button></div></article>`;
   const rq = $("#rq", body);
   rq.oninput = () => { q = rq.value; const pos = rq.selectionStart; libro(body, P); const n = $("#rq", body); n.focus(); n.setSelectionRange(pos, pos); };
   $$("[data-p]", body).forEach(b => b.onclick = () => { page = +b.dataset.p; libro(body, P); $(".rpage", body).scrollTop = 0; });
-  $$("[data-go]", body).forEach(b => b.onclick = () => { page = Math.max(1, Math.min(P.length, page + +b.dataset.go)); libro(body, P); });
+  $$("[data-go]", body).forEach(b => b.onclick = () => { page = Math.max(1, Math.min(P.length, page + +b.dataset.go)); libro(body, P); $(".rpage", body).scrollTop = 0; });
 }
 
 export function spellCard(s) {
-  return `<div class="scard"><h2>${esc(s.n)}</h2><p class="smeta">${s.lvl ? `${s.esc[0].toUpperCase() + s.esc.slice(1)} de nivel ${s.lvl}` : `Truco de ${s.esc}`} (${esc(s.cls)})</p>
+  return `<div class="scard spell lv${s.lvl}"><h2>${esc(s.n)}</h2><p class="smeta">${s.lvl ? `${s.esc[0].toUpperCase() + s.esc.slice(1)} de nivel ${s.lvl}` : `Truco de ${s.esc}`} (${esc(s.cls)})</p>
     <dl><dt>Tiempo de lanzamiento</dt><dd>${esc(s.t)}</dd><dt>Alcance</dt><dd>${esc(s.al)}</dd><dt>Componentes</dt><dd>${esc(s.co)}</dd><dt>Duración</dt><dd>${esc(s.du)}</dd></dl>
-    ${paras(s.txt).map(p => `<p>${esc(p)}</p>`).join("")}${s.sup ? `<p class="sup">${esc(s.sup)}</p>` : ""}</div>`;
+    <div class="stext">${bookHTML(s.txt)}</div>${s.sup ? `<p class="sup">${rich(s.sup)}</p>` : ""}</div>`;
 }
 function conjuros(body, S) {
   const list = S.filter(s => (!q || norm(s.n).includes(norm(q))) && (filt.lvl === "" || s.lvl === +filt.lvl) && (!filt.cls || norm(s.cls).includes(norm(filt.cls))));
@@ -75,14 +118,22 @@ function conjuros(body, S) {
   $$("[data-s]", body).forEach(b => b.onclick = () => { sel = b.dataset.s; conjuros(body, S); });
 }
 
+// Separa la cabecera del perfil (sentidos, inmunidades, idiomas, VD) del cuerpo (rasgos, acciones…)
+function monsterParts(txt) {
+  const ls = (txt || "").split("\n"), v = ls.findIndex(l => /^VD:/.test(l.trim()));
+  const head = v > 0 ? ls.slice(1, v + 1).filter(l => !/^CA:/.test(l.trim())) : [];
+  const body = (v > 0 ? ls.slice(v + 1) : ls.slice(1)).join("\n").replace(/^(Rasgos|Acciones legendarias|Acciones adicionales|Acciones|Reacciones)\s+(?=[A-ZÁÉÍÓÚÑ])/gm, "$1\n");
+  return { head, body };
+}
 export function monsterCard(m, withAdd) {
   const mod = v => { const x = Math.floor((v - 10) / 2); return (x >= 0 ? "+" : "−") + Math.abs(x); };
-  return `<div class="scard"><h2>${esc(m.n)}</h2><p class="smeta">${esc(m.tipo)}</p>
+  return `<div class="scard statblock"><h2>${esc(m.n)}</h2><p class="smeta">${esc(m.tipo)}</p>
     <div class="mstats"><span><b>CA</b> ${m.ca}</span><span><b>PG</b> ${m.pg} (${esc(m.pgd)})</span><span><b>Iniciativa</b> ${esc(m.ini)}</span><span><b>Velocidad</b> ${esc(m.vel)}</span><span><b>VD</b> ${esc(m.vd)}</span></div>
     <div class="mab">${Object.entries(m.ab).map(([k, v]) => `<div><small>${k.toUpperCase()}</small><b>${v}</b><em>${mod(v)}</em></div>`).join("")}</div>
-    ${m.atk.length ? `<div class="matk">${m.atk.map(a => `<span>⚔️ <b>${esc(a.name)}</b> ${esc(a.atk)} · ${esc(a.dmg)}</span>`).join("")}</div>` : ""}
+    ${m.atk.length ? `<div class="matk">${m.atk.map(a => `<span>⚔️ <b>${esc(a.name)}</b> ${rich(a.atk)} · ${rich(a.dmg)}</span>`).join("")}</div>` : ""}
     ${withAdd ? `<div class="row" style="margin:10px 0"><button class="btn gold small" id="addmon">➕ Poner en la mesa</button><input type="number" id="addn" value="1" min="1" max="12" style="width:56px" aria-label="Cuántos"></div>` : ""}
-    <details><summary>Perfil completo</summary>${paras(m.txt).map(p => `<p>${esc(p)}</p>`).join("")}</details></div>`;
+    ${(() => { const { head, body } = monsterParts(m.txt); return `<div class="mhead">${head.map(l => `<p>${esc(l.trim()).replace(/(^|\s)([A-ZÁÉÍÓÚÑ][a-záéíóúñ ]{2,30}):/g, "$1<b>$2:</b>")}</p>`).join("")}</div>
+    <details open><summary>Rasgos y acciones</summary><div class="stext">${bookHTML(body)}</div></details>`; })()}</div>`;
 }
 const VDS = ["0", "1/8", "1/4", "1/2", ...Array.from({ length: 30 }, (_, i) => String(i + 1))];
 function monstruos(body, M) {

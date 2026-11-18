@@ -13,7 +13,7 @@ import { renderRolls, visibleRolls } from "./tiradas.js";
 import { attacksOf, attack, acOf, nameOf } from "../core/combate.js";
 import { phase, current, pending, beginCombat, rollInit, startRounds, endTurn, stopCombat, eco, moveBudget, speedOf, spend, toggle, ACCIONES, rangeOf, inRange, cover, modifiers, dist, metres } from "../core/turnos.js";
 import { srd } from "../core/srd.js";
-import { publish } from "../core/dados.js";
+import { publish, mySkin, SKIN_HEX } from "../core/dados.js";
 
 // Nombres de las miniaturas 3D (los modelos están en assets/kaykit/minis)
 export const MINI_NAMES = { peana: "Peana de cartón", Skeleton_Minion: "Esqueleto", Skeleton_Warrior: "Esqueleto guerrero", Skeleton_Rogue: "Esqueleto pícaro", Skeleton_Mage: "Esqueleto mago", Knight: "Caballero", Barbarian: "Bárbaro", Mage: "Mago", Rogue: "Pícaro", Rogue_Hooded: "Encapuchado" };
@@ -25,7 +25,7 @@ let hudOpen = !(window.matchMedia && window.matchMedia("(max-width: 900px)").mat
 
 export function mountTactical(host, opts = {}) {
   host.innerHTML = `<div class="tactical"><div class="boardwrap"></div><aside class="sidecol"><div class="sidetabs" role="tablist"><button role="tab" data-side="ini">Iniciativa</button><button role="tab" data-side="tir">🎲 Tiradas</button></div><div class="initcol" aria-label="Iniciativa"></div><div class="rollcol" hidden></div></aside><div class="hud"></div>
-    <button class="btn small viewtoggle" id="v3d" title="Cambiar entre la mesa en 3D y el plano en 2D"></button><div class="turnbar" hidden></div><div class="turnbanner" hidden></div></div>`;
+    <button class="btn small viewtoggle" id="v3d" title="Cambiar entre la mesa en 3D y el plano en 2D"></button><div class="turnbar" hidden></div><div class="turnbanner" hidden></div><div class="dboxes l"></div><div class="dboxes r"></div></div>`;
   const bw = $(".boardwrap", host), ini = $(".initcol", host), hud = $(".hud", host), rc = $(".rollcol", host), tb = $(".turnbar", host), banner = $(".turnbanner", host);
   const sideShow = () => { $$("[data-side]", host).forEach(b => b.setAttribute("aria-selected", b.dataset.side === sideTab)); ini.hidden = sideTab !== "ini"; rc.hidden = sideTab !== "tir"; if (sideTab === "tir") renderRolls(rc); };
   $$("[data-side]", host).forEach(b => b.onclick = () => { sideTab = b.dataset.side; sideShow(); });
@@ -235,7 +235,22 @@ export function mountTactical(host, opts = {}) {
     const ax = $("#areax", hud); if (ax) ax.onclick = () => { lastArea = null; drawHud(); };
   }
 
-  drawInit(); drawHud(); sideShow();
+  // Cajetillas de dados de cada uno, a los lados del tablero; se abren cuando su dueño tira
+  const opened = new Map(); let boxSeen = new Set((S().rolls || []).map(r => r.id)), boxSig = "";
+  function drawBoxes() {
+    const s = S(), onBoard = new Set((s.tokens || []).filter(t => t.kind === "pc").map(t => t.owner));
+    const people = s.users.filter(u => u.role !== "player" || onBoard.has(u.id) || u.id === me());
+    visibleRolls(s).forEach(r => { if (!boxSeen.has(r.id)) { boxSeen.add(r.id); if (r.dice && r.dice.length) { opened.set(r.who, Date.now()); setTimeout(drawBoxes, 4600); } } });
+    const skinOf = id => { const r = [...(s.rolls || [])].reverse().find(x => x.who === id && x.skin); return r ? r.skin : (id === me() ? mySkin() : "rubi"); };
+    const html = people.map(u => { const open = Date.now() - (opened.get(u.id) || 0) < 4500, ch = s.characters.find(c => c.owner === u.id);
+      return `<button class="dbox${open ? " open" : ""}${u.id === me() ? " mine" : ""}" data-dbox="${u.id}" style="--c:${esc(u.color || "#d6aa4e")};--skin:${SKIN_HEX[skinOf(u.id)] || "#a3122a"}" title="${u.id === me() ? "Tus dados: pulsa para tirar" : "Dados de " + esc(u.name)}">
+        <span class="lid"></span><span class="body"><i></i><i></i><i></i></span><small>${esc(ch && u.role === "player" ? ch.name.split(" ")[0] : u.name.split(" ")[0])}</small></button>`; });
+    const half = Math.ceil(html.length / 2), sig = html.join("");
+    if (sig === boxSig) return; boxSig = sig;
+    $(".dboxes.l", host).innerHTML = html.slice(0, half).join(""); $(".dboxes.r", host).innerHTML = html.slice(half).join("");
+    $$("[data-dbox]", host).forEach(b => b.onclick = () => { if (b.dataset.dbox === me()) { sideTab = "tir"; sideShow(); const p = $("#trpad", host); if (p) p.scrollIntoView({ block: "nearest" }); } });
+  }
+  drawInit(); drawHud(); sideShow(); drawBoxes();
   return {
     update() {
       const s = S();
@@ -247,6 +262,7 @@ export function mountTactical(host, opts = {}) {
       if (s.board.seq !== lastTurnSeen) { sel = sel; drawHud(); }
       const n = (s.rolls || []).length; if (n > rollsSeen && sideTab !== "tir") { const b = $('[data-side="tir"]', host); if (b) b.classList.add("ping"); } rollsSeen = n;
       if (!host.querySelector(".hud input:focus")) drawHud();
+      drawBoxes();
     }
   };
 }

@@ -12,11 +12,21 @@ export async function renderStage(el) {
   const my = ++token;
   const state = store.get();
   const p = presentationFor(state);
-  const mapURL = state.world.map ? await getImage(state.world.map) : exampleMap().url;
+  const backURL = state.backdrop ? await getImage(state.backdrop) : null;
+  const mapURL = backURL || (state.world.map ? await getImage(state.world.map) : exampleMap().url);
   let html = "";
   const caption = (eyebrow, title, text) => `<div class="body"><div class="eyebrow">${esc(eyebrow)}</div><h2>${esc(title)}</h2>${text ? `<p>${esc(text)}</p>` : ""}</div>`;
 
-  if (!p) {
+  if (p && p.type === "lore") {
+    const sn = p.snap || {}, url = sn.img ? await getImage(sn.img) : null;
+    const who = p.to ? (state.users.find(u => u.id === p.to) || {}).name : null;
+    const tag = who ? `<div class="presto">Solo para ${esc(who)}</div>` : "";
+    if (url && !sn.text && !sn.eyebrow) html = `<div class="pres" style="background:#0a0806">${tag}<div class="art"><img src="${url}" alt="${esc(sn.title)}"></div></div>`;
+    else if (url) html = `<div class="pres lorepres">${tag}<div class="art"><img src="${url}" alt="${esc(sn.title)}"></div>${caption(sn.eyebrow || "", sn.title, sn.text)}</div>`;
+    else html = `<div class="pres" style="background-image:url('${mapURL}')">${tag}<div class="shade"></div>${caption(sn.eyebrow || "", sn.title, sn.text)}</div>`;
+  } else if (!p && backURL) {
+    html = `<div class="pres" style="background:#0a0806"><div class="art"><img src="${backURL}" alt="Escena"></div></div>`;
+  } else if (!p) {
     html = `<div class="pres empty-stage"><div class="body"><div class="eyebrow">LA MESA</div><h2>Nada en la mesa</h2>
       <p>Cuando el máster muestre algo (un lugar, una ilustración o una escena) aparecerá aquí para todos.</p></div></div>`;
   } else if (p.type === "recap") {

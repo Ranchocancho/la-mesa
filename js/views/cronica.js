@@ -23,7 +23,7 @@ function draw() {
     <h1 class="title">Crónica</h1>
     <p class="lead">La historia del grupo, escrita entre todos. Durante la partida, anotad lo que pasa; al cerrar la sesión, el máster lo convierte en el «Anteriormente…».</p>
     ${list.map(x => `<section class="chron ${x.status === "open" ? "live" : ""}">
-      <header><h2>${esc(sessionName(x))}${x.title ? ` · ${esc(x.title)}` : ""}</h2><small>${x.status === "open" ? "En curso" : esc(x.date || "")}</small></header>
+      <header><h2>${esc(sessionName(x))}${x.title ? ` · ${esc(x.title)}` : ""}</h2><small>${x.status === "open" ? "En curso" : esc(x.date || "")}${x.status !== "open" && dm ? ` · <a href="#lore/ses:${x.id}">✎ Editar</a>` : ""}</small></header>
       ${x.recap ? `<p class="recaptext">${esc(x.recap)}</p>` : ""}
       ${(x.xp || []).length ? `<div class="xpgot">${x.xp.map(g => `<span><b>+${g.amount} PX</b> ${esc(g.name)}${g.reason ? ` · ${esc(g.reason)}` : ""}</span>`).join("")}</div>` : ""}
       <div class="entries">${entries(x.id).map(e => {

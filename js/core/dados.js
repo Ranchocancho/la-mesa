@@ -4,6 +4,9 @@ import { store, uid } from "./store.js";
 import { currentUser, isDM } from "./session.js";
 
 export const rnd = sides => 1 + Math.floor(Math.random() * sides);
+// Juego de dados de este jugador (se guarda en su navegador y viaja con cada tirada)
+export const mySkin = () => { try { return localStorage.getItem("lamesa:dados") || "rubi"; } catch (e) { return "rubi"; } };
+export const setMySkin = k => { try { localStorage.setItem("lamesa:dados", k); } catch (e) { /* */ } };
 
 /** Interpreta "2d6+1d4+3" → [{n,d,kh?,kl?}|{k:num}] */
 export function parse(expr) {
@@ -60,7 +63,7 @@ export function publish(r) {
   const e = {
     id: uid("tir"), at: Date.now(), who: me ? me.id : null, whoName: me ? me.name : "", label: r.label || r.expr, expr: r.expr,
     kind: r.kind || "free", adv: r.adv || 0, crit: !!r.crit, tok: r.by || null, target: r.target || null, link: r.link || null,
-    dice: out.dice, total: out.total, nat: out.nat, secret: !!r.secret, status: "pending", dmg: r.dmg || null, dtype: r.dtype || null, ac: r.ac ?? null, why: r.why || null, cov: r.cov || null, auto: r.auto || null
+    dice: out.dice, total: out.total, nat: out.nat, secret: !!r.secret, status: "pending", dmg: r.dmg || null, dtype: r.dtype || null, ac: r.ac ?? null, why: r.why || null, cov: r.cov || null, auto: r.auto || null, skin: r.skin || mySkin(), throw: r.throw || null
   };
   if (e.kind === "attack" && r.ac != null) e.result = out.nat === 20 ? "crit" : out.nat === 1 ? "miss" : out.total >= r.ac ? (r.auto ? "crit" : "hit") : "miss";
   // Las tiradas sin consecuencias (pruebas libres) no necesitan confirmación
@@ -71,3 +74,5 @@ export function publish(r) {
 }
 
 export const RESULT = { hit: "Impacto", miss: "Fallo", crit: "¡Crítico!" };
+/** Color de cada juego de dados (para pintar las cajetillas sin cargar el 3D). */
+export const SKIN_HEX = { rubi: "#a3122a", zafiro: "#1c46b8", esmeralda: "#0f7a45", amatista: "#6a2bb0", obsidiana: "#161418", oro: "#c99a2e", hueso: "#e8dcc0", madera: "#8a5a2e" };

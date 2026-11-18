@@ -1,7 +1,7 @@
 // Tabla de tiradas compartida y bandeja de dados. Todos ven las tiradas; el máster confirma, cambia o anula.
 import { store } from "../core/store.js";
 import { isDM, currentUser } from "../core/session.js";
-import { publish, RESULT } from "../core/dados.js";
+import { publish, RESULT, mySkin, setMySkin } from "../core/dados.js";
 import { decide, damageFor, nameOf } from "../core/combate.js";
 import { $, $$, esc } from "../core/ui.js";
 import { srd, srdNow, findMonster } from "../core/srd.js";
@@ -33,7 +33,9 @@ function rollInfo(s, r) {
   return parts.join("") || `<p class="empty">Sin reglas especiales.</p>`;
 }
 
-let adv = 0, secret = false, editing = null;
+let adv = 0, secret = false, editing = null, pool = {};
+const SKIN_NAMES = { rubi: "Rubí", zafiro: "Zafiro", esmeralda: "Esmeralda", amatista: "Amatista", obsidiana: "Obsidiana", oro: "Oro", hueso: "Hueso", madera: "Madera" };
+const poolExpr = mod => { const p = Object.entries(pool).filter(([, n]) => n).map(([d, n]) => `${n}d${d}`).join("+"); return (p || "") + (mod ? (mod > 0 ? "+" : "") + mod : ""); };
 const KIND = { attack: "Ataque", damage: "Daño", check: "Prueba", save: "Salvación", init: "Iniciativa", free: "Tirada" };
 
 /** Lista de tiradas visibles para este usuario (las secretas, solo el máster y quien tira). */
@@ -44,9 +46,12 @@ export function renderRolls(el) {
   const s = store.get(), dm = isDM(s), me = currentUser(s);
   const list = visibleRolls(s).slice(-30).reverse();
   const hasDamage = id => (s.rolls || []).some(x => x.link === id && x.status !== "void");
+  const pe = poolExpr(0);
   el.innerHTML = `<div class="tray">
-      <div class="trayd">${[4, 6, 8, 10, 12, 20, 100].map(d => `<button class="die d${d}" data-d="${d}" title="Tirar d${d}">d${d}</button>`).join("")}</div>
-      <div class="trayo"><input type="number" id="trmod" placeholder="+0" aria-label="Modificador">
+      <div class="trayd">${[4, 6, 8, 10, 12, 20, 100].map(d => `<button class="die d${d} ${pool[d] ? "inpool" : ""}" data-d="${d}" title="Añadir un d${d} a la mano">d${d}${pool[d] ? `<i>${pool[d]}</i>` : ""}</button>`).join("")}</div>
+      <div class="pad" id="trpad" title="Arrastra y suelta para lanzar">${pe ? `<b>${pe}</b><span>Arrastra aquí para lanzar · o pulsa Tirar</span>` : `<span>Elige dados arriba (o tira 1d20) y <b>arrastra aquí para lanzarlos</b></span>`}</div>
+      <div class="trayo"><select id="trskin" aria-label="Tus dados">${Object.entries(SKIN_NAMES).map(([k, n]) => `<option value="${k}" ${mySkin() === k ? "selected" : ""}>🎲 ${n}</option>`).join("")}</select>${pe ? `<button class="btn small" id="trclear">Vaciar</button>` : ""}
+        <input type="number" id="trmod" placeholder="+0" aria-label="Modificador">
         <button class="btn small" id="tradv" aria-pressed="${adv === 1}" title="Ventaja (d20)">Ventaja</button><button class="btn small" id="trdis" aria-pressed="${adv === -1}" title="Desventaja (d20)">Desv.</button>
         ${dm ? `<button class="btn small" id="trsec" aria-pressed="${secret}" title="Solo la ves tú">Secreta</button>` : ""}
         <input id="trexpr" placeholder="2d6+3" aria-label="Expresión de dados"><button class="btn small gold" id="trgo">Tirar</button></div>
@@ -74,12 +79,29 @@ export function renderRolls(el) {
     }).join("") || `<p class="empty">Aún no se ha tirado nada. ¡Que rueden los dados!</p>`}</div>`;
 
   const mod = () => +($("#trmod", el).value || 0);
-  $$("[data-d]", el).forEach(b => b.onclick = () => {
-    const d = +b.dataset.d, m = mod();
-    publish({ expr: `1d${d}${m ? (m > 0 ? "+" : "") + m : ""}`, label: `d${d}${m ? (m > 0 ? " +" : " ") + m : ""}`, adv: d === 20 ? adv : 0, secret, kind: "free" });
-    adv = 0; renderRolls(el);
+  $$("[data-d]", el).forEach(b => {
+    b.onclick = () => { const d = +b.dataset.d; pool[d] = Math.min(10, (pool[d] || 0) + 1); renderRolls(el); };
+    b.oncontextmenu = e => { e.preventDefault(); const d = +b.dataset.d; pool[d] = Math.max(0, (pool[d] || 0) - 1); renderRolls(el); };
   });
-  $("#trgo", el).onclick = () => { const e = $("#trexpr", el).value.trim(); if (e) { publish({ expr: e, label: e, adv, secret, kind: "free" }); adv = 0; $("#trexpr", el).value = ""; renderRolls(el); } };
+  const throwNow = th => {
+    const typed = $("#trexpr", el).value.trim(), m = mod();
+    const expr = typed || poolExpr(m) || `1d20${m ? (m > 0 ? "+" : "") + m : ""}`;
+    publish({ expr, label: expr, adv: /^1d20([+-]\d+)?$/.test(expr) ? adv : 0, secret, kind: "free", throw: th });
+    adv = 0; pool = {}; $("#trexpr", el).value = ""; renderRolls(el);
+  };
+  $("#trgo", el).onclick = () => throwNow(null);
+  // Lanzar con la mano: dirección y fuerza del arrastre sobre el tapete
+  const pad = $("#trpad", el); let g0 = null;
+  pad.onpointerdown = e => { g0 = { x: e.clientX, y: e.clientY, t: performance.now() }; pad.setPointerCapture(e.pointerId); pad.classList.add("grab"); };
+  pad.onpointermove = e => { if (g0) pad.style.setProperty("--sx", `${(e.clientX - g0.x) / 6}px`) || pad.style.setProperty("--sy", `${(e.clientY - g0.y) / 6}px`); };
+  pad.onpointerup = e => {
+    pad.classList.remove("grab"); if (!g0) return;
+    const dx = e.clientX - g0.x, dy = e.clientY - g0.y, len = Math.hypot(dx, dy), ms = Math.max(60, performance.now() - g0.t); g0 = null;
+    if (len < 12) return throwNow(null);
+    throwNow({ fx: dx / len, fy: -dy / len, power: Math.max(0.5, Math.min(1.6, (len / ms) * 1.4)) });
+  };
+  $("#trskin", el).onchange = e => setMySkin(e.target.value);
+  const cl = $("#trclear", el); if (cl) cl.onclick = () => { pool = {}; renderRolls(el); };
   $("#trexpr", el).onkeydown = e => { if (e.key === "Enter") $("#trgo", el).click(); };
   $("#tradv", el).onclick = () => { adv = adv === 1 ? 0 : 1; renderRolls(el); };
   $("#trdis", el).onclick = () => { adv = adv === -1 ? 0 : -1; renderRolls(el); };

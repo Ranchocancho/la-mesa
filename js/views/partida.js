@@ -2,7 +2,9 @@
 import { store } from "../core/store.js";
 import { isDM } from "../core/session.js";
 import { liveSession, visibleLive, lastClosed, sessionName, startSession, closeSession, show, presentationFor, addEntry } from "../core/sesiones.js";
-import { loadScene, blankBoard, clearBoard, saveBoardAsScene } from "../core/mesa.js";
+import { loadScene, blankBoard, clearBoard, saveBoardAsScene, addPC, removePC } from "../core/mesa.js";
+import { presence } from "../core/presence.js";
+import { loreOf, entry, related, refName, showEntry, clockOf, clockText, advanceClock, setBackdrop } from "../core/lore.js";
 import { renderStage } from "./presentacion.js";
 import { mountTactical } from "./mesa.js";
 import { renderRolls } from "./tiradas.js";
@@ -63,7 +65,7 @@ function draw() {
   panel.hidden = !dm || panelHidden;
   if (dm && !panelHidden && !(closing && typing(panel))) {
     const open = [...$$("details[open]", panel)].map(d => d.dataset.k);
-    panel.innerHTML = sessionBlock(state) + tacticalBlock(state) + showBlock(state);
+    panel.innerHTML = sessionBlock(state) + directionBlock(state) + tacticalBlock(state) + showBlock(state);
     open.forEach(k => { const d = $(`details[data-k="${k}"]`, panel); if (d) d.open = true; });
     bind(state);
   }
@@ -90,6 +92,17 @@ function sessionBlock(state) {
     <div class="row"><button class="btn" id="close">Cerrar sesión</button></div></div>`;
 }
 
+// Dirección: reloj de campaña y la carpeta de escenas preparadas para esta sesión, a un clic
+function directionBlock(state) {
+  const live = liveSession(state); if (!live) return "";
+  const chaps = loreOf(state).filter(e => e.kind === "chapter" && (e.session === live.id || !e.session)).sort((a, b) => (a.session ? 0 : 1) - (b.session ? 0 : 1) || (a.order || 0) - (b.order || 0));
+  return `<div class="panel"><h2 class="sec">Dirección</h2>
+    <div class="lclock inline"><span>🕯 ${esc(clockText(clockOf(state)))}</span><div class="row">${[[10, "+10 min"], [60, "+1 h"], [480, "+8 h"]].map(([m, l]) => `<button class="btn small" data-clock="${m}">${l}</button>`).join("")}</div></div>
+    ${chaps.length ? `<div class="showplaces"><details data-k="prep" open><summary><span>📂 Escenas preparadas</span><small>${chaps.length}</small></summary><ol class="prepmini">${chaps.map(c => `<li><a href="#lore/${c.id}">${esc(c.name)}</a><span>${related(state, c.id).map(r => { const n = refName(state, r), e = entry(state, r);
+        return e && e.kind !== "note" && e.kind !== "chapter" ? `<button class="btn small" data-showlore="${r}" title="Mostrar a todos">${n.icon} ${esc(n.name)}</button>` : n.kind === "scene" ? `<button class="btn small" data-load="${r}" title="Cargar en la mesa">⚔️ ${esc(n.name)}</button>` : `<a class="btn small" href="#lore/${r}">${n.icon} ${esc(n.name)}</a>`; }).join("")}</span></li>`).join("")}</ol></details></div>` : `<p class="empty">Sin escenas preparadas. <a href="#lore/s:chapter">Prepáralas en el Lore</a>.</p>`}
+    <div class="row" style="margin-top:8px"><a class="btn small" href="#lore">📖 Abrir el Lore</a>${state.backdrop ? `<button class="btn small" id="nobackdrop">Quitar fondo</button>` : ""}</div></div>`;
+}
+
 function tacticalBlock(state) {
   const b = state.board, p = state.presentation || {};
   const groups = [];
@@ -103,11 +116,14 @@ function tacticalBlock(state) {
         <button class="btn small" id="tedit" aria-pressed="${tacEdit}">${tacEdit ? "Terminar de editar" : "Editar la mesa"}</button>
         <button class="btn small" id="tsave">Guardar como escena</button>
         <button class="btn small danger" id="tclear">Retirar la mesa</button>
-      </div>` : `<p class="empty" style="margin:0 0 8px">No hay ninguna escena en la mesa.</p>`}
+      </div>
+      <h3 class="sub" style="margin:14px 0 6px">Personajes en la mesa</h3>
+      <div class="pclist">${state.characters.map(c => { const on = state.tokens.some(t => t.kind === "pc" && t.char === c.id), live = c.owner && presence.online(c.owner);
+        return `<label class="pcrow${on ? " on" : ""}"><input type="checkbox" data-pc="${c.id}" ${on ? "checked" : ""}><span class="dot${live ? " live" : ""}" title="${live ? "Conectado" : "Desconectado"}"></span><span>${esc(c.name)}</span><small>${live ? "conectado" : "fuera"}</small></label>`; }).join("") || `<p class="empty">No hay personajes.</p>`}</div>` : `<p class="empty" style="margin:0 0 8px">No hay ninguna escena en la mesa.</p>`}
     <div class="showplaces" style="margin-top:10px">${groups.map(([k, n, sc]) => `<details data-k="${k}"><summary><span>${esc(n)}</span><small>${sc.length}</small></summary>
       <div class="scenelist">${sc.map(x => `<div class="scenerow"><span>${esc(x.name)}</span><small>${x.tokens.length} fichas</small><button class="btn small gold" data-load="${x.id}">Cargar</button></div>`).join("")}</div></details>`).join("")}</div>
     <div class="row" style="margin-top:10px"><button class="btn small" id="tblank">Mesa vacía</button><a class="btn small" href="#escenas">Preparar escenas</a></div>
-    <p class="note" style="margin:10px 0 0">Al cargar una escena, todos la ven y el grupo aparece en su punto de inicio.</p></div>`;
+    <p class="note" style="margin:10px 0 0">Al cargar una escena solo aparecen los personajes de quien está conectado. Marca o desmarca arriba para meter o sacar a alguien.</p></div>`;
 }
 
 function showBlock(state) {
@@ -147,6 +163,10 @@ function bind(state) {
   on("xpfill", () => { const v = $("#xpall", el).value, why = $("#xpwhy", el).value; $$("[data-xpc]", el).forEach(i => (i.value = v)); $$("[data-xpr]", el).forEach(i => { if (!i.value) i.value = why; }); });
   on("tblank", () => { tacEdit = true; blankBoard(); });
   on("tedit", () => { tacEdit = !tacEdit; draw(); });
+  $$("[data-clock]", el).forEach(b => b.onclick = () => advanceClock(+b.dataset.clock));
+  $$("[data-showlore]", el).forEach(b => b.onclick = () => showEntry(b.dataset.showlore));
+  on("nobackdrop", () => setBackdrop(null));
+  $$("[data-pc]", el).forEach(b => b.onchange = () => b.checked ? addPC(b.dataset.pc) : removePC(b.dataset.pc));
   on("tclear", () => { const b = $("#tclear", el); if (!b.dataset.sure) { b.dataset.sure = 1; b.textContent = "Pulsa otra vez"; return; } tacEdit = false; clearBoard(); });
   on("tsave", () => {
     const b = $("#tsave", el);

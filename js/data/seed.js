@@ -52,6 +52,14 @@ export function seed() {
             { id: "i2", type: "text", title: "Rumor de la taberna", text: "Dicen que el herrero Doran Brasaviva sabe más de lo que cuenta.", revealed: false }
           ]
         },
+        { id: "mercado", parent: "velarath", name: "Barrio del mercado", kind: "Distrito", x: 0.5, y: 0.5, visible: true,
+          summary: "Toldos de colores, olor a pan y a hierro caliente. Los pregoneros gritan precios y los guardias vigilan con desgana.",
+          secret: "Desde que callaron las campanas, alguien vende en el mercado mercancía del almacén saqueado.", items: [] },
+        { id: "ciervo", parent: "mercado", name: "Posada El Ciervo Rojo", kind: "Localización", x: 0.5, y: 0.5, visible: true,
+          summary: "Buena comida, habitaciones baratas y una chimenea que nunca se apaga.",
+          secret: "Elvira esconde a un fugitivo en el sótano.", items: [] },
+        { id: "campanario", parent: "velarath", name: "El campanario", kind: "Localización", x: 0.5, y: 0.5, visible: true,
+          summary: "Una torre de piedra negra que domina la plaza.", secret: "Bajo la torre está la cripta. La llave la tiene el gremio.", items: [] },
         {
           id: "hollin", name: "Bosque de Hollín", kind: "Región", x: 0.3, y: 0.33, visible: true,
           summary: "Un bosque quemado que aún humea. Los caminos cambian de sitio.",
@@ -85,6 +93,33 @@ export function seed() {
         recap: "El grupo llegó a Vel Arath y encontró la ciudad en silencio. Doran Brasaviva insinuó que el gremio sabe por qué callaron las campanas. Tras una pelea con goblins en el mercado, Mirra encontró una llave de hierro con el sello del gremio. La sesión terminó a las puertas de la cripta, bajo el campanario."
       }
     ],
+    // Lore: personajes, facciones, eventos, galería, notas y la preparación de la próxima sesión
+    lore: [
+      { id: "elvira", kind: "npc", name: "Elvira", role: "Posadera de El Ciervo Rojo · antigua aventurera", place: "ciervo", revealed: true, img: null, at: 1,
+        summary: "Mujer de pelo cano y manos de espadachina. Trata a todos como a viejos amigos.", secret: "Oculta a Tomás, aprendiz del gremio, en el sótano. Lo buscan por ver algo en el campanario.", links: ["gremio"] },
+      { id: "doran", kind: "npc", name: "Doran Brasaviva", role: "Maestro herrero", place: "mercado", revealed: true, img: null, at: 2,
+        summary: "Herrero enorme y nervioso. Miente fatal.", secret: "Sabe que el gremio guarda la llave de la cripta. Teme a su propio maestre.", links: ["gremio"] },
+      { id: "dorian", kind: "npc", name: "Dorian", role: "Comerciante de telas", place: "mercado", revealed: false, img: null, at: 3,
+        summary: "Joven, bien vestido, a la defensiva.", secret: "No es el ladrón: protege a su hermana, que robó del almacén.", links: [] },
+      { id: "merek", kind: "npc", name: "Merek", role: "Comerciante de telas", place: "mercado", revealed: false, img: null, at: 4,
+        summary: "Mayor, de voz potente. Se ofende con facilidad.", secret: "Quiere quitarse de en medio a un competidor.", links: [] },
+      { id: "gremio", kind: "faction", name: "Gremio de herreros", place: "velarath", revealed: true, img: null, at: 5,
+        summary: "El gremio más rico de Vel Arath. Su sello es un yunque con una campana.", secret: "Su maestre hizo callar las campanas para abrir la cripta sin testigos.", links: [] },
+      { id: "altercado", kind: "event", name: "Un altercado en el mercado", place: "mercado", etype: "preparado", status: "pendiente", revealed: false, img: null, at: 6,
+        summary: "Dos comerciantes discuten a gritos junto a un carro de telas. Uno acusa al otro de vender mercancía robada. Un guardia observa desde lejos.",
+        secret: "La mercancía procede del almacén saqueado. Dorian no es el ladrón: está protegiendo a alguien. Merek intenta deshacerse de un competidor.",
+        actions: "Hablar con los comerciantes\nInterrogar al guardia\nInvestigar la mercancía\nIgnorar el altercado", links: ["dorian", "merek"] },
+      { id: "puertas", kind: "event", name: "Cierran las puertas al anochecer", place: "velarath", etype: "ambiental", status: "pendiente", revealed: false, img: null, at: 7,
+        summary: "Suenan los cuernos de la muralla: las puertas de la ciudad se cierran hasta el alba.", secret: "Quien quede fuera tendrá que sobornar al guardia o colarse por las cloacas.", actions: "", links: [] },
+      { id: "nota1", kind: "note", name: "Hilos sueltos", place: null, revealed: false, img: null, at: 8, summary: "",
+        secret: "¿Quién robó el almacén? · ¿Qué vio Tomás en el campanario? · La druida Ceniza sabe algo del fuego.", links: [] },
+      { id: "cap1", kind: "chapter", name: "Llegada a Vel Arath", session: null, order: 0, place: "velarath", revealed: false, img: null, at: 9, summary: "", secret: "Describir las murallas y el silencio de las campanas. Los guardias de la entrada piden el motivo de la visita.", links: ["puertas"] },
+      { id: "cap2", kind: "chapter", name: "El mercado", session: null, order: 1, place: "mercado", revealed: false, img: null, at: 10, summary: "", secret: "Rumores del mercado. Si se aburren, lanzar el altercado.", links: ["altercado", "doran"] },
+      { id: "cap3", kind: "chapter", name: "La posada", session: null, order: 2, place: "ciervo", revealed: false, img: null, at: 11, summary: "", secret: "Interior 3D (escena «taberna»). Elvira y el fugitivo oculto.", links: ["elvira"] },
+      { id: "cap4", kind: "chapter", name: "La investigación", session: null, order: 3, place: "campanario", revealed: false, img: null, at: 12, summary: "", secret: "Pistas, las cloacas y un encuentro opcional en la cripta.", links: ["gremio"] }
+    ],
+    clock: { day: 3, min: 17 * 60 + 30 },
+    backdrop: null,
     rolls: [], // tiradas de dados compartidas
     chronicle: [ // notas que escriben los jugadores durante cada sesión
       { id: "cr1", session: "s6", by: "j1", name: "Jugador 1", text: "Mirra le birla una llave de hierro a un goblin en plena pelea del mercado. Lleva el sello del gremio de herreros.", at: 1731430000000 },

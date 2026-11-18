@@ -11,7 +11,6 @@ import { siluetaFor, siluetaURL } from "../data/siluetas.js";
 import { estado, etiqueta } from "../data/estados.js";
 import { computeVision, explored } from "../core/vision.js";
 import { playEffect, EFECTOS } from "./efectos3d.js";
-import { throwDice } from "./dados3d.js";
 import { sound, AMBIENTES } from "../core/sonido.js";
 
 const CELL = 4, BASE = "assets/kaykit/";
@@ -193,7 +192,7 @@ export function createBoard3D(host, opts) {
   const hl = new THREE.Mesh(new THREE.PlaneGeometry(CELL * 0.96, CELL * 0.96), new THREE.MeshBasicMaterial({ color: 0xd6aa4e, transparent: true, opacity: 0.35, depthWrite: false }));
   hl.rotation.x = -Math.PI / 2; hl.position.y = 0.12; hl.visible = false; scene.add(hl);
 
-  let fogGroup = new THREE.Group(), fxList = [], seenFx = new Set(), fxReady = false, pickMode = null, fogSig = "";
+  let trays = 0, fogGroup = new THREE.Group(), fxList = [], seenFx = new Set(), fxReady = false, pickMode = null, fogSig = "";
   scene.add(fogGroup);
   const pickRing = new THREE.Mesh(new THREE.RingGeometry(0.9, 1, 64), new THREE.MeshBasicMaterial({ color: 0xff8a3a, transparent: true, opacity: 0.8, side: THREE.DoubleSide, depthWrite: false }));
   pickRing.rotation.x = -Math.PI / 2; pickRing.position.y = 0.2; pickRing.visible = false; scene.add(pickRing);
@@ -255,7 +254,7 @@ export function createBoard3D(host, opts) {
     const W = g.cols * CELL, H = g.rows * CELL;
     // Mesa de madera y marco del tablero
     const wood = woodTex(); wood.repeat.set(3, 3);
-    const table = new THREE.Mesh(new THREE.BoxGeometry(W + CELL * 6, 2.5, H + CELL * 6), new THREE.MeshStandardMaterial({ map: wood, roughness: 0.7 }));
+    const table = new THREE.Mesh(new THREE.BoxGeometry(W + CELL * 8, 2.5, H + CELL * 8), new THREE.MeshStandardMaterial({ map: wood, roughness: 0.7 }));
     table.position.y = -1.6; table.receiveShadow = true; grp.add(table);
     const frameM = new THREE.Mesh(new THREE.BoxGeometry(W + 1.6, 0.6, H + 1.6), new THREE.MeshStandardMaterial({ color: 0x2b1d12, roughness: 0.6 }));
     frameM.position.y = -0.35; frameM.receiveShadow = true; grp.add(frameM);
@@ -560,16 +559,7 @@ export function createBoard3D(host, opts) {
       if (r && r.mixer) { play(r, "Spellcast_Shoot", true); setTimeout(() => { if (!r.down) play(r, "Idle"); }, 900); }
       else if (r) r.hitT = 0.5;
     }
-    // Dados: cada tirada nueva rueda sobre la mesa, junto a quien la hace
-    for (const r of (opts.rolls ? opts.rolls() : [])) {
-      if (seenFx.has(r.id)) continue;
-      seenFx.add(r.id);
-      if (!(fxReady || Date.now() - r.at < 6000) || !r.dice.length) continue;
-      const t = r.tok && m.tokens.find(k => k.id === r.tok);
-      const at = t ? new THREE.Vector3(cx(t.c) + CELL * 0.9, 0, cz(t.r) + CELL * 0.9) : new THREE.Vector3(0, 0, G.rows * CELL * 0.3);
-      fxList.push(throwDice(scene, r.dice, at, new THREE.Color(opts.rollColor ? opts.rollColor(r) : "#8a2be2").getHex()));
-      sound.play("dice");
-    }
+    // Los dados ya no ruedan sobre el tablero: salen en la cajetilla (dicecam.js)
     fxReady = true;
   }
 
