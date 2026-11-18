@@ -4,7 +4,7 @@
 //  - "local": modo demostración, sincroniza pestañas del mismo navegador.
 import { seed } from "../data/seed.js";
 
-const KEY = "lamesa:campana:v1";
+const KEY = "lamesa:mundo:v2";
 const listeners = new Set();
 let state = null;
 let backend = "local";
@@ -14,7 +14,7 @@ let channel = null;
 function loadLocal() {
   try {
     const s = JSON.parse(localStorage.getItem(KEY));
-    if (s && s.version === 1) return s;
+    if (s && s.version === 2) return s;
   } catch (e) { /* sin almacenamiento */ }
   return seed();
 }

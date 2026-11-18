@@ -1,7 +1,5 @@
 // Secciones que llegan en hitos siguientes.
 const INFO = {
-  mesa: { t: "Mesa táctica", items: ["Editor de tablero hexagonal con suelos y escenografía", "Iniciativa en una columna junto al tablero", "Ficha plegable con tu personaje y tu objetivo", "Estado del grupo, dados compartidos y vista 3D"], link: true },
-  personajes: { t: "Personajes", items: ["Ficha 2024 con ilustración destacada", "Todos pueden verla; solo el dueño y el máster la editan", "Inventario y conjuros del SRD 5.2", "Subida de nivel guiada y experiencia"] },
   lore: { t: "Lore y panel del máster", items: ["Biblioteca de lugares, PNJ, facciones y objetos", "PNJ itinerantes que el máster mueve entre regiones", "Notas por ramas y panel de apoyo durante la partida"] },
   cronica: { t: "Crónica", items: ["Cuaderno que escriben los jugadores mientras juegan", "Reparto de experiencia al cerrar la sesión", "Resumen automático para el «Anteriormente en…»"] }
 };

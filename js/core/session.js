@@ -1,17 +1,28 @@
-// Quién está usando esta pestaña y qué puede hacer.
-// Hoy se elige en la pantalla de inicio; en el Hito 1 vendrá de la cuenta de Google.
-const KEY = "lamesa:yo";
-let me = null;
-try { me = sessionStorage.getItem(KEY); } catch (e) { me = null; }
+// Quién está usando esta pestaña, con qué papel y qué puede hacer.
+// Papeles: "admin" (quien creó el mundo), "dm" (máster) y "player" (jugador).
+// El administrador y los másteres pueden "ver como" cualquier jugador para comprobar qué ve.
+const KEY = "lamesa:yo", VKEY = "lamesa:vercomo";
+let me = null, viewAs = null;
+try { me = sessionStorage.getItem(KEY); viewAs = sessionStorage.getItem(VKEY); } catch (e) { /* solo en memoria */ }
+const keep = (k, v) => { try { v == null ? sessionStorage.removeItem(k) : sessionStorage.setItem(k, v); } catch (e) { /* solo en memoria */ } };
 
 export const session = {
   id: () => me,
-  set(id) { me = id; try { sessionStorage.setItem(KEY, id); } catch (e) { /* solo en memoria */ } },
-  clear() { me = null; try { sessionStorage.removeItem(KEY); } catch (e) { /* solo en memoria */ } }
+  set(id) { me = id; keep(KEY, id); },
+  clear() { me = null; viewAs = null; keep(KEY, null); keep(VKEY, null); },
+  viewAs: () => viewAs,
+  setViewAs(id) { viewAs = id || null; keep(VKEY, viewAs); }
 };
 
-export const currentUser = state => state.users.find(u => u.id === me) || null;
-export const isDM = state => (currentUser(state) || {}).role === "dm";
+export const ROLE = { admin: "Administrador", dm: "Máster", player: "Jugador" };
+export const realUser = state => state.users.find(u => u.id === me) || null;
+/** Puede preparar y dirigir (administrador o máster), sin contar el "ver como". */
+export const isEditor = state => { const u = realUser(state); return !!u && (u.role === "admin" || u.role === "dm"); };
+export const isAdmin = state => (realUser(state) || {}).role === "admin";
+export const viewingAs = state => (isEditor(state) && viewAs && state.users.find(u => u.id === viewAs && u.role === "player")) || null;
+export const currentUser = state => viewingAs(state) || realUser(state);
+/** Actúa como máster ahora mismo (es editor y no está viendo como un jugador). */
+export const isDM = state => isEditor(state) && !viewingAs(state);
 
 /** Reglas de permisos en un solo sitio, para que todas las vistas apliquen las mismas. */
 export const can = {
@@ -19,5 +30,5 @@ export const can = {
   present: state => isDM(state),
   seePlace: (state, place) => isDM(state) || place.visible,
   seeItem: (state, item) => isDM(state) || item.revealed,
-  editCharacter: (state, ch) => isDM(state) || ch.owner === me
+  editCharacter: (state, ch) => isDM(state) || ch.owner === (currentUser(state) || {}).id
 };

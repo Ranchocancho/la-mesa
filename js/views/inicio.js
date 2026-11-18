@@ -1,17 +1,19 @@
-// Inicio: elegir quién eres y, después, el vestíbulo de la sesión con "Anteriormente en…".
+// Inicio del mundo: la partida en curso, el «Anteriormente…», el grupo con sus papeles y las sesiones pasadas.
 import { store } from "../core/store.js";
-import { session, currentUser, isDM } from "../core/session.js";
+import { session, currentUser, isDM, isAdmin, ROLE } from "../core/session.js";
+import { visibleLive, lastClosed, pastSessions, sessionName, nextNumber, startSession, show } from "../core/sesiones.js";
 import { presence } from "../core/presence.js";
 import { getImage } from "../core/images.js";
 import { exampleMap } from "../data/worldmap.js";
 import { $, $$, esc, avatar, toast } from "../core/ui.js";
 
-let el = null;
+let el = null, editing = null;
 
 export function mount(root) {
   el = document.createElement("div");
   el.className = "page";
   root.appendChild(el);
+  editing = null;
   draw();
   return { update: (s, label, remote) => { if (!(label === "recap" && !remote)) draw(); }, presence: drawParty, unmount() { el = null; } };
 }
@@ -22,52 +24,63 @@ function draw() {
   const me = currentUser(state);
   if (!me) return drawWho(state);
   const dm = isDM(state);
-  const last = state.sessions[state.sessions.length - 1];
+  const live = visibleLive(state);
+  const last = lastClosed(state);
+  const past = pastSessions(state);
+  const go = () => { location.hash = "partida"; };
   el.innerHTML = `<div class="wrap">
     <h1 class="title">${esc(state.campaign.name)}</h1>
-    <p class="lead">Sesión ${state.campaign.session}. ${dm ? "Cuando estéis todos, empieza con el resumen de lo ocurrido." : "Esperando a que el máster empiece la sesión."}</p>
+    <p class="lead">${live ? `${esc(sessionName(live))} en curso.` : dm ? "No hay ninguna partida en curso. Cuando os sentéis a jugar, empieza una sesión." : "No hay ninguna partida en curso. Mientras tanto puedes repasar el mapa y lo que sabéis del mundo."}</p>
+    <section class="livebox ${live ? "on" : ""}">
+      ${live ? `<div><b>${esc(sessionName(live))}</b><span>${live.test ? "Solo la veis el administrador y los másteres" : "Todo el grupo está invitado"}</span></div>
+        <a class="btn gold" href="#partida">${dm ? "Ir a la partida" : "Unirse a la partida"}</a>`
+      : dm ? `<div><b>Sesión ${nextNumber(state)}</b><span>Al empezar, todos verán el «Anteriormente…».</span></div>
+        <div class="row"><button class="btn gold" id="start">Empezar sesión</button><button class="btn" id="starttest">Sesión de pruebas</button></div>`
+      : `<div><b>Sin partida</b><span>Te avisaremos aquí cuando el máster empiece.</span></div>`}
+    </section>
     <div class="lobby">
       <section class="recap" id="recapbg">
         <div class="in">
           <h3>Anteriormente: ${esc(last ? last.title : "")}</h3>
-          <p id="recaptext">${esc(last ? last.recap : "Todavía no hay sesiones anteriores.")}</p>
-          ${dm ? `<div class="row">
-            <button class="btn gold" id="startrecap">Mostrar «Anteriormente en…» a todos</button>
-            <a class="btn" href="#mundo">Abrir el mapa del mundo</a>
-            <button class="btn" id="editrecap">Editar resumen</button>
-          </div>` : `<div class="row"><a class="btn" href="#mundo">Ver el mapa del mundo</a></div>`}
+          <p>${esc(last ? last.recap : "Todavía no hay sesiones anteriores.")}</p>
+          <div class="row">${dm && last ? `<button class="btn" id="showrecap">Mostrarlo a todos</button>` : ""}<a class="btn" href="#mundo">Ver el mapa del mundo</a></div>
         </div>
       </section>
       <section class="panel">
         <h2 class="sec">El grupo</h2>
         <div class="party" id="party"></div>
         ${dm && store.mode() === "cloud" ? `<h2 class="sec" style="margin-top:20px">Invitar al grupo</h2>
-          <p class="note" style="margin:0 0 10px">Envía este enlace a tus jugadores. Entrarán con su cuenta de Google y quedarán dentro de la campaña.</p>
+          <p class="note" style="margin:0 0 10px">Envía este enlace. Cada uno entra con su cuenta de Google y queda dentro del mundo como jugador.</p>
           <div class="row"><input id="invite" readonly class="btn" style="flex:1;min-width:0;text-align:left;font-size:13px" aria-label="Enlace de invitación"><button class="btn gold small" id="copyinv">Copiar enlace</button></div>` : ""}
-        ${dm && store.mode() === "local" ? `<p class="note" style="margin-top:16px">Para probar la sincronización, abre esta misma página en otra pestaña y entra como un jugador. Lo que muestres aquí aparecerá allí al momento.</p>
-          <div class="row" style="margin-top:12px"><button class="btn small danger" id="reset">Restablecer la campaña de ejemplo</button></div>` : ""}
+        ${dm && store.mode() === "local" ? `<p class="note" style="margin-top:16px">Modo demostración: abre esta página en otra pestaña y entra como un jugador para ver la sincronización.</p>
+          <div class="row" style="margin-top:12px"><button class="btn small danger" id="reset">Restablecer el mundo de ejemplo</button></div>` : ""}
       </section>
     </div>
+    <section style="margin-top:24px"><h2 class="sec">Sesiones anteriores</h2>
+      <div class="sessions">${past.map(x => editing === x.id ? `<div class="sess">
+          <label class="field">Título<input id="etitle" value="${esc(x.title)}"></label>
+          <label class="field" style="margin-top:8px">Resumen<textarea id="erecap" rows="5">${esc(x.recap)}</textarea></label>
+          <div class="row" style="margin-top:8px"><button class="btn gold small" id="esave">Guardar</button><button class="btn small" id="ecancel">Cancelar</button></div></div>`
+        : `<div class="sess"><div class="head"><b>Sesión ${x.n} · ${esc(x.title)}</b><small>${esc(x.date || "")}</small>${dm ? `<button class="btn small" data-edit="${x.id}">Editar</button>` : ""}</div><p>${esc(x.recap)}</p></div>`).join("") || `<p class="empty">Aún no habéis jugado ninguna sesión.</p>`}</div>
+    </section>
   </div>`;
   drawParty();
   const bgURL = state.world.map ? null : exampleMap().url;
   if (bgURL) $("#recapbg").style.backgroundImage = `url('${bgURL}')`;
   else getImage(state.world.map).then(u => { const b = $("#recapbg"); if (b && u) b.style.backgroundImage = `url('${u}')`; });
 
-  const sr = $("#startrecap");
-  if (sr) sr.onclick = () => store.commit("present", s => { s.presentation = { type: "recap" }; });
-  const er = $("#editrecap");
-  if (er) er.onclick = () => {
-    const p = $("#recaptext");
-    p.outerHTML = `<label class="field" style="margin-bottom:12px"><span class="sr">Resumen de la sesión anterior</span><textarea id="recapedit" rows="5">${esc(last ? last.recap : "")}</textarea></label>`;
-    er.textContent = "Guardar resumen";
-    er.onclick = () => {
-      const v = $("#recapedit").value;
-      store.commit("recap", s => { const l = s.sessions[s.sessions.length - 1]; if (l) l.recap = v; });
-      toast("Resumen guardado");
-      draw();
-    };
-  };
+  const on = (id, fn) => { const b = $("#" + id, el); if (b) b.onclick = fn; };
+  on("start", () => { startSession(false); go(); });
+  on("starttest", () => { startSession(true); go(); });
+  on("showrecap", () => { show({ type: "recap" }); go(); });
+  $$("[data-edit]", el).forEach(b => b.onclick = () => { editing = b.dataset.edit; draw(); });
+  on("ecancel", () => { editing = null; draw(); });
+  on("esave", () => {
+    const id = editing, t = $("#etitle").value.trim(), r = $("#erecap").value;
+    editing = null;
+    store.commit("recap", s => { const x = s.sessions.find(y => y.id === id); if (x) { x.title = t; x.recap = r; } });
+    toast("Sesión guardada"); draw();
+  });
   const inv = $("#invite");
   if (inv) {
     import("../core/cloud.js").then(m => { inv.value = m.inviteLink(); });
@@ -77,37 +90,35 @@ function draw() {
     };
   }
   const rs = $("#reset");
-  if (rs) rs.onclick = () => { if (rs.dataset.sure) { store.reset(); toast("Campaña de ejemplo restablecida"); } else { rs.dataset.sure = "1"; rs.textContent = "Pulsa otra vez para confirmar"; } };
+  if (rs) rs.onclick = () => { if (rs.dataset.sure) { store.reset(); toast("Mundo de ejemplo restablecido"); } else { rs.dataset.sure = "1"; rs.textContent = "Pulsa otra vez para confirmar"; } };
 }
 
 function drawParty() {
   const box = el && $("#party", el);
   if (!box) return;
   const state = store.get();
-  if (store.mode() === "cloud") return drawPartyCloud(box, state);
-  const dmUser = state.users.find(u => u.role === "dm");
-  const rows = [`<div class="pc">${avatar(dmUser, 44)}<div><b>${esc(dmUser.name)}</b><span>Máster</span></div>${status(dmUser.id)}</div>`];
-  state.characters.forEach(c => {
-    const owner = state.users.find(u => u.id === c.owner);
-    rows.push(`<div class="pc">${avatar(c, 44)}<div><b>${esc(c.name)}</b><span>${esc(c.species)} · ${esc(c.cls)} ${c.level} · ${esc(owner ? owner.name : "")}</span></div>${status(c.owner)}</div>`);
-  });
-  box.innerHTML = rows.join("");
-}
-function drawPartyCloud(box, state) {
-  const dm = isDM(state);
-  const players = state.users.filter(u => u.role !== "dm");
+  const dm = isDM(state), admin = isAdmin(state) && dm;
+  const players = state.users.filter(u => u.role === "player");
   const rows = state.users.map(u => {
     const ch = state.characters.find(c => c.owner === u.id);
-    return `<div class="pc">${avatar(u, 44)}<div><b>${esc(u.name)}</b><span>${u.role === "dm" ? "Máster" : ch ? `${esc(ch.name)} · ${esc(ch.cls)} ${ch.level}` : "Sin personaje asignado"}</span></div>${status(u.id)}</div>`;
+    const role = admin && u.role !== "admin"
+      ? `<select class="btn small" data-role="${u.id}" aria-label="Papel de ${esc(u.name)}"><option value="player" ${u.role === "player" ? "selected" : ""}>Jugador</option><option value="dm" ${u.role === "dm" ? "selected" : ""}>Máster</option></select>`
+      : `<span>${esc(ROLE[u.role] || "Jugador")}</span>`;
+    return `<div class="pc">${avatar(ch && u.role === "player" ? ch : u, 44)}<div><b>${esc(u.name)}</b><span>${ch ? `${esc(ch.name)} · ${esc(ch.cls)} ${ch.level}` : u.role === "player" ? "Sin personaje asignado" : esc(ROLE[u.role])}</span></div><div class="pcend">${role}${status(u.id)}</div></div>`;
   });
   let assign = "";
-  if (dm && state.characters.length) {
+  if (dm && state.characters.length && players.length) {
     assign = `<h2 class="sec" style="margin-top:18px">Personajes</h2>
-      <p class="note" style="margin:0 0 8px">Asigna cada personaje a su jugador. La ficha completa llega en el hito 2.</p>
-      ${state.characters.map(c => `<label class="pc" style="grid-template-columns:44px 1fr minmax(120px,auto)">${avatar(c, 44)}<div><b>${esc(c.name)}</b><span>${esc(c.cls)} ${c.level}</span></div>
+      <p class="note" style="margin:0 0 8px">Asigna cada personaje a su jugador. Las fichas están en <a href="#personajes" style="color:var(--oro)">Personajes</a>.</p>
+      ${state.characters.map(c => `<label class="pc">${avatar(c, 44)}<div><b>${esc(c.name)}</b><span>${esc(c.cls)} ${c.level}</span></div>
         <select class="btn small" data-char="${c.id}" aria-label="Jugador de ${esc(c.name)}"><option value="">Sin jugador</option>${players.map(p => `<option value="${p.id}" ${c.owner === p.id ? "selected" : ""}>${esc(p.name)}</option>`).join("")}</select></label>`).join("")}`;
   }
-  box.innerHTML = rows.join("") + (players.length ? "" : `<p class="empty">Aún no se ha unido ningún jugador. Mándales el enlace de invitación.</p>`) + assign;
+  box.innerHTML = rows.join("") + (players.length || !dm ? "" : `<p class="empty">Aún no se ha unido ningún jugador. Mándales el enlace de invitación.</p>`) + assign;
+  $$("[data-role]", box).forEach(sel => sel.onchange = () => store.commit("place", s => {
+    const u = s.users.find(x => x.id === sel.dataset.role); u.role = sel.value;
+    s.dms = s.users.filter(x => x.role === "dm").map(x => x.id);
+    toast(sel.value === "dm" ? `${u.name} ahora es máster` : `${u.name} ahora es jugador`);
+  }));
   $$("[data-char]", box).forEach(sel => sel.onchange = () => store.commit("place", s => {
     const c = s.characters.find(x => x.id === sel.dataset.char); c.owner = sel.value || null;
     s.users.forEach(u => { if (u.character === c.id) delete u.character; });
@@ -120,14 +131,14 @@ const status = id => presence.online(id) ? `<span class="on">● conectado</span
 function drawWho(state) {
   el.innerHTML = `<div class="wrap">
     <h1 class="title">¿Quién eres?</h1>
-    <p class="lead">Elige con quién entras en esta pestaña. El máster ve y controla todo; cada jugador ve lo que el máster le revela.</p>
+    <p class="lead">Modo demostración: elige con quién entras en esta pestaña. El máster ve y controla todo; cada jugador ve lo que el máster le revela.</p>
     <div class="who">
       ${state.users.map(u => {
         const c = state.characters.find(x => x.owner === u.id);
-        return `<button class="whoc ${u.role === "dm" ? "dmc" : ""}" data-id="${u.id}">${avatar(c || u)}<b>${esc(c ? c.name : u.name)}</b><span>${u.role === "dm" ? "Máster de la partida" : `${esc(u.name)} · ${esc(c.cls)} ${c.level}`}</span></button>`;
+        return `<button class="whoc ${u.role !== "player" ? "dmc" : ""}" data-id="${u.id}">${avatar(c || u)}<b>${esc(c ? c.name : u.name)}</b><span>${u.role !== "player" ? ROLE[u.role] : `${esc(u.name)} · ${esc(c.cls)} ${c.level}`}</span></button>`;
       }).join("")}
     </div>
-    <p class="note">En la versión real cada uno entrará con su cuenta de Google y no habrá que elegir. De momento sirve para probar la app desde varias pestañas del mismo navegador.</p>
+    <p class="note">Con la versión en la nube cada uno entra con su cuenta de Google y no hay que elegir.</p>
   </div>`;
   $$(".whoc", el).forEach(b => b.onclick = () => {
     session.set(b.dataset.id);

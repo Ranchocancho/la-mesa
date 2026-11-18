@@ -1,18 +1,21 @@
 rules_version = '2';
 
 // Reglas de seguridad de La Mesa.
-// - Solo los miembros de una campaña ven sus datos.
-// - Solo el máster modifica la campaña.
+// Cada documento de "campaigns" es un MUNDO.
+// - Solo los miembros de un mundo ven sus datos.
+// - Lo modifican su dueño (el administrador, quien lo creó) y los másteres que él nombre.
+// - Solo el dueño nombra o quita másteres.
 // - Los jugadores solo reciben los lugares visibles y el contenido revelado.
-// - Las notas secretas solo las lee el máster.
+// - Las notas secretas solo las leen el dueño y los másteres.
 // - Cualquiera con el enlace y una cuenta de Google puede unirse como jugador.
 service cloud.firestore {
   match /databases/{database}/documents {
 
     function signedIn() { return request.auth != null; }
-    function campaign(c) { return get(/databases/$(database)/documents/campaigns/$(c)).data; }
-    function isMember(c) { return signedIn() && request.auth.uid in campaign(c).memberIds; }
-    function isDM(c) { return signedIn() && campaign(c).dm == request.auth.uid; }
+    function world(c) { return get(/databases/$(database)/documents/campaigns/$(c)).data; }
+    function isMember(c) { return signedIn() && request.auth.uid in world(c).memberIds; }
+    function editorOf(w) { return signedIn() && (w.owner == request.auth.uid || request.auth.uid in w.get('dms', [])); }
+    function isEditor(c) { return editorOf(world(c)); }
 
     // Un jugador se añade a sí mismo, sin tocar nada más.
     function joiningSelf() {
@@ -29,31 +32,56 @@ service cloud.firestore {
       allow get: if signedIn();
       allow list: if signedIn() && request.auth.uid in resource.data.memberIds;
       allow create: if signedIn()
-        && request.resource.data.dm == request.auth.uid
+        && request.resource.data.owner == request.auth.uid
         && request.resource.data.memberIds == [request.auth.uid];
       allow update: if signedIn() && (
-        (resource.data.dm == request.auth.uid
-          && request.resource.data.dm == resource.data.dm)
+        (editorOf(resource.data)
+          && request.resource.data.owner == resource.data.owner
+          && (resource.data.owner == request.auth.uid
+              || request.resource.data.get('dms', []) == resource.data.get('dms', [])))
         || joiningSelf());
-      allow delete: if signedIn() && resource.data.dm == request.auth.uid;
+      allow delete: if signedIn() && resource.data.owner == request.auth.uid;
 
       match /places/{p} {
-        allow read: if isDM(c) || (isMember(c) && resource.data.visible == true);
-        allow write: if isDM(c);
+        allow read: if isEditor(c) || (isMember(c) && resource.data.visible == true);
+        allow write: if isEditor(c);
       }
       match /items/{i} {
-        allow read: if isDM(c) || (isMember(c) && resource.data.revealed == true);
-        allow write: if isDM(c);
+        allow read: if isEditor(c) || (isMember(c) && resource.data.revealed == true);
+        allow write: if isEditor(c);
+      }
+      // Fichas: todo el grupo las ve; cada jugador crea y edita la suya; el administrador y los másteres, todas.
+      match /characters/{ch} {
+        allow read: if isMember(c);
+        allow create: if isEditor(c) || (isMember(c) && request.resource.data.owner == request.auth.uid);
+        allow update: if isEditor(c) || (isMember(c) && resource.data.owner == request.auth.uid
+          && request.resource.data.owner == request.auth.uid);
+        allow delete: if isEditor(c) || (isMember(c) && resource.data.owner == request.auth.uid);
+      }
+      // Mesa táctica: escenas preparadas (solo máster), la mesa en directo y las fichas sobre ella.
+      match /scenes/{sc} {
+        allow read, write: if isEditor(c);
+      }
+      match /board/{b} {
+        allow read: if isMember(c);
+        allow write: if isEditor(c);
+      }
+      match /tokens/{t} {
+        allow read: if isMember(c);
+        allow create, delete: if isEditor(c);
+        allow update: if isEditor(c) || (isMember(c) && resource.data.owner == request.auth.uid
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['c', 'r', 'init', 'conds', 'fx']));
       }
       match /secrets/{s} {
-        allow read, write: if isDM(c);
+        allow read, write: if isEditor(c);
       }
+      // Imágenes: los jugadores también suben (por ejemplo, el retrato de su personaje).
       match /images/{k} {
         allow read: if isMember(c);
-        allow write: if isDM(c);
+        allow write: if isMember(c);
         match /c/{n} {
           allow read: if isMember(c);
-          allow write: if isDM(c);
+          allow write: if isMember(c);
         }
       }
       match /presence/{u} {

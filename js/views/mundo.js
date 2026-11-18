@@ -210,6 +210,7 @@ function drawEditor(state, place) {
     <label class="field">Tipo<select data-f="kind">${KINDS.map(k => `<option ${k === place.kind ? "selected" : ""}>${k}</option>`).join("")}</select></label>
     <label class="switch"><input type="checkbox" id="f-vis" ${place.visible ? "checked" : ""}> Visible para los jugadores</label>
     <div class="row"><button class="btn gold" id="present">Mostrar este lugar a todos</button></div>
+    <div class="row"><button class="btn small" id="placemap">${place.map ? "Cambiar el mapa del lugar" : "+ Mapa del lugar (ciudad, mazmorra…)"}</button>${place.map ? `<button class="btn small danger" id="noplacemap">Quitar mapa</button>` : ""}</div>
     <label class="field">Descripción para los jugadores<textarea data-f="summary" rows="3">${esc(place.summary)}</textarea></label>
     <div class="secretbox"><label class="field"><span><span class="tag secret">SOLO MÁSTER</span> Notas secretas</span><textarea data-f="secret" rows="3">${esc(place.secret)}</textarea></label></div>
     <h2 class="sec" style="margin:4px 0 0">Contenido</h2>
@@ -233,6 +234,18 @@ function drawEditor(state, place) {
     if (i.dataset.f === "name") { const pin = pinsEl.querySelector(`[data-id="${pid}"] span`); if (pin) pin.textContent = i.value; }
   }));
   $("#f-vis", side).onchange = e => store.commit("place", s => { P(pid)(s).visible = e.target.checked; });
+  $("#placemap", side).onclick = async () => {
+    const f = await pickFile(); if (!f) return;
+    try {
+      toast("Cargando el mapa del lugar…");
+      const r = await readImageFile(f, 2600);
+      const key = uid("mapa"); await putImage(key, r.dataURL);
+      store.commit("place", s => { Object.assign(P(pid)(s), { map: key, mapW: r.w, mapH: r.h }); });
+      toast("Mapa del lugar guardado. Lo verán al mostrar este lugar.");
+    } catch (err) { toast("No se pudo cargar la imagen. Prueba con un JPG o PNG."); }
+  };
+  const npm = $("#noplacemap", side);
+  if (npm) npm.onclick = () => store.commit("place", s => { const p = P(pid)(s); delete p.map; delete p.mapW; delete p.mapH; });
   $("#present", side).onclick = () => store.commit("present", s => { const p = P(pid)(s); p.visible = true; s.presentation = { type: "place", place: pid }; });
 
   $$("[data-item]", side).forEach(box => {
