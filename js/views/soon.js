@@ -1,7 +1,6 @@
 // Secciones que llegan en hitos siguientes.
 const INFO = {
   lore: { t: "Lore y panel del máster", items: ["Biblioteca de lugares, PNJ, facciones y objetos", "PNJ itinerantes que el máster mueve entre regiones", "Notas por ramas y panel de apoyo durante la partida"] },
-  cronica: { t: "Crónica", items: ["Cuaderno que escriben los jugadores mientras juegan", "Reparto de experiencia al cerrar la sesión", "Resumen automático para el «Anteriormente en…»"] }
 };
 
 export function mount(root, ctx) {

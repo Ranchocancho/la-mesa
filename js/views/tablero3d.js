@@ -1,4 +1,4 @@
-// La mesa en 3D: tablero de casillas de 5 pies sobre una mesa de madera, escenografía y miniaturas de KayKit (CC0),
+// La mesa en 3D: tablero de casillas de 1,5 m sobre una mesa de madera, escenografía y miniaturas de KayKit (CC0),
 // luces de antorcha con parpadeo, fuego con partículas, ambientes de luz y cámara orbital o libre.
 // Usa los mismos datos que la vista 2D: { grid: {cols, rows, terrain, props, ambient}, tokens: [...] }.
 import * as THREE from "three";
@@ -11,6 +11,8 @@ import { siluetaFor, siluetaURL } from "../data/siluetas.js";
 import { estado, etiqueta } from "../data/estados.js";
 import { computeVision, explored } from "../core/vision.js";
 import { playEffect, EFECTOS } from "./efectos3d.js";
+import { throwDice } from "./dados3d.js";
+import { sound, AMBIENTES } from "../core/sonido.js";
 
 const CELL = 4, BASE = "assets/kaykit/";
 const loader = new GLTFLoader();
@@ -69,6 +71,15 @@ function woodTex() {
   }
   const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.colorSpace = THREE.SRGBColorSpace;
   return t;
+}
+let LEAF = null;
+function woodLeaf() {
+  if (LEAF) return LEAF;
+  const c = document.createElement("canvas"); c.width = 128; c.height = 192;
+  const g = c.getContext("2d"); g.fillStyle = "#6b4526"; g.fillRect(0, 0, 128, 192);
+  for (let i = 0; i < 4; i++) { g.fillStyle = i % 2 ? "#5e3b20" : "#734b2a"; g.fillRect(i * 32, 0, 30, 192); }
+  g.fillStyle = "#2b2b2b"; g.fillRect(0, 30, 128, 10); g.fillRect(0, 150, 128, 10); g.beginPath(); g.arc(104, 100, 6, 0, 7); g.fill();
+  LEAF = new THREE.CanvasTexture(c); LEAF.colorSpace = THREE.SRGBColorSpace; return LEAF;
 }
 function glowTex() {
   const c = document.createElement("canvas"); c.width = c.height = 64;
@@ -161,6 +172,8 @@ export function createBoard3D(host, opts) {
       <button class="btn small" data-cam="mode" aria-pressed="false" title="Órbita alrededor del centro o cámara libre">Órbita</button>
       <button class="btn small" data-cam="walls" aria-pressed="true" title="Muros bajos para ver mejor">Muros bajos</button>
       ${opts.dm && opts.setFog ? `<button class="btn small" data-cam="fog" title="Niebla de guerra para los jugadores">Niebla</button>` : ""}
+      ${opts.dm && opts.setSound ? `<select class="btn small" data-snd aria-label="Sonido ambiente">${Object.entries(AMBIENTES).map(([k, v]) => `<option value="${k}">🎵 ${v}</option>`).join("")}</select>` : ""}
+      <span class="volbox"><button class="btn small" data-cam="mute" title="Silenciar">${sound.muted ? "🔇" : "🔊"}</button><input type="range" min="0" max="1" step="0.05" value="${sound.volume}" data-vol aria-label="Volumen"></span>
       ${opts.dm ? `<select class="btn small" data-amb aria-label="Ambiente">${Object.entries(AMBIENT).map(([k, v]) => `<option value="${k}">${v.n}</option>`).join("")}</select>` : ""}
     </div><div class="dragtip" hidden></div><div class="loading3d">Montando la mesa…</div>`;
   const tip = host.querySelector(".dragtip"), loadingEl = host.querySelector(".loading3d");
@@ -213,10 +226,13 @@ export function createBoard3D(host, opts) {
     if (k === "top") frame("top");
     if (k === "mode") setFree(!free);
     if (k === "fog") { opts.setFog(!(G && G.fog)); return; }
+    if (k === "mute") { sound.setMuted(!sound.muted); b.textContent = sound.muted ? "🔇" : "🔊"; return; }
     if (k === "walls") { lowWalls = !lowWalls; b.textContent = lowWalls ? "Muros bajos" : "Muros altos"; b.setAttribute("aria-pressed", lowWalls); lastSig = ""; sync(); }
   });
   const amb = host.querySelector("[data-amb]");
   if (amb) amb.onchange = () => opts.setAmbient && opts.setAmbient(amb.value);
+  const snd = host.querySelector("[data-snd]"); if (snd) snd.onchange = () => opts.setSound(snd.value);
+  host.querySelector("[data-vol]").oninput = e => sound.setVolume(+e.target.value);
   // Cámara libre: flechas o WASD mueven el punto de mira por la mesa
   const keys = new Set();
   const kd = e => { if (free && !/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)) keys.add(e.key.toLowerCase()); }, ku = e => keys.delete(e.key.toLowerCase());
@@ -319,6 +335,12 @@ export function createBoard3D(host, opts) {
         } else if (how === "door") {
           obj.rotation.y = isWallIn(g, p.c - 1, p.r) || isWallIn(g, p.c + 1, p.r) ? 0 : Math.PI / 2;
           obj.scale.set(1, wh < 1 ? 0.6 : 1, 1);
+          // Hoja de madera: cerrada tapa el hueco; abierta, girada contra el marco
+          const leaf = new THREE.Mesh(new THREE.BoxGeometry(2.2, wh < 1 ? 1.9 : 3.1, 0.22), new THREE.MeshStandardMaterial({ map: woodLeaf(), roughness: 0.8 }));
+          const hinge = new THREE.Group(); hinge.position.set(-1.1, 0, 0); leaf.position.set(1.1, (wh < 1 ? 1.9 : 3.1) / 2, 0); hinge.add(leaf);
+          hinge.rotation.y = p.open ? -Math.PI / 2 * 0.92 : 0;
+          obj.add(hinge);
+          obj.traverse(o => { o.userData.door = p.id; });
         } else obj.rotation.y = ((p.c * 3 + p.r * 5) % 4) * Math.PI / 2;
         if (p.k === "antorcha" || p.k === "velas") {
           const f = fire(p.k === "velas" ? 0.35 : 0.55);
@@ -463,11 +485,12 @@ export function createBoard3D(host, opts) {
       if (others.length) { let mx = 0, mz = 0; others.forEach(o => { mx += cx(o.c); mz += cz(o.r); }); rec.face = Math.atan2(mx / others.length - tx, mz / others.length - tz); }
       const hp = opts.hpOf(t), down = !!hp && hp.cur <= 0;
       if (hp && rec.lastHp != null && hp.cur < rec.lastHp && !down) {
-        rec.hitT = 1;
+        rec.hitT = 1; if (fxReady) sound.play("hit");
         if (rec.mixer) { play(rec, "Hit_A", true); setTimeout(() => { if (!rec.down) play(rec, "Idle"); }, 700); }
       }
       rec.lastHp = hp ? hp.cur : null;
       if (down !== rec.down) {
+        if (down && rec.lastHp != null) sound.play("down");
         rec.down = down; play(rec, down ? "Death_A" : "Idle", down);
         if (rec.mini && rec.mini.userData.mats) rec.mini.userData.mats.forEach(m => m.color.setScalar(down ? 0.45 : 1));
       }
@@ -518,6 +541,8 @@ export function createBoard3D(host, opts) {
     const sig = JSON.stringify([G.cols, G.rows, G.terrain, G.props, lowWalls]);
     if (sig !== lastSig) { lastSig = sig; buildWorld(G); if (first) frame("persp"); }
     applyAmbient(G.ambient || "interior");
+    sound.ambient(G.sound || "");
+    if (snd) snd.value = G.sound || "";
     const fb = host.querySelector('[data-cam="fog"]'); if (fb) { fb.setAttribute("aria-pressed", !!G.fog); fb.textContent = G.fog ? "Niebla: sí" : "Niebla: no"; }
     syncTokens(m.tokens).then(() => updateFog(m));
     // Efectos lanzados (en la mesa o en la ficha de quien lanza). Los ve todo el mundo; no se repiten al entrar más tarde.
@@ -528,10 +553,21 @@ export function createBoard3D(host, opts) {
       if (!(fxReady || Date.now() - fx.at < 6000)) continue;
       const caster = fx.caster && m.tokens.find(t => t.id === fx.caster);
       const from = caster ? { c: caster.c, r: caster.r } : fx.to;
+      sound.fx(fx.k);
       fxList.push(playEffect(scene, fx.k, new THREE.Vector3(cx(from.c), 0, cz(from.r)), new THREE.Vector3(cx(fx.to.c), 0, cz(fx.to.r)), CELL));
       const r = fx.caster && toks.get(fx.caster);
       if (r && r.mixer) { play(r, "Spellcast_Shoot", true); setTimeout(() => { if (!r.down) play(r, "Idle"); }, 900); }
       else if (r) r.hitT = 0.5;
+    }
+    // Dados: cada tirada nueva rueda sobre la mesa, junto a quien la hace
+    for (const r of (opts.rolls ? opts.rolls() : [])) {
+      if (seenFx.has(r.id)) continue;
+      seenFx.add(r.id);
+      if (!(fxReady || Date.now() - r.at < 6000) || !r.dice.length) continue;
+      const t = r.tok && m.tokens.find(k => k.id === r.tok);
+      const at = t ? new THREE.Vector3(cx(t.c) + CELL * 0.9, 0, cz(t.r) + CELL * 0.9) : new THREE.Vector3(0, 0, G.rows * CELL * 0.3);
+      fxList.push(throwDice(scene, r.dice, at, new THREE.Color(opts.rollColor ? opts.rollColor(r) : "#8a2be2").getHex()));
+      sound.play("dice");
     }
     fxReady = true;
   }
@@ -581,6 +617,10 @@ export function createBoard3D(host, opts) {
     if (pickMode) { setNdc(e); const h = cellAt(); const pm = pickMode; pickMode = null; pickRing.visible = hl.visible = false; renderer.domElement.style.cursor = ""; if (h && inside(h)) pm.cb(h); else pm.cb(null); e.stopPropagation(); return; }
     setNdc(e); down = { x: e.clientX, y: e.clientY };
     const id = tokenAt(), t = id && opts.model().tokens.find(k => k.id === id);
+    if (!t && opts.dm) {
+      const dh = ray.intersectObjects(world.children, true).find(h => h.object.userData.door);
+      if (dh) { const did = dh.object.userData.door; opts.mutate("board", mm => { const pr = (mm.grid.props || []).find(x => x.id === did); if (pr) pr.open = !pr.open; }); sound.play("door"); return; }
+    }
     if (t && opts.canMove(t)) { drag = { id, from: { c: t.c, r: t.r }, moved: false }; controls.enabled = false; renderer.domElement.setPointerCapture(e.pointerId); }
     else if (t) down.tok = id;
   });
@@ -594,7 +634,7 @@ export function createBoard3D(host, opts) {
     if (rec && rec.root) { rec.root.position.set(hit.x, 1.2, hit.z); rec.target.copy(rec.root.position); }
     if (inside(h)) { hl.visible = true; hl.position.x = cx(h.c); hl.position.z = cz(h.r); hl.material.color.set(isWall(h.c, h.r) ? 0xb33a2e : 0xd6aa4e); }
     const d = dist(drag.from, h);
-    tip.hidden = false; tip.textContent = `${d * 5} pies (${d} casillas)`;
+    tip.hidden = false; tip.textContent = `${(d * 1.5).toLocaleString("es-ES")} m (${d} casillas)`;
     const r = host.getBoundingClientRect(); tip.style.left = (e.clientX - r.left + 14) + "px"; tip.style.top = (e.clientY - r.top + 14) + "px";
   });
   const up = e => {
@@ -603,7 +643,8 @@ export function createBoard3D(host, opts) {
       const d = drag; drag = null;
       if (!d.moved) { select(d.id); return; }
       setNdc(e); const h = cellAt(), rec = toks.get(d.id);
-      if (h && inside(h) && !isWall(h.c, h.r)) {
+      const shut = (G.props || []).some(pr => pr.k === "puerta" && !pr.open && pr.c === h?.c && pr.r === h?.r);
+      if (h && inside(h) && !isWall(h.c, h.r) && (!shut || opts.dm)) {
         if (rec && rec.root) { rec.root.position.set(cx(h.c), 0, cz(h.r)); rec.target.copy(rec.root.position); }
         opts.mutate("token", mm => { const k = mm.tokens.find(z => z.id === d.id); if (k) { k.c = h.c; k.r = h.r; } });
       } else if (rec && rec.root) { rec.root.position.set(cx(d.from.c), 0, cz(d.from.r)); rec.target.copy(rec.root.position); }
@@ -667,7 +708,7 @@ export function createBoard3D(host, opts) {
   });
   function dispose() {
     if (disposed) return; disposed = true;
-    renderer.setAnimationLoop(null); ro.disconnect(); controls.dispose(); renderer.dispose();
+    renderer.setAnimationLoop(null); ro.disconnect(); sound.ambient(""); controls.dispose(); renderer.dispose();
     window.removeEventListener("keydown", kd); window.removeEventListener("keyup", ku);
   }
 

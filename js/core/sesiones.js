@@ -2,7 +2,7 @@
 // No hay campañas: la historia del mundo continúa de una sesión a la siguiente.
 // Una "sesión de pruebas" solo la ven el administrador y los másteres.
 import { store, uid } from "./store.js";
-import { isEditor } from "./session.js";
+import { isEditor, currentUser } from "./session.js";
 
 export const liveSession = s => s.sessions.find(x => x.id === s.live && x.status === "open") || null;
 export const lastClosed = s => [...s.sessions].reverse().find(x => x.status === "closed" && !x.test) || null;
@@ -40,11 +40,22 @@ export function startSession(test) {
   });
 }
 
-export function closeSession(title, recap) {
+/** Añade una nota a la crónica de una sesión. */
+export function addEntry(sessionId, text) {
+  const me = currentUser(store.get());
+  if (!me || !text.trim()) return;
+  store.commit("chronicle", s => { s.chronicle = s.chronicle || []; s.chronicle.push({ id: uid("cr"), session: sessionId, by: me.id, name: me.name, text: text.trim(), at: Date.now() }); });
+}
+
+/** Cierra la sesión: resumen para el «Anteriormente…» y experiencia repartida (xp: [{char, amount, reason}]). */
+export function closeSession(title, recap, xp = []) {
   store.commit("session", s => {
     const l = liveSession(s);
     if (l && l.test) s.sessions = s.sessions.filter(x => x.id !== l.id);
-    else if (l) Object.assign(l, { status: "closed", title: title || `Sesión ${l.n}`, recap });
+    else if (l) {
+      Object.assign(l, { status: "closed", title: title || `Sesión ${l.n}`, recap });
+      l.xp = xp.filter(x => x.amount).map(x => { const c = s.characters.find(y => y.id === x.char); if (c) c.xp = (c.xp || 0) + x.amount; return { char: x.char, name: c ? c.name : "", amount: x.amount, reason: x.reason || "" }; });
+    }
     s.live = null; s.presentation = null;
   });
 }

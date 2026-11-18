@@ -6,6 +6,9 @@ import { getImage, putImage, readImageFile } from "../core/images.js";
 import { ABILITIES, AB_SHORT, SKILLS, CLASSES, classInfo, xpFor, canLevelUp, mod, sign, prof, skillBonus, saveBonus, passive, carried, capacity, levelNotes, newCharacter } from "../data/dnd.js";
 import { $, $$, esc, toast, debounce, pickFile } from "../core/ui.js";
 import { darkvisionOf } from "../core/vision.js";
+import { publish } from "../core/dados.js";
+import { srdNow, findSpell } from "../core/srd.js";
+import { spellCard } from "./reglas.js";
 
 let el = null, openId = null, tab = "car", leveling = null;
 const TABS = [["car", "Características"], ["com", "Combate"], ["inv", "Inventario"], ["con", "Conjuros"], ["ras", "Rasgos y notas"]];
@@ -108,8 +111,8 @@ function drawSheet(state, c) {
       <div class="stat hpbox"><small>Puntos de golpe</small>
         <div class="hpline"><input type="number" data-n="hp.cur" value="${c.hp.cur}" aria-label="PG actuales"><span>/</span><input type="number" data-n="hp.max" value="${c.hp.max}" aria-label="PG máximos"><span class="tmp">temp</span><input type="number" data-n="hp.temp" value="${c.hp.temp}" aria-label="PG temporales"></div>
         ${ed ? `<div class="hpquick"><input type="number" id="hpd" min="0" placeholder="0" aria-label="Cantidad"><button class="btn small danger" id="dmg">Daño</button><button class="btn small" id="heal">Curar</button></div>` : ""}</div>
-      ${stat("Velocidad", `<input type="number" data-n="speed" value="${c.speed}"><em>pies</em>`)}
-      ${stat("Visión oscuridad", `<input type="number" step="30" data-n="darkvision" value="${darkvisionOf(c)}"><em>pies</em>`)}
+      ${stat("Velocidad", `<input type="number" step="1.5" data-n="speed" value="${c.speed}"><em>m</em>`)}
+      ${stat("Visión oscuridad", `<input type="number" step="9" data-n="darkvision" value="${darkvisionOf(c)}"><em>m</em>`)}
       ${stat("Iniciativa", `<b>${sign(mod(c.abilities.des))}</b>`)}
       ${stat("Competencia", `<b>${sign(pb)}</b>`)}
       ${stat("Percepción pasiva", `<b>${passive(c, "percepcion", "sab")}</b>`)}
@@ -135,10 +138,10 @@ function levelPanel(c) {
 }
 
 function tabCar(c) {
-  return `<div class="abilities">${ABILITIES.map(([k, n]) => `<div class="ab"><small>${n}</small><b>${sign(mod(c.abilities[k]))}</b><input type="number" data-n="abilities.${k}" value="${c.abilities[k]}" aria-label="${n}"></div>`).join("")}</div>
+  return `<div class="abilities">${ABILITIES.map(([k, n]) => `<div class="ab"><small>${n}</small><b class="rollable" data-roll="check|${n}|${mod(c.abilities[k])}" title="Tirar prueba de ${n}">${sign(mod(c.abilities[k]))}</b><input type="number" data-n="abilities.${k}" value="${c.abilities[k]}" aria-label="${n}"></div>`).join("")}</div>
     <div class="cols2">
-      <div><h2 class="sec">Tiradas de salvación</h2><div class="checks">${ABILITIES.map(([k, n]) => `<label class="chk"><input type="checkbox" data-save="${k}" ${(c.saves || []).includes(k) ? "checked" : ""}><span>${n}</span><b>${sign(saveBonus(c, k))}</b></label>`).join("")}</div></div>
-      <div><h2 class="sec">Habilidades</h2><div class="checks">${SKILLS.map(([k, n, ab]) => { const v = (c.skills || {})[k] || 0; return `<label class="chk"><select data-skill="${k}" aria-label="Competencia en ${n}"><option value="0">·</option><option value="1" ${v === 1 ? "selected" : ""}>●</option><option value="2" ${v === 2 ? "selected" : ""}>★</option></select><span>${n} <small>${AB_SHORT[ab]}</small></span><b>${sign(skillBonus(c, k, ab))}</b></label>`; }).join("")}</div>
+      <div><h2 class="sec">Tiradas de salvación</h2><div class="checks">${ABILITIES.map(([k, n]) => `<label class="chk"><input type="checkbox" data-save="${k}" ${(c.saves || []).includes(k) ? "checked" : ""}><span>${n}</span><b class="rollable" data-roll="save|Salvación de ${n}|${saveBonus(c, k)}" title="Tirar salvación">${sign(saveBonus(c, k))}</b></label>`).join("")}</div></div>
+      <div><h2 class="sec">Habilidades</h2><div class="checks">${SKILLS.map(([k, n, ab]) => { const v = (c.skills || {})[k] || 0; return `<label class="chk"><select data-skill="${k}" aria-label="Competencia en ${n}"><option value="0">·</option><option value="1" ${v === 1 ? "selected" : ""}>●</option><option value="2" ${v === 2 ? "selected" : ""}>★</option></select><span>${n} <small>${AB_SHORT[ab]}</small></span><b class="rollable" data-roll="check|${n}|${skillBonus(c, k, ab)}" title="Tirar ${n}">${sign(skillBonus(c, k, ab))}</b></label>`; }).join("")}</div>
         <p class="note" style="margin:8px 0 0">● competente · ★ pericia</p></div>
     </div>`;
 }
@@ -158,8 +161,8 @@ function tabInv(c) {
   const w = carried(c), cap = capacity(c);
   return `<h2 class="sec">Monedas</h2>
     <div class="coins">${[["po", "Oro"], ["pp", "Plata"], ["pe", "Electro"], ["pc", "Cobre"]].map(([k, n]) => `<label class="field">${n}<input type="number" data-n="coins.${k}" value="${c.coins[k] || 0}"></label>`).join("")}</div>
-    <h2 class="sec" style="margin-top:16px">Equipo <small class="weight ${w > cap ? "over" : ""}">${Math.round(w * 10) / 10} / ${cap} lb</small></h2>
-    ${rows(c.inventory, "inventory", [["equipped", "Equipado", "check"], ["name", "Objeto", "", 3], ["qty", "Cant.", "num", .7], ["weight", "Peso (lb)", "num", .9], ["notes", "Notas", "", 3]], "+ Objeto")}`;
+    <h2 class="sec" style="margin-top:16px">Equipo <small class="weight ${w > cap ? "over" : ""}">${Math.round(w * 10) / 10} / ${cap} kg</small></h2>
+    ${rows(c.inventory, "inventory", [["equipped", "Equipado", "check"], ["name", "Objeto", "", 3], ["qty", "Cant.", "num", .7], ["weight", "Peso (kg)", "num", .9], ["notes", "Notas", "", 3]], "+ Objeto")}`;
 }
 
 function tabCon(c) {
@@ -177,11 +180,13 @@ function tabCon(c) {
     <h2 class="sec">Conjuros</h2>
     ${Object.keys(byLvl).sort((a, b) => a - b).map(l => `<h3 class="lvlh">${+l === 0 ? "Trucos" : `Nivel ${l}`}</h3>
       <div class="rows">${byLvl[l].map(([s, i]) => `<div class="rowi"><label class="mini" title="Preparado"><input type="checkbox" data-l="spells.list.${i}.prepared" ${s.prepared ? "checked" : ""}> Prep.</label>
-        <input data-l="spells.list.${i}.name" value="${esc(s.name)}" placeholder="Conjuro" style="flex:3" aria-label="Conjuro">
+        <input data-l="spells.list.${i}.name" value="${esc(s.name)}" placeholder="Conjuro" style="flex:3" aria-label="Conjuro" list="spelllist">${findSpell(s.name) ? `<button class="btn small" data-spinfo="${esc(s.name)}" title="Ver el conjuro">📖</button>` : ""}
         <input type="number" min="0" max="9" data-l="spells.list.${i}.level" value="${s.level || 0}" style="flex:.6" aria-label="Nivel">
         <input data-l="spells.list.${i}.notes" value="${esc(s.notes || "")}" placeholder="Notas (alcance, componentes…)" style="flex:3" aria-label="Notas">
         <button class="btn small danger edonly" data-del="spells.list.${i}" aria-label="Quitar">✕</button></div>`).join("")}</div>`).join("") || `<p class="empty">Sin conjuros.</p>`}
-    <div class="row edonly" style="margin-top:8px"><button class="btn small" data-add="spells.list">+ Conjuro</button></div>`;
+    <div class="row edonly" style="margin-top:8px"><button class="btn small" data-add="spells.list">+ Conjuro</button></div>
+    <datalist id="spelllist">${(srdNow.conjuros || []).map(x => `<option value="${esc(x.n)}">${x.lvl ? "Nv " + x.lvl : "Truco"}</option>`).join("")}</datalist>
+    <div id="spinfo"></div>`;
 }
 
 function tabRas(c) {
@@ -210,6 +215,12 @@ function bind(state, c, ed) {
   const on = (sel, fn) => { const b = $(sel, el); if (b) b.onclick = fn; };
   on("#back", () => { openId = null; leveling = null; draw(); });
   $$("[data-tab]", el).forEach(b => b.onclick = () => { tab = b.dataset.tab; draw(); });
+  $$("[data-roll]", el).forEach(b => b.onclick = e => {
+    e.preventDefault(); const [kind, label, m] = b.dataset.roll.split("|");
+    const tok = (state.tokens || []).find(t => t.char === c.id);
+    const r = publish({ kind, expr: `1d20${+m >= 0 ? "+" : ""}${m}`, label: `${c.name} · ${label}`, by: tok ? tok.id : null });
+    toast(`🎲 ${label}: ${r.dice.filter(d => !d.drop).map(d => d.v).join("+")} ${+m >= 0 ? "+" : "−"} ${Math.abs(+m)} = ${r.total}`);
+  });
   if (!ed) {
     $$("input,select,textarea", $(".sheet", el)).forEach(i => (i.disabled = true));
     return;
@@ -221,7 +232,9 @@ function bind(state, c, ed) {
     if (i.type === "checkbox") i.onchange = () => store.commit("char", s => setP(C(s), i.dataset.l, i.checked));
     else if (i.type === "number") i.addEventListener("change", () => store.commit("char", s => setP(C(s), i.dataset.l, +i.value || 0)));
     else i.addEventListener("input", () => saveText(i.dataset.l, i.value));
+    if (/^spells\.list\.\d+\.name$/.test(i.dataset.l)) i.addEventListener("change", () => { const sp = findSpell(i.value); if (sp) store.commit("char", s => { setP(C(s), i.dataset.l.replace(/name$/, "level"), sp.lvl); }); });
   });
+  $$("[data-spinfo]", el).forEach(b => b.onclick = () => { const box = $("#spinfo", el), sp = findSpell(b.dataset.spinfo); box.innerHTML = box.dataset.cur === sp.n ? "" : spellCard(sp); box.dataset.cur = box.innerHTML ? sp.n : ""; });
   $$("[data-mini]", el).forEach(i => i.onchange = () => store.commit("char", s => { C(s).mini = i.value || null; }));
   $$("[data-save]", el).forEach(i => i.onchange = () => store.commit("char", s => { const x = C(s); x.saves = (x.saves || []).filter(k => k !== i.dataset.save); if (i.checked) x.saves.push(i.dataset.save); }));
   $$("[data-skill]", el).forEach(i => i.onchange = () => store.commit("char", s => { const x = C(s); x.skills = x.skills || {}; x.skills[i.dataset.skill] = +i.value; }));

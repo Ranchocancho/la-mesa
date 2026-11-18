@@ -20,23 +20,23 @@ export function seed() {
       newCharacter({ id: "mirra", owner: "j1", name: "Mirra Zarzal", species: "Mediana", cls: "Pícara", subclass: "Ladrona", background: "Criminal", level: 5, xp: 14250, initials: "MZ", color: "#79a85a",
         abilities: { fue: 8, des: 18, con: 12, int: 13, sab: 12, car: 14 }, saves: ["des", "int"],
         skills: { sigilo: 2, juegomanos: 2, acrobacias: 1, percepcion: 1, engano: 1, investigacion: 1 },
-        hp: { max: 33, cur: 27, temp: 0 }, ac: 15, speed: 25,
-        weapons: [{ id: "w1", name: "Estoque", atk: "+7", dmg: "1d8+4 perforante", notes: "Sutil" }, { id: "w2", name: "Arco corto", atk: "+7", dmg: "1d6+4 perforante", notes: "80/320 pies" }],
+        hp: { max: 33, cur: 27, temp: 0 }, ac: 15, speed: 7.5,
+        weapons: [{ id: "w1", name: "Estoque", atk: "+7", dmg: "1d8+4 perforante", notes: "Sutil" }, { id: "w2", name: "Arco corto", atk: "+7", dmg: "1d6+4 perforante", notes: "24/96 m" }],
         inventory: [{ id: "i1", name: "Herramientas de ladrón", qty: 1, weight: 1 }, { id: "i2", name: "Llave de hierro del gremio", qty: 1, weight: 0, notes: "Encontrada en el mercado" }, { id: "i3", name: "Armadura de cuero tachonado", qty: 1, weight: 13, equipped: true }],
         coins: { po: 34, pp: 12, pe: 0, pc: 5 },
         features: [{ id: "f1", name: "Ataque furtivo (3d6)", text: "Una vez por turno, daño extra si tienes ventaja o un aliado junto al objetivo." }, { id: "f2", name: "Acción astuta", text: "Correr, Destrabarse o Esconderse como acción adicional." }] }),
       newCharacter({ id: "brena", owner: "j2", name: "Brena Martillo-Ceniza", species: "Enana", cls: "Guerrera", subclass: "Campeona", background: "Soldado", level: 5, xp: 6800, initials: "BR", color: "#c97a3d",
         abilities: { fue: 17, des: 10, con: 16, int: 8, sab: 12, car: 10 }, saves: ["fue", "con"], skills: { atletismo: 1, intimidacion: 1, percepcion: 1 },
-        hp: { max: 49, cur: 49, temp: 0 }, ac: 18, speed: 30,
+        hp: { max: 49, cur: 49, temp: 0 }, ac: 18, speed: 9,
         weapons: [{ id: "w1", name: "Hacha de guerra", atk: "+6", dmg: "1d8+3 cortante", notes: "Versátil (1d10)" }] }),
       newCharacter({ id: "ilyas", owner: "j3", name: "Ilyas Vel", species: "Elfo", cls: "Mago", subclass: "Evocador", background: "Sabio", level: 5, xp: 6600, initials: "IV", color: "#7d8fe0",
         abilities: { fue: 8, des: 14, con: 14, int: 18, sab: 12, car: 10 }, saves: ["int", "sab"], skills: { arcanos: 1, historia: 1, investigacion: 1 },
-        hp: { max: 32, cur: 32, temp: 0 }, ac: 12, speed: 30,
+        hp: { max: 32, cur: 32, temp: 0 }, ac: 12, speed: 9,
         spells: { slots: { 1: { max: 4, used: 1 }, 2: { max: 3, used: 0 }, 3: { max: 2, used: 0 } },
           list: [{ id: "s1", name: "Rayo de escarcha", level: 0, prepared: true }, { id: "s2", name: "Proyectil mágico", level: 1, prepared: true }, { id: "s3", name: "Escudo", level: 1, prepared: true }, { id: "s4", name: "Paso brumoso", level: 2, prepared: true }, { id: "s5", name: "Bola de fuego", level: 3, prepared: true }] } }),
       newCharacter({ id: "osric", owner: "j4", name: "Hermano Osric", species: "Humano", cls: "Clérigo", subclass: "Dominio de la Vida", background: "Acólito", level: 5, xp: 6700, initials: "HO", color: "#e0d6b0",
         abilities: { fue: 14, des: 10, con: 14, int: 10, sab: 17, car: 12 }, saves: ["sab", "car"], skills: { medicina: 1, religion: 1, perspicacia: 1 },
-        hp: { max: 38, cur: 38, temp: 0 }, ac: 18, speed: 30,
+        hp: { max: 38, cur: 38, temp: 0 }, ac: 18, speed: 9,
         spells: { slots: { 1: { max: 4, used: 0 }, 2: { max: 3, used: 0 }, 3: { max: 2, used: 0 } },
           list: [{ id: "s1", name: "Llama sagrada", level: 0, prepared: true }, { id: "s2", name: "Curar heridas", level: 1, prepared: true }, { id: "s3", name: "Arma espiritual", level: 2, prepared: true }, { id: "s4", name: "Revivir", level: 3, prepared: true }] } })
     ],
@@ -81,9 +81,14 @@ export function seed() {
     },
     sessions: [
       {
-        id: "s6", n: 6, status: "closed", test: false, date: "2026-11-12", title: "La cripta bajo el campanario",
+        id: "s6", n: 6, status: "closed", test: false, date: "2026-11-12", xp: [{ name: "Todo el grupo", amount: 450, reason: "Pelea del mercado y pistas sobre el gremio" }], title: "La cripta bajo el campanario",
         recap: "El grupo llegó a Vel Arath y encontró la ciudad en silencio. Doran Brasaviva insinuó que el gremio sabe por qué callaron las campanas. Tras una pelea con goblins en el mercado, Mirra encontró una llave de hierro con el sello del gremio. La sesión terminó a las puertas de la cripta, bajo el campanario."
       }
+    ],
+    rolls: [], // tiradas de dados compartidas
+    chronicle: [ // notas que escriben los jugadores durante cada sesión
+      { id: "cr1", session: "s6", by: "j1", name: "Jugador 1", text: "Mirra le birla una llave de hierro a un goblin en plena pelea del mercado. Lleva el sello del gremio de herreros.", at: 1731430000000 },
+      { id: "cr2", session: "s6", by: "j4", name: "Jugador 4", text: "Doran Brasaviva miente fatal. Osric cree que el gremio esconde algo bajo el campanario.", at: 1731431000000 }
     ],
     scenes: exampleScenes(), // escenas tácticas preparadas (por lugar) y la biblioteca (sin lugar)
     board: null,             // la mesa táctica en directo

@@ -10,6 +10,8 @@
 //   campaigns/{cid}/scenes/{id}    escenas tácticas preparadas (solo el máster)
 //   campaigns/{cid}/board/live     la mesa táctica en directo
 //   campaigns/{cid}/tokens/{id}    fichas sobre la mesa (cada jugador mueve la suya)
+//   campaigns/{cid}/chronicle/{id} notas de la crónica (cada uno escribe las suyas)
+//   campaigns/{cid}/rolls/{id}     tiradas de dados (cada uno las suyas; el máster las confirma)
 //   campaigns/{cid}/images/{key}   imágenes troceadas en documentos de menos de 1 MB
 //   campaigns/{cid}/presence/{uid} última señal de cada participante
 import { firebaseConfig } from "./firebase-config.js";
@@ -25,7 +27,7 @@ const COLORS = ["#79a85a", "#c97a3d", "#7d8fe0", "#e0d6b0", "#b4583a", "#8a9a4a"
 
 let fb, auth, db;
 const unsubs = [];
-const cache = { campaign: null, places: new Map(), items: new Map(), secrets: new Map(), characters: new Map(), scenes: new Map(), tokens: new Map(), board: null, got: new Set() };
+const cache = { campaign: null, places: new Map(), items: new Map(), secrets: new Map(), characters: new Map(), scenes: new Map(), tokens: new Map(), chronicle: new Map(), rolls: new Map(), board: null, got: new Set() };
 let last = new Map();       // lo último sincronizado, para enviar solo lo que cambia
 let beatTimer = null;
 
@@ -136,7 +138,7 @@ export async function createCampaign(name, withExample) {
 function listen(cid) {
   const dm = cloud.isEditor;
   const col = n => fb.collection(db, "campaigns", cid, n);
-  const need = dm ? ["campaign", "places", "items", "secrets", "characters", "board", "tokens", "scenes"] : ["campaign", "places", "items", "characters", "board", "tokens"];
+  const need = dm ? ["campaign", "places", "items", "secrets", "characters", "board", "tokens", "scenes", "chronicle", "rolls"] : ["campaign", "places", "items", "characters", "board", "tokens", "chronicle", "rolls"];
   cache.got.clear();
   const done = k => { cache.got.add(k); if (need.every(n => cache.got.has(n))) refresh(); };
   const fail = e => { console.error(e); cloud.error = "Se perdió la conexión con la campaña. Recarga la página."; ping(); };
@@ -145,6 +147,8 @@ function listen(cid) {
   unsubs.push(fb.onSnapshot(dm ? col("items") : fb.query(col("items"), fb.where("revealed", "==", true)), s => { cache.items = new Map(s.docs.map(d => [d.id, d.data()])); done("items"); }, fail));
   unsubs.push(fb.onSnapshot(col("characters"), s => { cache.characters = new Map(s.docs.map(d => [d.id, d.data()])); done("characters"); }, fail));
   unsubs.push(fb.onSnapshot(fb.doc(db, "campaigns", cid, "board", "live"), d => { cache.board = d.exists() ? d.data() : null; done("board"); }, fail));
+  unsubs.push(fb.onSnapshot(col("rolls"), s => { cache.rolls = new Map(s.docs.map(d => [d.id, d.data()])); done("rolls"); }, fail));
+  unsubs.push(fb.onSnapshot(col("chronicle"), s => { cache.chronicle = new Map(s.docs.map(d => [d.id, d.data()])); done("chronicle"); }, fail));
   unsubs.push(fb.onSnapshot(col("tokens"), s => { cache.tokens = new Map(s.docs.map(d => [d.id, d.data()])); done("tokens"); }, fail));
   if (dm) unsubs.push(fb.onSnapshot(col("scenes"), s => { cache.scenes = new Map(s.docs.map(d => [d.id, d.data()])); done("scenes"); }, fail));
   if (dm) unsubs.push(fb.onSnapshot(col("secrets"), s => { cache.secrets = new Map(s.docs.map(d => [d.id, d.data()])); done("secrets"); }, fail));
@@ -156,7 +160,7 @@ function listen(cid) {
 function stopCampaign() {
   unsubs.splice(0).forEach(u => u());
   clearInterval(beatTimer); beatTimer = null;
-  cache.campaign = null; cache.places.clear(); cache.items.clear(); cache.secrets.clear(); cache.characters.clear(); cache.scenes.clear(); cache.tokens.clear(); cache.board = null; cache.got.clear();
+  cache.campaign = null; cache.places.clear(); cache.items.clear(); cache.secrets.clear(); cache.characters.clear(); cache.scenes.clear(); cache.tokens.clear(); cache.chronicle.clear(); cache.rolls.clear(); cache.board = null; cache.got.clear();
   last = new Map(); cloud.cid = null; cloud.isEditor = false;
 }
 
@@ -185,6 +189,8 @@ function refresh() {
     world: { map: c.map ? c.map.key : null, mapW: c.map ? c.map.w : null, mapH: c.map ? c.map.h : null, places },
     sessions: c.sessions || [], presentation: c.presentation || null,
     scenes: [...cache.scenes.entries()].map(([id, x]) => ({ id, ...x })).sort((a, b) => (a.order || 0) - (b.order || 0)).map(x => strip(x, "order")),
+    rolls: [...cache.rolls.entries()].map(([id, x]) => ({ id, ...x })).sort((a, b) => a.at - b.at),
+    chronicle: [...cache.chronicle.entries()].map(([id, x]) => ({ id, ...x })).sort((a, b) => a.at - b.at),
     board: cache.board, tokens: [...cache.tokens.entries()].map(([id, x]) => ({ id, ...x }))
   };
   last = new Map([...docsOf(state, cloud.isEditor)].map(([k, v]) => [k, JSON.stringify(v)]));
@@ -209,6 +215,8 @@ function docsOf(s, dm) {
   s.characters.forEach((ch, i) => { const { id, ...rest } = ch; out.set("characters/" + id, { ...rest, order: i }); });
   (s.scenes || []).forEach((sc, i) => { const { id, ...rest } = sc; out.set("scenes/" + id, { ...rest, order: i }); });
   if (s.board) out.set("board/live", s.board);
+  (s.chronicle || []).forEach(e => { const { id, ...rest } = e; out.set("chronicle/" + id, rest); });
+  (s.rolls || []).forEach(e => { const { id, ...rest } = e; out.set("rolls/" + id, rest); });
   (s.tokens || []).forEach(t => { const { id, ...rest } = t; out.set("tokens/" + id, rest); });
   s.world.places.forEach((p, i) => {
     const { items, secret, id, ...rest } = p;
@@ -224,7 +232,7 @@ function push(state) {
   const me = cloud.user.uid;
   const all = docsOf(state, true);
   // El administrador y los másteres guardan todo; un jugador solo puede tocar su propia ficha.
-  const allowed = (k, v) => cloud.isEditor || ((k.startsWith("characters/") || k.startsWith("tokens/")) && v && v.owner === me);
+  const allowed = (k, v) => cloud.isEditor || ((k.startsWith("characters/") || k.startsWith("tokens/")) && v && v.owner === me) || (k.startsWith("chronicle/") && v && v.by === me) || (k.startsWith("rolls/") && v && v.who === me);
   const ref = k => k === "C" ? fb.doc(db, "campaigns", cloud.cid) : fb.doc(db, "campaigns", cloud.cid, ...k.split("/"));
   const batch = fb.writeBatch(db);
   let n = 0;

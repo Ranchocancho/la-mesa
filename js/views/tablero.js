@@ -1,4 +1,4 @@
-// Tablero de casillas cuadradas (5 pies por casilla), vista plana. Lo usan el editor de escenas y la mesa en directo.
+// Tablero de casillas cuadradas (1,5 m por casilla), vista plana. Lo usan el editor de escenas y la mesa en directo.
 // Modelo: { grid: { cols, rows, terrain: {"c,r": tipo}, props: [{id,c,r,k}] }, tokens: [{id,kind,name,c,r,color,size,hp,maxhp,ac,char,owner,hidden,init}] }
 import { getImage } from "../core/images.js";
 import { esc } from "../core/ui.js";
@@ -20,7 +20,7 @@ const T = 44, S = T / 2; // lado de la casilla en el plano 2D
 const key = (c, r) => c + "," + r;
 export const center = (c, r) => [c * T + S + 4, r * T + S + 4];
 const corners = (x, y, h = S) => [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([a, b]) => (x + a * h).toFixed(1) + "," + (y + b * h).toFixed(1)).join(" ");
-/** Distancia en casillas con la regla de 2024: cada diagonal cuenta como 5 pies. */
+/** Distancia en casillas con la regla de 2024: cada diagonal cuenta como una casilla (1,5 m). */
 export const dist = (a, b) => Math.max(Math.abs(a.c - b.c), Math.abs(a.r - b.r));
 const pixelToHex = (x, y) => ({ c: Math.floor((x - 4) / T), r: Math.floor((y - 4) / T) });
 export const healthWord = (hp, max) => hp <= 0 ? "Fuera de combate" : hp / max > 0.75 ? "Ileso" : hp / max > 0.5 ? "Herido" : hp / max > 0.25 ? "Malherido" : "Al borde";
@@ -67,7 +67,7 @@ export function createBoard(host, opts) {
       if (ty && ty.wall) walls += `<polygon points="${corners(x, y)}" class="wall"/><polygon points="${corners(x, y, S * 0.78)}" class="walltop"/>`;
       else cells += `<polygon points="${corners(x, y)}" fill="${ty ? ty.f : "#3a332b"}" class="cell"/>`;
     }
-    const props = (grid.props || []).map(p => { const [x, y] = center(p.c, p.r); return `<text x="${x}" y="${y + 9}" class="prop">${(PROPS[p.k] || ["?"])[0]}</text>`; }).join("");
+    const props = (grid.props || []).map(p => { const [x, y] = center(p.c, p.r); return `<text x="${x}" y="${y + 9}" class="prop" ${p.k === "puerta" && p.open ? 'opacity=".35"' : ""}>${(PROPS[p.k] || ["?"])[0]}</text>`; }).join("");
     const fog = opts.fogState ? opts.fogState() : null;
     let fogSvg = "";
     if (fog) for (let r = 0; r < grid.rows; r++) for (let c = 0; c < grid.cols; c++) {
@@ -130,7 +130,7 @@ export function createBoard(host, opts) {
       const d = dist(drag.from, h);
       const [cx, cy] = center(h.c, h.r);
       svg.querySelector(".ghost").innerHTML = inside(h) ? `<polygon points="${corners(cx, cy)}" class="target"/>` : "";
-      tip.hidden = false; tip.textContent = `${d * 5} pies (${d} casillas)`;
+      tip.hidden = false; tip.textContent = `${(d * 1.5).toLocaleString("es-ES")} m (${d} casillas)`;
       const r = host.getBoundingClientRect(); tip.style.left = (e.clientX - r.left + 14) + "px"; tip.style.top = (e.clientY - r.top + 14) + "px";
     }
   });

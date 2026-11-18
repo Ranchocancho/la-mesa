@@ -6,16 +6,16 @@ export const ESTADOS = [
   { id: "asustado", n: "Asustado", c: "#7b4fb0", t: "Desventaja en pruebas y ataques mientras veas la fuente del miedo. No puedes acercarte a ella voluntariamente." },
   { id: "aturdido", n: "Aturdido", c: "#e0c23a", t: "Incapacitado. Fallas automáticamente las salvaciones de Fuerza y Destreza. Los ataques contra ti tienen ventaja." },
   { id: "cegado", n: "Cegado", c: "#4a4a4a", t: "No ves: fallas pruebas que requieran vista. Tus ataques tienen desventaja; los ataques contra ti, ventaja." },
-  { id: "derribado", n: "Derribado", c: "#9a7a52", t: "Solo puedes arrastrarte o levantarte (mitad de tu movimiento). Desventaja al atacar. Ataques contra ti: ventaja a 5 pies, desventaja más lejos." },
+  { id: "derribado", n: "Derribado", c: "#9a7a52", t: "Solo puedes arrastrarte o levantarte (mitad de tu movimiento). Desventaja al atacar. Ataques contra ti: ventaja a 1,5 m, desventaja más lejos." },
   { id: "ensordecido", n: "Ensordecido", c: "#6f8a8a", t: "No oyes: fallas pruebas que requieran oído." },
   { id: "envenenado", n: "Envenenado", c: "#5e9a32", t: "Desventaja en tiradas de ataque y pruebas de característica." },
   { id: "hechizado", n: "Hechizado", c: "#d65a9a", t: "No puedes atacar a quien te hechiza ni dañarle. Tiene ventaja en sus pruebas sociales contigo." },
   { id: "incapacitado", n: "Incapacitado", c: "#a65a3a", t: "No puedes realizar acciones, acciones adicionales ni reacciones. Se rompe la concentración. Desventaja en iniciativa." },
-  { id: "inconsciente", n: "Inconsciente", c: "#2a2a5a", t: "Incapacitado y derribado; sueltas lo que llevas. Fallas salvaciones de Fuerza y Destreza. Ataques contra ti con ventaja; crítico a 5 pies." },
+  { id: "inconsciente", n: "Inconsciente", c: "#2a2a5a", t: "Incapacitado y derribado; sueltas lo que llevas. Fallas salvaciones de Fuerza y Destreza. Ataques contra ti con ventaja; crítico a 1,5 m." },
   { id: "invisible", n: "Invisible", c: "#bfe4ff", t: "Ventaja en iniciativa. No te ven sin magia o sentidos especiales. Tus ataques con ventaja; los ataques contra ti, con desventaja." },
-  { id: "paralizado", n: "Paralizado", c: "#3a8ad6", t: "Incapacitado y velocidad 0. Fallas salvaciones de Fuerza y Destreza. Ataques contra ti con ventaja; crítico a 5 pies." },
+  { id: "paralizado", n: "Paralizado", c: "#3a8ad6", t: "Incapacitado y velocidad 0. Fallas salvaciones de Fuerza y Destreza. Ataques contra ti con ventaja; crítico a 1,5 m." },
   { id: "petrificado", n: "Petrificado", c: "#8c8c8c", t: "Convertido en piedra: incapacitado, velocidad 0, resistencia a todo el daño, inmune a veneno. Ataques contra ti con ventaja." },
-  { id: "agotamiento", n: "Agotamiento", c: "#b33a2e", t: "Por cada nivel: −2 a las tiradas d20 y −5 pies de velocidad. A nivel 6 mueres. Un descanso largo quita un nivel.", levels: 6 },
+  { id: "agotamiento", n: "Agotamiento", c: "#b33a2e", t: "Por cada nivel: −2 a las tiradas d20 y −1,5 m de velocidad. A nivel 6 mueres. Un descanso largo quita un nivel.", levels: 6 },
   { id: "concentracion", n: "Concentración", c: "#d6aa4e", t: "Mantiene un conjuro. Al recibir daño, salvación de Constitución (CD 10 o la mitad del daño, la mayor) o se pierde." }
 ];
 export const estado = id => ESTADOS.find(e => e.id === id);

@@ -9,6 +9,9 @@ import * as partida from "./views/partida.js";
 import * as mundo from "./views/mundo.js";
 import * as personajes from "./views/personajes.js";
 import * as escenas from "./views/escenas.js";
+import * as cronica from "./views/cronica.js";
+import * as reglas from "./views/reglas.js";
+import { preload } from "./core/srd.js";
 import * as soon from "./views/soon.js";
 
 const ROUTES = [
@@ -17,8 +20,9 @@ const ROUTES = [
   { id: "mundo", label: "Mapa", view: mundo },
   { id: "escenas", label: "Escenas", view: escenas, dmOnly: true },
   { id: "personajes", label: "Personajes", view: personajes },
+  { id: "reglas", label: "Reglas", view: reglas },
   { id: "lore", label: "Lore", view: soon, soon: 4 },
-  { id: "cronica", label: "Crónica", view: soon, soon: 5 }
+  { id: "cronica", label: "Crónica", view: cronica }
 ];
 
 let current = null, mounted = null, cloudMod = null;
@@ -127,3 +131,4 @@ async function boot() {
   presence.beat();
 }
 boot();
+preload();

@@ -20,7 +20,7 @@ export const clearBoard = () => store.commit("board", s => { s.board = null; s.t
 export const saveBoardAsScene = (name, placeId) => store.commit("board", s => {
   const b = s.board; if (!b) return;
   s.scenes.push({ id: "esc-" + Math.random().toString(36).slice(2, 8), name, place: placeId || null, cols: b.cols, rows: b.rows, terrain: { ...b.terrain }, props: b.props.map(p => ({ ...p })),
-    ambient: b.ambient || "interior", tokens: s.tokens.filter(t => t.kind !== "pc").map(t => ({ ...t, init: null })), start: (s.tokens.find(t => t.kind === "pc") || { c: 1, r: 1 }) });
+    ambient: b.ambient || "interior", sound: b.sound || "", tokens: s.tokens.filter(t => t.kind !== "pc").map(t => ({ ...t, init: null })), start: (s.tokens.find(t => t.kind === "pc") || { c: 1, r: 1 }) });
 });
 
 const d20 = () => 1 + Math.floor(Math.random() * 20);

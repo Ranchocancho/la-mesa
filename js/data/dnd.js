@@ -42,7 +42,7 @@ export const skillBonus = (c, key, ab) => mod(c.abilities[ab]) + prof(c.level) *
 export const saveBonus = (c, ab) => mod(c.abilities[ab]) + ((c.saves || []).includes(ab) ? prof(c.level) : 0);
 export const passive = (c, key, ab) => 10 + skillBonus(c, key, ab);
 export const carried = c => (c.inventory || []).reduce((t, i) => t + (+i.weight || 0) * (+i.qty || 1), 0) + (c.weapons || []).reduce((t, w) => t + (+w.weight || 0), 0);
-export const capacity = c => (+c.abilities.fue || 10) * 15; // libras
+export const capacity = c => (+c.abilities.fue || 10) * 7.5; // kg (regla 2024: Fuerza × 7,5 kg)
 
 /** Qué revisar al llegar a un nivel (recordatorios generales de las reglas 2024). */
 export function levelNotes(cls, lvl) {
@@ -62,7 +62,7 @@ export function newCharacter(base = {}) {
     level: 1, xp: 0, initials: "", color: "#8a9a4a", portrait: null, alignment: "",
     abilities: { fue: 10, des: 10, con: 10, int: 10, sab: 10, car: 10 },
     saves: [...info.saves], skills: {},
-    hp: { max: info.hd, cur: info.hd, temp: 0 }, ac: 10, speed: 30, hdUsed: 0,
+    hp: { max: info.hd, cur: info.hd, temp: 0 }, ac: 10, speed: 9, hdUsed: 0,
     weapons: [], inventory: [], coins: { po: 0, pp: 0, pe: 0, pc: 0 },
     spells: { slots: {}, list: [] },
     features: [], languages: "Común", proficiencies: "", notes: "",

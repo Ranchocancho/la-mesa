@@ -22,8 +22,8 @@ function taberna() {
   [[1, 5], [14, 6], [5, 1], [10, 9]].forEach(([c, r]) => s.props.push({ id: id("p"), c, r, k: "antorcha" }));
   [[6, 1]].forEach(([c, r]) => s.props.push({ id: id("p"), c, r, k: "estandarte" }));
   s.props.push({ id: id("p"), c: 12, r: 2, k: "tonel" });
-  s.tokens.push(foe("Bandido", 9, 4, 11, 12), foe("Bandido", 10, 6, 11, 12), foe("Bandido", 11, 5, 11, 12), foe("Matón", 12, 6, 32, 12, { initBonus: 1 }));
-  s.start = { c: 6, r: 8 };
+  s.tokens.push(foe("Bandido", 9, 4, 11, 12, { attacks: [{ name: "Cimitarra", atk: "+3", dmg: "1d6+1 cortante" }] }), foe("Bandido", 10, 6, 11, 12, { attacks: [{ name: "Cimitarra", atk: "+3", dmg: "1d6+1 cortante" }] }), foe("Bandido", 11, 5, 11, 12, { attacks: [{ name: "Ballesta ligera", atk: "+3", dmg: "1d8+1 perforante" }] }), foe("Matón", 12, 6, 32, 12, { initBonus: 1, attacks: [{ name: "Maza", atk: "+4", dmg: "1d6+2 contundente" }] }));
+  s.start = { c: 6, r: 8 }; s.sound = "taberna";
   return s;
 }
 
@@ -33,8 +33,8 @@ function camino() {
   [[2, 1], [4, 2], [7, 1], [10, 2], [13, 1], [15, 3], [3, 9], [6, 10], [9, 9], [12, 10], [16, 9], [11, 3]].forEach(([c, r]) => s.props.push({ id: id("p"), c, r, k: "arbol" }));
   [[5, 3], [14, 8], [8, 8]].forEach(([c, r]) => s.props.push({ id: id("p"), c, r, k: "arbusto" }));
   [[9, 4], [12, 7]].forEach(([c, r]) => s.props.push({ id: id("p"), c, r, k: "roca" }));
-  s.tokens.push(foe("Lobo", 10, 3, 11, 13, { initBonus: 2 }), foe("Lobo", 13, 8, 11, 13, { initBonus: 2 }), foe("Lobo", 15, 5, 11, 13, { initBonus: 2 }));
-  s.start = { c: 2, r: 5 }; s.ambient = "dia";
+  s.tokens.push(foe("Lobo", 10, 3, 11, 13, { initBonus: 2, attacks: [{ name: "Mordisco", atk: "+4", dmg: "1d6+2 perforante" }] }), foe("Lobo", 13, 8, 11, 13, { initBonus: 2, attacks: [{ name: "Mordisco", atk: "+4", dmg: "1d6+2 perforante" }] }), foe("Lobo", 15, 5, 11, 13, { initBonus: 2, attacks: [{ name: "Mordisco", atk: "+4", dmg: "1d6+2 perforante" }] }));
+  s.start = { c: 2, r: 5 }; s.ambient = "dia"; s.sound = "bosque";
   return s;
 }
 
@@ -47,9 +47,9 @@ function puente() {
   for (let c = 12; c < 18; c++) s.terrain[k(c, 5)] = "tierra";
   [[13, 2], [15, 3], [14, 8], [16, 9], [3, 2], [2, 9]].forEach(([c, r]) => s.props.push({ id: id("p"), c, r, k: "arbol" }));
   [[12, 3], [13, 8]].forEach(([c, r]) => s.props.push({ id: id("p"), c, r, k: "roca" }));
-  s.tokens.push(foe("Goblin", 12, 2, 10, 15, { initBonus: 2, hidden: true }), foe("Goblin", 14, 7, 10, 15, { initBonus: 2, hidden: true }),
-    foe("Goblin", 13, 4, 10, 15, { initBonus: 2 }), foe("Jefe goblin", 15, 5, 21, 17, { initBonus: 2 }));
-  s.start = { c: 2, r: 6 }; s.ambient = "dia";
+  s.tokens.push(foe("Goblin", 12, 2, 10, 15, { initBonus: 2, attacks: [{ name: "Cimitarra", atk: "+4", dmg: "1d6+2 cortante" }, { name: "Arco corto", atk: "+4", dmg: "1d6+2 perforante" }], hidden: true }), foe("Goblin", 14, 7, 10, 15, { initBonus: 2, attacks: [{ name: "Cimitarra", atk: "+4", dmg: "1d6+2 cortante" }, { name: "Arco corto", atk: "+4", dmg: "1d6+2 perforante" }], hidden: true }),
+    foe("Goblin", 13, 4, 10, 15, { initBonus: 2, attacks: [{ name: "Cimitarra", atk: "+4", dmg: "1d6+2 cortante" }, { name: "Arco corto", atk: "+4", dmg: "1d6+2 perforante" }] }), foe("Jefe goblin", 15, 5, 21, 17, { initBonus: 2, attacks: [{ name: "Cimitarra", atk: "+4", dmg: "2d6+2 cortante" }] }));
+  s.start = { c: 2, r: 6 }; s.ambient = "dia"; s.sound = "viento";
   return s;
 }
 
@@ -68,10 +68,10 @@ function cripta() {
   [[10, 7], [4, 5]].forEach(([c, r]) => s.props.push({ id: id("p"), c, r, k: "calavera" }));
   [[15, 9], [16, 10]].forEach(([c, r]) => s.props.push({ id: id("p"), c, r, k: "barril" }));
   s.props.push({ id: id("p"), c: 8, r: 10, k: "trampa" });
-  s.tokens.push(foe("Esqueleto", 9, 4, 13, 13), foe("Esqueleto", 10, 7, 13, 13),
-    foe("Esqueleto arquero", 15, 6, 13, 13, { initBonus: 3 }), foe("Nigromante", 14, 8, 22, 12, { initBonus: 2 }),
-    foe("Guardián de la cripta", 14, 2, 45, 16, { hidden: true, size: 1.3, icon: "nomuerto" }));
-  s.start = { c: 2, r: 5 }; s.ambient = "noche";
+  s.tokens.push(foe("Esqueleto", 9, 4, 13, 13, { attacks: [{ name: "Espada corta", atk: "+5", dmg: "1d6+3 perforante" }, { name: "Arco corto", atk: "+5", dmg: "1d6+3 perforante" }] }), foe("Esqueleto", 10, 7, 13, 13, { attacks: [{ name: "Espada corta", atk: "+5", dmg: "1d6+3 perforante" }] }),
+    foe("Esqueleto arquero", 15, 6, 13, 13, { initBonus: 3, attacks: [{ name: "Arco corto", atk: "+5", dmg: "1d6+3 perforante" }] }), foe("Nigromante", 14, 8, 22, 12, { initBonus: 2, attacks: [{ name: "Rayo de escarcha", atk: "+5", dmg: "2d8 frío" }, { name: "Daga", atk: "+3", dmg: "1d4+1 perforante" }] }),
+    foe("Guardián de la cripta", 14, 2, 45, 16, { hidden: true, size: 1.3, icon: "nomuerto", attacks: [{ name: "Espadón", atk: "+6", dmg: "2d6+4 cortante" }] }));
+  s.start = { c: 2, r: 5 }; s.ambient = "noche"; s.sound = "mazmorra";
   return s;
 }
 
@@ -79,7 +79,7 @@ export const exampleScenes = () => [taberna(), camino(), cripta(), puente()];
 
 /** Copia una escena preparada a la mesa en directo, colocando al grupo en su punto de inicio. */
 export function sceneToBoard(scene, characters, keepPCs) {
-  const board = { scene: scene.id, name: scene.name, cols: scene.cols, rows: scene.rows, terrain: { ...scene.terrain }, props: scene.props.map(p => ({ ...p })), ambient: scene.ambient || "interior", turn: null, round: 0 };
+  const board = { scene: scene.id, name: scene.name, cols: scene.cols, rows: scene.rows, terrain: { ...scene.terrain }, props: scene.props.map(p => ({ ...p })), ambient: scene.ambient || "interior", sound: scene.sound || "", turn: null, round: 0 };
   const foes = scene.tokens.map(t => ({ ...t, id: id("t"), init: null }));
   const spots = ring(scene.start || { c: 1, r: 1 }, scene);
   const pcs = characters.map((ch, i) => {

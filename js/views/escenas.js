@@ -7,6 +7,7 @@ import { loadScene } from "../core/mesa.js";
 import { createBoard, TERRAIN } from "./tablero.js";
 import { tokenEditor, bindTokenEditor } from "./mesa.js";
 import { $, $$, esc, toast } from "../core/ui.js";
+import { srdNow, monsterToken, findMonster } from "../core/srd.js";
 
 let el = null, openId = null, board = null, sel = null, placing = false, preview3d = false;
 
@@ -90,12 +91,26 @@ function side() {
       <div class="row" style="margin-top:10px"><button class="btn small" id="sc3d" aria-pressed="${preview3d}">${preview3d ? "✏️ Editar en 2D" : "🎲 Ver en 3D"}</button></div>
       <div class="row" style="margin-top:10px"><button class="btn gold small" id="scload">Cargar en la mesa</button><button class="btn small" id="scdup">Duplicar</button><button class="btn small danger" id="scdel">Eliminar</button></div>
     </div>
+    <div class="panel" style="margin-top:12px"><h2 class="sec">Monstruo del compendio</h2>
+      <div class="row"><input id="monq" list="monlist" placeholder="Bandido, Esqueleto, Lobo…" style="flex:1;min-width:0"><input type="number" id="monn" value="1" min="1" max="12" style="width:52px" aria-label="Cuántos"><button class="btn small gold" id="monadd">Añadir</button></div>
+      <datalist id="monlist">${(srdNow.monstruos || []).map(m => `<option value="${esc(m.n)}">VD ${m.vd}</option>`).join("")}</datalist>
+      <p class="note" style="margin:6px 0 0">Aparecen junto al punto de inicio del grupo, con sus PG, CA y ataques del manual.</p></div>
     <div class="panel" style="margin-top:12px">${t ? `<h2 class="sec">Ficha seleccionada</h2>${tokenEditor(t)}` : `<p class="empty">Usa «👹 Enemigo» para colocar enemigos y tócalos para editarlos. Con «✋ Mover» los recolocas.</p>`}</div>`;
   const M = fn => store.commit("board", st => fn(st.scenes.find(y => y.id === openId)));
   $("#scname", box).onchange = e => M(x => { x.name = e.target.value; });
   $("#scplace", box).onchange = e => M(x => { x.place = e.target.value || null; });
   $("#sccols", box).onchange = e => M(x => { x.cols = Math.max(5, Math.min(40, +e.target.value)); });
   $("#scrows", box).onchange = e => M(x => { x.rows = Math.max(5, Math.min(30, +e.target.value)); });
+  $("#monadd", box).onclick = () => {
+    const m = findMonster($("#monq", box).value); if (!m) { toast("No encuentro ese monstruo en el compendio"); return; }
+    const n = Math.max(1, +$("#monn", box).value || 1);
+    M(x => { const busy = new Set(x.tokens.map(k => k.c + "," + k.r)); let placed = 0;
+      for (let d = 2; d < 14 && placed < n; d++) for (let r = 0; r < x.rows && placed < n; r++) for (let c = x.cols - 1; c >= 0 && placed < n; c--) {
+        if (Math.max(Math.abs(c - x.start.c), Math.abs(r - x.start.r)) !== d || busy.has(c + "," + r) || x.terrain[c + "," + r] === "muro") continue;
+        busy.add(c + "," + r); const t = monsterToken(m, c, r); if (n > 1) t.name = `${m.n} ${placed + 1}`; x.tokens.push(t); placed++;
+      } });
+    toast(`${n} × ${m.n} añadidos`);
+  };
   $("#sc3d", box).onclick = () => { preview3d = !preview3d; board = null; draw(); };
   $("#scstart", box).onclick = () => { placing = !placing; side(); };
   $("#scload", box).onclick = () => { loadScene(openId); location.hash = "partida"; toast("Escena cargada en la mesa"); };

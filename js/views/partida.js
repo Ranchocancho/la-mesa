@@ -1,13 +1,14 @@
 // La Partida: el escenario común y, para el máster, el panel con el que decide qué tenéis delante.
 import { store } from "../core/store.js";
 import { isDM } from "../core/session.js";
-import { liveSession, visibleLive, lastClosed, sessionName, startSession, closeSession, show, presentationFor } from "../core/sesiones.js";
+import { liveSession, visibleLive, lastClosed, sessionName, startSession, closeSession, show, presentationFor, addEntry } from "../core/sesiones.js";
 import { loadScene, blankBoard, clearBoard, saveBoardAsScene } from "../core/mesa.js";
 import { renderStage } from "./presentacion.js";
 import { mountTactical } from "./mesa.js";
+import { renderRolls } from "./tiradas.js";
 import { $, $$, esc, toast } from "../core/ui.js";
 
-let el, closing = false, tac = null, tacEdit = false, panelHidden = false, lastKey = null;
+let rollsOpen = false, el, closing = false, tac = null, tacEdit = false, panelHidden = false, lastKey = null;
 
 export function mount(root) {
   el = document.createElement("div");
@@ -35,6 +36,9 @@ function drawStage(force) {
     return;
   }
   tac = null; st.classList.remove("tac");
+  let dr = $(".rolldrawer", el.querySelector(".stagebox"));
+  if (rollsOpen) { if (!dr) { dr = document.createElement("div"); dr.className = "rolldrawer"; el.querySelector(".stagebox").style.position = "relative"; el.querySelector(".stagebox").appendChild(dr); } renderRolls(dr); }
+  else if (dr) dr.remove();
   const key = JSON.stringify(presentationFor(s)) + JSON.stringify(s.world.places.map(p => [p.map, p.summary, p.items.length]));
   if (!force && key === lastKey && st.childElementCount) return;
   lastKey = key; renderStage(st);
@@ -46,13 +50,18 @@ function draw() {
   const dm = isDM(state);
   const live = visibleLive(state);
   el.classList.toggle("withpanel", dm && !panelHidden);
-  $("#sbar", el).innerHTML = `${live ? `<b>${esc(sessionName(live))}</b> en curso${live.test ? ` · <span class="tag secret">SOLO MÁSTERES</span>` : ""}` : "No hay ninguna partida en curso"}
-    <span class="grow"></span>${dm ? `<button class="btn small" id="togglepanel">${panelHidden ? "Mostrar panel" : "Ocultar panel"}</button>` : ""}<a class="btn small" href="#mundo">Mapa del mundo</a>`;
+  const typing = box => box && box.contains(document.activeElement) && /INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName);
+  if (!typing($("#sbar", el))) $("#sbar", el).innerHTML = `${live ? `<b>${esc(sessionName(live))}</b> en curso${live.test ? ` · <span class="tag secret">SOLO MÁSTERES</span>` : ""}` : "No hay ninguna partida en curso"}
+    ${live ? `<span class="quicknote"><input id="qnote" placeholder="📜 Anotar en la crónica…" aria-label="Nota para la crónica"><button class="btn small" id="qnotego">Anotar</button></span>` : ""}
+    <span class="grow"></span>${tactical(state) ? "" : `<button class="btn small" id="rollsbtn" aria-pressed="${rollsOpen}">🎲 Tiradas</button>`}${dm ? `<button class="btn small" id="togglepanel">${panelHidden ? "Mostrar panel" : "Ocultar panel"}</button>` : ""}<a class="btn small" href="#mundo">Mapa del mundo</a>`;
+  const qn = $("#qnote", el), qg = $("#qnotego", el);
+  if (qg) { const go = () => { if (qn.value.trim()) { addEntry(live.id, qn.value); qn.value = ""; toast("Anotado en la crónica"); } }; qg.onclick = go; qn.onkeydown = e => { if (e.key === "Enter") go(); }; }
+  const rb = $("#rollsbtn", el); if (rb) rb.onclick = () => { rollsOpen = !rollsOpen; draw(); };
   const tp = $("#togglepanel", el);
   if (tp) tp.onclick = () => { panelHidden = !panelHidden; draw(); if (tac) setTimeout(() => tac.update(), 50); };
   const panel = $("#dmp", el);
   panel.hidden = !dm || panelHidden;
-  if (dm && !panelHidden) {
+  if (dm && !panelHidden && !(closing && typing(panel))) {
     const open = [...$$("details[open]", panel)].map(d => d.dataset.k);
     panel.innerHTML = sessionBlock(state) + tacticalBlock(state) + showBlock(state);
     open.forEach(k => { const d = $(`details[data-k="${k}"]`, panel); if (d) d.open = true; });
@@ -70,7 +79,11 @@ function sessionBlock(state) {
   if (closing) return `<div class="panel"><h2 class="sec">Cerrar ${esc(sessionName(live))}</h2>
     ${live.test ? `<p class="empty" style="margin-bottom:12px">La sesión de pruebas se descarta al cerrarla.</p>` : `
     <label class="field">Título<input id="ctitle" placeholder="La cripta bajo el campanario" value="${esc(live.title)}"></label>
-    <label class="field" style="margin-top:10px">Qué pasó (será el «Anteriormente…» de la próxima)<textarea id="crecap" rows="6">${esc(live.recap)}</textarea></label>`}
+    <label class="field" style="margin-top:10px">Qué pasó (será el «Anteriormente…» de la próxima)<textarea id="crecap" rows="6">${esc(live.recap || notesOf(state, live.id))}</textarea></label>
+    ${notesOf(state, live.id) && !live.recap ? `<p class="note" style="margin:6px 0 0">Lo he rellenado con las notas de la crónica. Retócalo a tu gusto.</p>` : ""}
+    <h2 class="sec" style="margin-top:14px">Experiencia</h2>
+    <div class="xpgrid xpall"><input type="number" id="xpall" min="0" placeholder="PX" aria-label="PX para todos"><input id="xpwhy" placeholder="Motivo (p. ej. derrotar a los esqueletos)" aria-label="Motivo"><button class="btn small" id="xpfill">A todos</button></div>
+    <div class="xplist">${state.characters.map(c => `<div class="xpgrid"><span>${esc(c.name)}</span><input type="number" min="0" data-xpc="${c.id}" placeholder="0" aria-label="PX para ${esc(c.name)}"><input data-xpr="${c.id}" placeholder="Motivo" aria-label="Motivo para ${esc(c.name)}"></div>`).join("")}</div>`}
     <div class="row" style="margin-top:12px"><button class="btn gold" id="doclose">${live.test ? "Terminar la prueba" : "Guardar y cerrar"}</button><button class="btn" id="cancelclose">Seguir jugando</button></div></div>`;
   return `<div class="panel"><h2 class="sec">${esc(sessionName(live))} en curso</h2>
     ${live.test ? `<p class="note" style="margin:0 0 12px">Los jugadores no ven esta sesión ni lo que muestres en ella.</p>` : ""}
@@ -125,10 +138,13 @@ function bind(state) {
   on("doclose", () => {
     const t = $("#ctitle", el), r = $("#crecap", el);
     if (r && !r.value.trim()) { toast("Escribe un pequeño resumen: será el «Anteriormente…» de la próxima sesión"); r.focus(); return; }
-    closing = false; closeSession(t ? t.value.trim() : "", r ? r.value.trim() : "");
-    toast("Sesión cerrada");
+    const xp = $$("[data-xpc]", el).map(i => ({ char: i.dataset.xpc, amount: +i.value || 0, reason: ($(`[data-xpr="${i.dataset.xpc}"]`, el) || {}).value || "" }));
+    closing = false; closeSession(t ? t.value.trim() : "", r ? r.value.trim() : "", xp);
+    const total = xp.reduce((a, x) => a + x.amount, 0);
+    toast(total ? `Sesión cerrada · ${total} PX repartidos` : "Sesión cerrada");
   });
   on("clear", () => show(null));
+  on("xpfill", () => { const v = $("#xpall", el).value, why = $("#xpwhy", el).value; $$("[data-xpc]", el).forEach(i => (i.value = v)); $$("[data-xpr]", el).forEach(i => { if (!i.value) i.value = why; }); });
   on("tblank", () => { tacEdit = true; blankBoard(); });
   on("tedit", () => { tacEdit = !tacEdit; draw(); });
   on("tclear", () => { const b = $("#tclear", el); if (!b.dataset.sure) { b.dataset.sure = 1; b.textContent = "Pulsa otra vez"; return; } tacEdit = false; clearBoard(); });
@@ -139,3 +155,5 @@ function bind(state) {
   $$("[data-load]", el).forEach(b => b.onclick = () => { tacEdit = false; loadScene(b.dataset.load); });
   $$("[data-show]", el).forEach(b => b.onclick = () => show(JSON.parse(b.dataset.show)));
 }
+
+const notesOf = (s, sid) => (s.chronicle || []).filter(e => e.session === sid).map(e => e.text).join("\n");
