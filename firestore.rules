@@ -1,0 +1,65 @@
+rules_version = '2';
+
+// Reglas de seguridad de La Mesa.
+// - Solo los miembros de una campaña ven sus datos.
+// - Solo el máster modifica la campaña.
+// - Los jugadores solo reciben los lugares visibles y el contenido revelado.
+// - Las notas secretas solo las lee el máster.
+// - Cualquiera con el enlace y una cuenta de Google puede unirse como jugador.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() { return request.auth != null; }
+    function campaign(c) { return get(/databases/$(database)/documents/campaigns/$(c)).data; }
+    function isMember(c) { return signedIn() && request.auth.uid in campaign(c).memberIds; }
+    function isDM(c) { return signedIn() && campaign(c).dm == request.auth.uid; }
+
+    // Un jugador se añade a sí mismo, sin tocar nada más.
+    function joiningSelf() {
+      let before = resource.data;
+      let after = request.resource.data;
+      return after.diff(before).affectedKeys().hasOnly(['memberIds', 'members'])
+        && after.memberIds.toSet().difference(before.memberIds.toSet()) == [request.auth.uid].toSet()
+        && before.memberIds.toSet().difference(after.memberIds.toSet()).size() == 0
+        && after.members.diff(before.members).affectedKeys().hasOnly([request.auth.uid])
+        && after.members[request.auth.uid].role == 'player';
+    }
+
+    match /campaigns/{c} {
+      allow get: if signedIn();
+      allow list: if signedIn() && request.auth.uid in resource.data.memberIds;
+      allow create: if signedIn()
+        && request.resource.data.dm == request.auth.uid
+        && request.resource.data.memberIds == [request.auth.uid];
+      allow update: if signedIn() && (
+        (resource.data.dm == request.auth.uid
+          && request.resource.data.dm == resource.data.dm)
+        || joiningSelf());
+      allow delete: if signedIn() && resource.data.dm == request.auth.uid;
+
+      match /places/{p} {
+        allow read: if isDM(c) || (isMember(c) && resource.data.visible == true);
+        allow write: if isDM(c);
+      }
+      match /items/{i} {
+        allow read: if isDM(c) || (isMember(c) && resource.data.revealed == true);
+        allow write: if isDM(c);
+      }
+      match /secrets/{s} {
+        allow read, write: if isDM(c);
+      }
+      match /images/{k} {
+        allow read: if isMember(c);
+        allow write: if isDM(c);
+        match /c/{n} {
+          allow read: if isMember(c);
+          allow write: if isDM(c);
+        }
+      }
+      match /presence/{u} {
+        allow read: if isMember(c);
+        allow write: if isMember(c) && u == request.auth.uid;
+      }
+    }
+  }
+}
