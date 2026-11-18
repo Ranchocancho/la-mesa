@@ -1,0 +1,20 @@
+// Secciones que llegan en hitos siguientes.
+const INFO = {
+  mesa: { t: "Mesa táctica", items: ["Editor de tablero hexagonal con suelos y escenografía", "Iniciativa en una columna junto al tablero", "Ficha plegable con tu personaje y tu objetivo", "Estado del grupo, dados compartidos y vista 3D"], link: true },
+  personajes: { t: "Personajes", items: ["Ficha 2024 con ilustración destacada", "Todos pueden verla; solo el dueño y el máster la editan", "Inventario y conjuros del SRD 5.2", "Subida de nivel guiada y experiencia"] },
+  lore: { t: "Lore y panel del máster", items: ["Biblioteca de lugares, PNJ, facciones y objetos", "PNJ itinerantes que el máster mueve entre regiones", "Notas por ramas y panel de apoyo durante la partida"] },
+  cronica: { t: "Crónica", items: ["Cuaderno que escriben los jugadores mientras juegan", "Reparto de experiencia al cerrar la sesión", "Resumen automático para el «Anteriormente en…»"] }
+};
+
+export function mount(root, ctx) {
+  const i = INFO[ctx.route.id];
+  const el = document.createElement("div");
+  el.className = "page soonpage";
+  el.innerHTML = `<div class="panel"><h2 class="sec">Llega en el hito ${ctx.route.soon}</h2>
+    <h1 class="title" style="font-size:26px">${i.t}</h1>
+    <ul>${i.items.map(x => `<li>${x}</li>`).join("")}</ul>
+    ${i.link ? `<p class="note">Mientras tanto, el prototipo de la mesa sigue disponible: <a href="https://claude.ai/artifact/W9yxnzrmLT2tZyARLbeUQ9" style="color:var(--oro)">La Mesa – prototipo</a>.</p>` : ""}
+  </div>`;
+  root.appendChild(el);
+  return {};
+}
