@@ -1,6 +1,6 @@
 // Combate: ataques contra un objetivo, daño y la decisión del máster (confirmar, cambiar o anular).
 import { store } from "./store.js";
-import { isDM } from "./session.js";
+import { isDM, currentUser } from "./session.js";
 import { publish } from "./dados.js";
 import { charOf } from "./mesa.js";
 import { damage as hurt } from "./salud.js";
@@ -40,6 +40,7 @@ export function attacksOf(s, t) {
 export function attack(attackerId, targetId, weapon, force = null, use = "act") {
   const s = store.get(), a = s.tokens.find(t => t.id === attackerId), t = s.tokens.find(x => x.id === targetId);
   if (!a || !t) return null;
+  { const me = currentUser(s); if (!isDM(s) && !(a.owner && me && a.owner === me.id)) { toast("Solo puedes atacar con tu propio personaje."); return null; } }
   const rng = weapon.rng || { n: 1.5, l: 1.5 }, reach = inRange(rng, a, t), cov = cover(s, a, t), mods = modifiers(s, a, t, rng);
   if (reach === "out") { toast(`${t.name || "El objetivo"} está a ${(dist(a, t) * 1.5).toLocaleString("es-ES")} m: fuera del alcance de ${weapon.name} (${rng.l} m)`); return null; }
   if (cov.level === "total") { toast("Cobertura total: no tienes línea hasta el objetivo"); return null; }

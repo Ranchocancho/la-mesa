@@ -45,13 +45,15 @@ let spellPer = {};
 /** Lista de tiradas visibles para este usuario (las secretas, solo el máster y quien tira). */
 export const visibleRolls = s => (s.rolls || []).filter(r => !r.secret || isDM(s) || r.who === (currentUser(s) || {}).id);
 
-export function renderRolls(el) {
+/** o: { tray: false → sin bandeja, log: false → sin registro, by: () => id de la figura que tira } (se recuerda por contenedor) */
+export function renderRolls(el, o) {
+  if (o) el._ro = o; o = el._ro || {};
   if (el.contains(document.activeElement) && /INPUT|SELECT/.test(document.activeElement.tagName)) return; // no pisar lo que se escribe
   const s = store.get(), dm = isDM(s), me = currentUser(s);
   const list = visibleRolls(s).slice(-30).reverse();
   const hasDamage = id => (s.rolls || []).some(x => x.link === id && x.status !== "void");
   const pe = poolExpr(0);
-  el.innerHTML = `<div class="tray">
+  el.innerHTML = `${o.tray === false ? "" : `<div class="tray">
       <div class="trayd">${[4, 6, 8, 10, 12, 20, 100].map(d => `<button class="die d${d} ${pool[d] ? "inpool" : ""}" data-d="${d}" title="Añadir un d${d} a la mano">d${d}${pool[d] ? `<i>${pool[d]}</i>` : ""}</button>`).join("")}</div>
       <div class="trayh"><span class="trhand" title="Clic en un dado para añadirlo · clic derecho para quitarlo">${pe ? `<b>${pe}</b>` : `<em>1d20</em> <small>o elige dados</small>`}</span>${pe ? `<button class="btn small" id="trclear" title="Vaciar la mano">✕</button>` : ""}<button class="btn small gold" id="trgo">🎲 Tirar</button></div>
       <div class="trayo"><select id="trskin" aria-label="Tus dados" title="Tus dados">${Object.entries(SKIN_NAMES).map(([k, n]) => `<option value="${k}" ${mySkin() === k ? "selected" : ""}>🎲 ${n}</option>`).join("")}</select>
@@ -59,9 +61,10 @@ export function renderRolls(el) {
         <button class="btn small" id="tradv" aria-pressed="${adv === 1}" title="Ventaja (d20)">Vent.</button><button class="btn small" id="trdis" aria-pressed="${adv === -1}" title="Desventaja (d20)">Desv.</button>
         ${dm ? `<button class="btn small" id="trsec" aria-pressed="${secret}" title="Solo la ves tú">Secreta</button>` : ""}
         <input id="trexpr" placeholder="2d6+3" aria-label="Expresión de dados"></div>
-    </div>
-    <div class="rolls">${list.filter(r => !(r.kind === "damage" && r.link && list.some(x => x.id === r.link))).map(r => rowHTML(s, r, dm, me, hasDamage, list.find(x => x.kind === "damage" && x.link === r.id))).join("") || `<p class="empty">Aún no se ha tirado nada. ¡Que rueden los dados!</p>`}</div>`;
+    </div>`}
+    ${o.log === false ? "" : `<div class="rolls">${list.filter(r => !(r.kind === "damage" && r.link && list.some(x => x.id === r.link))).map(r => rowHTML(s, r, dm, me, hasDamage, list.find(x => x.kind === "damage" && x.link === r.id))).join("") || `<p class="empty">Aún no se ha tirado nada. ¡Que rueden los dados!</p>`}</div>`}`;
 
+  if (o.tray !== false) {
   const mod = () => +($("#trmod", el).value || 0);
   $$("[data-d]", el).forEach(b => {
     b.onclick = () => { const d = +b.dataset.d; pool[d] = Math.min(10, (pool[d] || 0) + 1); renderRolls(el); };
@@ -70,7 +73,7 @@ export function renderRolls(el) {
   const throwNow = th => {
     const typed = $("#trexpr", el).value.trim(), m = mod();
     const expr = typed || poolExpr(m) || `1d20${m ? (m > 0 ? "+" : "") + m : ""}`;
-    publish({ expr, label: expr, adv: /^1d20([+-]\d+)?$/.test(expr) ? adv : 0, secret, kind: "free", throw: th });
+    publish({ expr, label: expr, adv: /^1d20([+-]\d+)?$/.test(expr) ? adv : 0, secret, kind: "free", throw: th, by: o.by ? o.by() : null });
     adv = 0; pool = {}; $("#trexpr", el).value = ""; renderRolls(el);
   };
   $("#trgo", el).onclick = () => throwNow(null);
@@ -80,6 +83,7 @@ export function renderRolls(el) {
   $("#tradv", el).onclick = () => { adv = adv === 1 ? 0 : 1; renderRolls(el); };
   $("#trdis", el).onclick = () => { adv = adv === -1 ? 0 : -1; renderRolls(el); };
   const sc = $("#trsec", el); if (sc) sc.onclick = () => { secret = !secret; renderRolls(el); };
+  }
   $$("[data-dec]", el).forEach(b => b.onclick = () => { const [id, a] = b.dataset.dec.split("|"); decide(id, a); });
   $$("[data-dmg]", el).forEach(b => b.onclick = () => damageFor(b.dataset.dmg));
   $$("[data-per]", el).forEach(x => x.onchange = () => { const [id, t] = x.dataset.per.split("|"); spellPer[id] = { ...(spellPer[id] || {}), [t]: x.value }; });

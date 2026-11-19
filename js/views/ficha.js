@@ -48,15 +48,15 @@ export function renderSheet(el) {
     </details>
 
     <section class="fsec2"><h4>⚔️ Ataques</h4>${attacksOf(s, tok || { kind: "pc", char: c.id }).map(w => `<div class="fatk"><b>${esc(w.name)}</b><span>${sign(w.atk)} · ${esc(w.expr)} ${esc(w.type || "")}</span><small>${w.rng.ranged ? `${w.rng.n}/${w.rng.l} m` : `${w.rng.l} m`}</small></div>`).join("") || `<p class="empty">Sin ataques.</p>`}
-      <p class="note">Para atacar: selecciona tu figura y toca al objetivo en la mesa.</p></section>
+      <p class="note">Para atacar: toca al objetivo en la mesa o en la iniciativa; las opciones salen arriba.</p></section>
 
     ${ab ? spellsBlock(s, c, tok) : ""}
 
-    <details class="fsec" data-k="rest" ${restOpen ? "open" : ""}><summary>Descansos</summary>
+    ${s.board && s.presentation && s.presentation.type === "tactical" ? "" : `<details class="fsec" data-k="rest" ${restOpen ? "open" : ""}><summary>Descansos</summary>
       <div class="frest"><div><b>Descanso corto</b> <small>1 hora · gasta dados de golpe (d${classInfo(c.cls).hd} + CON)</small>
         <div class="row"><input type="number" id="hdn" min="1" max="${c.level - (c.hdUsed || 0)}" value="${Math.min(hdN, Math.max(1, c.level - (c.hdUsed || 0)))}" aria-label="Dados de golpe"><span class="note">de ${c.level - (c.hdUsed || 0)} que te quedan</span><button class="btn small" id="srest" ${live ? "disabled title='No en combate'" : ""}>Descansar</button></div></div>
         <div><b>Descanso largo</b> <small>8 horas · todo: PG, dados de golpe, espacios; −1 agotamiento</small><div class="row"><button class="btn small" id="lrest" ${live ? "disabled title='No en combate'" : ""}>Descansar</button></div></div></div>
-    </details>`;
+    </details>`}`;
   bind(el, s, c, tok);
   const p = $(".fport", el); if (c.portrait) getImage(c.portrait).then(u => { if (u) { p.style.backgroundImage = `url('${u}')`; p.textContent = ""; } });
 }

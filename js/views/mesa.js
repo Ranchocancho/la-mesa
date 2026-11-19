@@ -34,7 +34,7 @@ let hudOpen = !(window.matchMedia && window.matchMedia("(max-width: 900px)").mat
 
 export function mountTactical(host, opts = {}) {
   host.innerHTML = `<div class="tactical"><div class="boardwrap"></div><aside class="sidecol"><div class="sidetabs" role="tablist"><button role="tab" data-side="ini">Iniciativa</button><button role="tab" data-side="tir">🎲 Tiradas</button></div><div class="initcol" aria-label="Iniciativa"></div><div class="rollcol" hidden></div></aside><div class="hud"></div>
-    <div class="topbar"><div class="tb-now" aria-live="polite"></div><div class="turnbar"></div><div class="tb-right"><div class="tb-ctl"></div><button class="btn small" id="v3d" title="Cambiar entre la mesa en 3D y el plano en 2D"></button></div></div><div class="editbadge" hidden>✏️ El máster está retocando la mesa…</div><div class="turnbanner" hidden></div><div class="taskcall" hidden></div><div class="dboxes l"></div><div class="dboxes r"></div></div>`;
+    <div class="topbar"><div class="tb-now" aria-live="polite"></div><div class="turnbar"></div><div class="tb-right"><div class="tb-ctl"></div><button class="btn small" id="v3d" title="Cambiar entre la mesa en 3D y el plano en 2D"></button></div></div><div class="editbadge" hidden>✏️ El máster está retocando la mesa…</div><div class="turnbanner" hidden></div><div class="taskcall" hidden></div></div>`;
   // Para los jugadores, la iniciativa va en su columna fija de la derecha (opts.sideHost) y el tablero ocupa todo el ancho
   if (opts.sideHost) { $(".sidecol", host).remove(); $(".tactical", host).classList.add("noside"); opts.sideHost.innerHTML = `<div class="initcol" aria-label="Iniciativa"></div>`; }
   const sideRoot = opts.sideHost || host;
@@ -43,6 +43,9 @@ export function mountTactical(host, opts = {}) {
   const sideShow = () => { if (!rc) return; $$("[data-side]", host).forEach(b => b.setAttribute("aria-selected", b.dataset.side === sideTab)); ini.hidden = sideTab !== "ini"; rc.hidden = sideTab !== "tir"; if (sideTab === "tir") renderRolls(rc); };
   $$("[data-side]", host).forEach(b => b.onclick = () => { sideTab = b.dataset.side; sideShow(); });
   let rollsSeen = (store.get().rolls || []).length;
+  const actHost = opts.actHost || null; let actSig = "", npcId = null, npcPick = null;
+  // Seleccionar una figura (desde la mesa, la iniciativa o la tira): se abre su consulta abajo
+  function selectTok(id) { if (board && board.select) board.select(id); if (sel !== id) { sel = id; } hudOpen = true; if (isDM(S()) && (S().tokens.find(t => t.id === id) || {}).kind !== "pc") npcId = id; drawHud(); if (opts.onSelect) opts.onSelect(id); }
   let sel = null, selPropId = null, sceneId = store.get().board && (store.get().board.scene + "#" + floorIdx(store.get().board)), board = null;
   const S = () => store.get();
   const me = () => (currentUser(S()) || {}).id;
@@ -95,7 +98,7 @@ export function mountTactical(host, opts = {}) {
     onSelectProp: id => { selPropId = id; if (id) hudOpen = true; drawHud(); },
     decorate: t => { const c = charOf(S(), t); return { ...(c ? { name: c.name, color: c.color, portrait: c.portrait } : t.portrait ? { portrait: t.portrait } : {}), isTurn: S().board.turn === t.id }; },
     hpOf: t => hpOf(S(), t),
-    onSelect: id => { sel = id; drawHud(); if (opts.onSelect) opts.onSelect(id); },
+    onSelect: id => { sel = id; if (id && isDM(S()) && (S().tokens.find(t => t.id === id) || {}).kind !== "pc") npcId = id; drawHud(); if (opts.onSelect) opts.onSelect(id); },
     charOf: t => charOf(S(), t),
     chars: () => S().characters,
     setFog: v => store.commit("board", st => { st.board.fog = v; }),
@@ -110,9 +113,9 @@ export function mountTactical(host, opts = {}) {
   function mountBoard() {
     if (board && board.dispose) board.dispose();
     bw.innerHTML = ""; bw.className = "boardwrap"; board = null;
-    $(".tb-ctl", host).innerHTML = "";
-    const tg = $("#v3d", host); tg.textContent = use3d() ? "🗺 Plano 2D" : "🎲 Mesa 3D"; tg.hidden = !!opts.edit;
-    if (use3d()) import("./tablero3d.js").then(m => { if (!m.webglOK) throw new Error("sin WebGL"); board = m.createBoard3D(bw, bopts); if (sel) board.select(sel); drawHud(); })
+    const tg = $("#v3d", host); $(".tb-right", host).appendChild(tg); // vuelve a su sitio antes de vaciar los controles
+    $(".tb-ctl", host).innerHTML = ""; tg.textContent = use3d() ? "🗺 Plano 2D" : "🎲 Mesa 3D"; tg.hidden = !!opts.edit;
+    if (use3d()) import("./tablero3d.js").then(m => { if (!m.webglOK) throw new Error("sin WebGL"); board = m.createBoard3D(bw, bopts); const col = $(".tb-ctl .camst", host); if (col) col.appendChild($("#v3d", host)); if (sel) board.select(sel); drawHud(); })
       .catch(e => { console.warn("Vista 3D no disponible", e); want3d = false; mountBoard(); });
     else board = createBoard(bw, bopts);
   }
@@ -180,7 +183,7 @@ export function mountTactical(host, opts = {}) {
     lastIni = iniHTML; ini.innerHTML = iniHTML;
     $$("[data-init]", ini).forEach(i => i.onchange = () => store.commit("token", st => { const t = st.tokens.find(x => x.id === i.dataset.init); if (t) t.init = i.value === "" ? null : +i.value; }));
     $$("[data-iroll]", ini).forEach(b => b.onclick = e => { e.stopPropagation(); rollInit(b.dataset.iroll); });
-    $$("[data-sel]", ini).forEach(r => r.onclick = e => { if (e.target.tagName !== "INPUT" && e.target.tagName !== "BUTTON" && board) board.select(r.dataset.sel); });
+    $$("[data-sel]", ini).forEach(r => r.onclick = e => { if (e.target.tagName !== "INPUT" && e.target.tagName !== "BUTTON") selectTok(r.dataset.sel); });
     const on = (id, fn) => { const x = $("#" + id, ini); if (x) x.onclick = fn; };
     on("cbegin", () => { beginCombat(); toast("¡Combate! Todos tiran iniciativa"); });
     on("cstart", startRounds); on("cnext", endTurn);
@@ -216,6 +219,14 @@ export function mountTactical(host, opts = {}) {
     }
     lastTaskKey = key;
   }
+  // La tira se encoge para que quepan todos, sin barra de desplazamiento
+  function fitStrip() {
+    const n = tb.querySelectorAll(".tbchip").length; if (!n) return;
+    const w = tb.clientWidth - 24, nowW = tb.querySelector(".tbchip.now") ? 120 : 0;
+    const av = Math.max(16, Math.min(32, Math.floor((w - nowW) / Math.max(1, n) - 10)));
+    tb.style.setProperty("--av", av + "px"); tb.classList.toggle("tight", av < 24);
+  }
+  if (window.ResizeObserver) new ResizeObserver(() => fitStrip()).observe(tb);
   function drawTurnBar() {
     const s = S(), ph = phase(s), cur = current(s), dm = isDM(s);
     drawNow();
@@ -238,7 +249,8 @@ export function mountTactical(host, opts = {}) {
     const stripHTML = seq.map(chip).join("") || `<span class="tbidle">Esperando iniciativas…</span>`;
     if (stripHTML !== lastStrip) {
       lastStrip = stripHTML; tb.innerHTML = stripHTML;
-      $$("[data-tsel]", tb).forEach(x => x.onclick = () => { if (board) board.select(x.dataset.tsel); });
+      $$("[data-tsel]", tb).forEach(x => x.onclick = () => selectTok(x.dataset.tsel));
+      fitStrip();
     }
     if (ph !== "live" || !cur) return;
     if (s.board.seq !== lastTurnSeen) {
@@ -262,31 +274,49 @@ export function mountTactical(host, opts = {}) {
   }
   function drawHud() {
     const s = S(), dm = isDM(s);
-    const ae = document.activeElement; if (ae && hud.contains(ae) && ae.closest(".hudprop") && /INPUT|TEXTAREA/.test(ae.tagName)) return;
+    const ae = document.activeElement; if (ae && (hud.contains(ae) || (actHost && actHost.contains(ae))) && /INPUT|TEXTAREA|SELECT/.test(ae.tagName)) return;
     const mineT = s.tokens.find(t => t.kind === "pc" && t.owner && t.owner === me());
     const target = s.tokens.find(t => t.id === sel && (dm || !t.hidden));
-    // Jugador con columna propia: el objetivo en pequeño, con sus opciones de ataque desde tu figura
+    // Jugador: el objetivo en pequeño, con sus opciones de ataque desde tu figura
     const tcard = tg => { const h = hpOf(s, tg), exact = tg.kind === "pc", pct = h ? Math.max(0, Math.min(100, h.cur / Math.max(1, h.max) * 100)) : 0;
       return `<div class="hudcard tcard"><div class="tch"><b>🎯 ${esc(nameOf(s, tg))}</b>${h ? `<span class="hw ${pct <= 25 ? "low" : pct <= 50 ? "mid" : ""}">${exact ? `${h.cur}/${h.max} PG` : healthWord(h.cur, h.max)}</span>` : ""}</div>
         ${(tg.conds || []).length ? `<div class="tconds">${tg.conds.map(x => { const e = estado(x.id); return e ? `<span class="cchip" style="--c:${e.c}" title="${esc(e.t)}">${esc(e.n)}</span>` : ""; }).join("")}</div>` : ""}
         ${atkBlock(s, mineT, true, tg.id)}</div>`; };
+    // Ficha con control (solo el máster, en su pestaña PNJ)
     const card = (t, title) => {
-      const h = hpOf(s, t), c = charOf(s, t), canHurt = dm || (t.owner && t.owner === me());
-      const exact = dm || t.kind === "pc";
+      const h = hpOf(s, t), c = charOf(s, t), canHurt = dm;
       const pct = h ? Math.max(0, Math.min(100, h.cur / Math.max(1, h.max) * 100)) : 0;
       return `<div class="hudcard"><small>${title}</small><b>${esc((c || t).name)}</b>
-        ${h ? `<div class="hpbar ${pct <= 25 ? "low" : pct <= 50 ? "mid" : ""}"><i style="width:${exact ? pct : pct > 75 ? 100 : pct > 50 ? 70 : pct > 25 ? 45 : pct > 0 ? 15 : 0}%"></i><em>${exact ? `${h.cur}/${h.max} PG${h.temp ? ` +${h.temp}` : ""}` : healthWord(h.cur, h.max)}</em></div>` : ""}
-        <div class="hudmeta">${exact ? `CA ${c ? c.ac : t.ac}` : ""}${c ? ` · ${esc(c.cls)} ${c.level}` : ""}</div>
+        ${h ? `<div class="hpbar ${pct <= 25 ? "low" : pct <= 50 ? "mid" : ""}"><i style="width:${pct}%"></i><em>${h.cur}/${h.max} PG${h.temp ? ` +${h.temp}` : ""}</em></div>` : ""}
+        <div class="hudmeta">CA ${c ? c.ac : t.ac}${c ? ` · ${esc(c.cls)} ${c.level}` : ` · Vel. ${esc(String(t.speed || 9))} m`}</div>
         ${canHurt && h ? `<div class="hpquick"><input type="number" min="0" placeholder="0" data-amt="${t.id}" aria-label="Cantidad"><button class="btn small danger" data-hurt="${t.id}">Daño</button><button class="btn small" data-heal="${t.id}">Curar</button></div>` : ""}
         ${condBlock(t, canHurt)}
-        ${atkBlock(s, t, canHurt, sel)}
+        ${t.kind !== "pc" ? atkBlock(s, t, canHurt, sel) : ""}
         ${canHurt && board && board.pick ? `<details class="castbox"><summary>✨ Lanzar efecto</summary><div class="castlist">${Object.entries(EFECTOS).map(([k, e]) => `<button class="btn small" data-cast="${t.id}|${k}" title="${e.hint || ""}">${e.n}</button>`).join("")}</div></details>` : ""}
         ${dm && t.kind !== "pc" ? `<details class="tkdetails" ${editOpen ? "open" : ""}><summary>Editar ${t.kind === "npc" ? "PNJ" : "enemigo"}</summary>${tokenEditor(t)}</details>` : ""}</div>`;
     };
     hud.classList.toggle("open", hudOpen);
-    const act = actorTok(), cur = current(s), myTurn = phase(s) === "live" && cur && (cur.owner === me() || (dm && cur.kind !== "pc"));
-    hud.innerHTML = `<button class="hudtoggle" id="hudt" aria-expanded="${hudOpen}">${hudOpen ? "▾ Ocultar" : "▸ Ficha y objetivo"}</button>
-      ${hudOpen ? `<div class="hudbody">${propCard(s)}${myTurn ? turnCard(s, cur) : ""}${areaBlock(s)}${mineT && (dm || !opts.sideHost) ? card(mineT, "Tu personaje") : ""}${target && target !== mineT ? (mineT && opts.sideHost && !dm ? tcard(target) : card(target, "Objetivo")) : mineT && opts.sideHost && !dm ? atkOnly(s, mineT) : ""}${!mineT && !target ? `<p class="empty">Toca una ficha para ver sus datos.</p>` : ""}</div>` : ""}`;
+    const cur = current(s), live = phase(s) === "live";
+    // Abajo, en la mesa: solo consulta (nadie lanza nada desde aquí)
+    hud.innerHTML = `<button class="hudtoggle" id="hudt" aria-expanded="${hudOpen}">${hudOpen ? "▾ Ocultar" : "▸ Consultar ficha"}</button>
+      ${hudOpen ? `<div class="hudbody">${propCard(s)}${areaBlock(s)}${target ? infoCard(s, target, dm, me()) : `<p class="empty">Toca una figura (en la mesa o en la iniciativa) para consultar su estado.</p>`}</div>` : ""}`;
+    // A la derecha: lo que puedes hacer tú (jugador: tu turno y tu objetivo; máster: la criatura que lleva)
+    if (actHost) {
+      let html = "";
+      if (!dm) {
+        const tg = target && mineT && target.id !== mineT.id ? target : null;
+        if (mineT && live && cur && cur.id === mineT.id) html = turnCard(s, mineT);
+        if (mineT && tg && phase(s)) html += `<div class="hudcard tcard myatk"><div class="tch"><b>🎯 Objetivo: ${esc(nameOf(s, tg))}</b><small>toca otra figura para cambiar</small></div>${atkBlock(s, mineT, true, tg.id)}</div>`;
+        else if (mineT && live && cur && cur.id === mineT.id) html += `<p class="note" style="margin:4px 0 0">🎯 Toca un enemigo en la mesa o en la iniciativa para elegir objetivo.</p>`;
+      } else {
+        const npcs = s.tokens.filter(t => t.kind !== "pc");
+        const pickId = npcId && s.tokens.some(t => t.id === npcId) ? npcId : cur && cur.kind !== "pc" ? cur.id : (target ? target.id : npcs[0] && npcs[0].id);
+        const t = s.tokens.find(x => x.id === pickId); npcPick = pickId;
+        html = `<div class="npcpick">${npcs.map(n => { const h = hpOf(s, n); return `<button class="npcchip ${n.id === pickId ? "on" : ""} ${h && h.cur <= 0 ? "down" : ""} ${cur && cur.id === n.id ? "turn" : ""}" data-npc="${n.id}" title="${esc(n.name)}${h ? ` · ${h.cur}/${h.max}` : ""}">${esc(n.name.split(" ")[0])}${h ? `<small>${h.cur}</small>` : ""}</button>`; }).join("") || `<p class="empty">No hay PNJ ni enemigos en la mesa.</p>`}</div>
+          ${t && live && cur && cur.id === t.id && t.kind !== "pc" ? turnCard(s, t) : ""}${t ? card(t, t.kind === "pc" ? "Personaje" : t.kind === "npc" ? "PNJ" : "Enemigo") : ""}`;
+      }
+      if (html !== actSig) { actSig = html; actHost.innerHTML = html; bindActs(actHost); $$("[data-npc]", actHost).forEach(b => b.onclick = () => { npcId = b.dataset.npc; if (board) board.select(npcId); drawHud(); }); }
+    }
     $("#hudt", hud).onclick = () => { hudOpen = !hudOpen; drawHud(); };
     const pc = $(".hudprop", hud);
     if (pc) {
@@ -296,18 +326,23 @@ export function mountTactical(host, opts = {}) {
         trap: () => { const st = S(), p = st.board.props.find(y => y.id === id), on = st.tokens.filter(t => p && t.c === p.c && t.r === p.r).map(t => t.id); if (!on.length) return toast("No hay nadie en esa casilla."); triggerTrap(id, on); },
         rot: () => setP(p => { p.rot = ((p.rot || 0) + 1) % 4; }), del: () => { store.commit("board", st => { st.board.props = st.board.props.filter(y => y.id !== id); }); selPropId = null; drawHud(); } });
     }
-    $$(".tkdetails", hud).forEach(d => d.ontoggle = () => { editOpen = d.open; });
-    $$(".accd", hud).forEach(d => d.ontoggle = () => { accOpen = d.open; });
-    const amt = id => Math.max(0, +($(`[data-amt="${id}"]`, hud) || {}).value || 0);
-    $$("[data-hurt]", hud).forEach(b => b.onclick = () => { const a = amt(b.dataset.hurt); if (a) applyHP(b.dataset.hurt, -a); });
-    $$("[data-heal]", hud).forEach(b => b.onclick = () => { const a = amt(b.dataset.heal); if (a) applyHP(b.dataset.heal, a); });
+    bindActs(hud);
+  }
+  function bindActs(R) {
+    const mineOk = id => { const st = S(), t = st.tokens.find(x => x.id === id); return isDM(st) || (t && t.owner && t.owner === me()); };
+    $$(".tkdetails", R).forEach(d => d.ontoggle = () => { editOpen = d.open; });
+    $$(".accd", R).forEach(d => d.ontoggle = () => { accOpen = d.open; });
+    const amt = id => Math.max(0, +($(`[data-amt="${id}"]`, R) || {}).value || 0);
+    $$("[data-hurt]", R).forEach(b => b.onclick = () => { const a = amt(b.dataset.hurt); if (a) applyHP(b.dataset.hurt, -a); });
+    $$("[data-heal]", R).forEach(b => b.onclick = () => { const a = amt(b.dataset.heal); if (a) applyHP(b.dataset.heal, a); });
     bindTokenEditor(hud, (id, fn) => store.commit("board", st => { const t = st.tokens.find(x => x.id === id); if (t) fn(t); }));
     const T = (id, fn) => store.commit("token", st => { const t = st.tokens.find(x => x.id === id); if (t) fn(t); });
-    $$("[data-addcond]", hud).forEach(b => b.onclick = () => { condPick = condPick === b.dataset.addcond ? null : b.dataset.addcond; drawHud(); });
-    $$("[data-cond]", hud).forEach(b => b.onclick = () => { const [id, cid] = b.dataset.cond.split("|"); T(id, t => { t.conds = t.conds || []; const i = t.conds.findIndex(c => c.id === cid); if (i >= 0) t.conds.splice(i, 1); else t.conds.push({ id: cid, lvl: estado(cid).levels ? 1 : undefined }); }); });
-    $$("[data-condlvl]", hud).forEach(b => b.onclick = () => { const [id, cid, d] = b.dataset.condlvl.split("|"); T(id, t => { const c = (t.conds || []).find(x => x.id === cid); if (c) { c.lvl = Math.max(1, Math.min(6, (c.lvl || 1) + +d)); } }); });
-    $$("[data-atk]", hud).forEach(b => b.onclick = () => {
+    $$("[data-addcond]", R).forEach(b => b.onclick = () => { condPick = condPick === b.dataset.addcond ? null : b.dataset.addcond; drawHud(); });
+    $$("[data-cond]", R).forEach(b => b.onclick = () => { const [id, cid] = b.dataset.cond.split("|"); if (!mineOk(id)) return; T(id, t => { t.conds = t.conds || []; const i = t.conds.findIndex(c => c.id === cid); if (i >= 0) t.conds.splice(i, 1); else t.conds.push({ id: cid, lvl: estado(cid).levels ? 1 : undefined }); }); });
+    $$("[data-condlvl]", R).forEach(b => b.onclick = () => { const [id, cid, d] = b.dataset.condlvl.split("|"); if (!mineOk(id)) return; T(id, t => { const c = (t.conds || []).find(x => x.id === cid); if (c) { c.lvl = Math.max(1, Math.min(6, (c.lvl || 1) + +d)); } }); });
+    $$("[data-atk]", R).forEach(b => b.onclick = () => {
       const [aid, i] = b.dataset.atk.split("|"), st = S(), a = st.tokens.find(x => x.id === aid);
+      if (!a || !mineOk(aid)) { toast("Solo puedes tirar con tu propio personaje."); return; }
       const tgt = isDM(st) && a.kind !== "pc" ? dmTarget || sel : sel;
       if (!tgt || tgt === aid) { toast("Elige primero el objetivo: toca un enemigo en la mesa"); return; }
       if (phase(st) === "live" && st.board.turn !== aid && !isDM(st)) { toast("No es tu turno (los ataques fuera de turno son reacciones: márcala y avisa al máster)"); }
@@ -316,21 +351,22 @@ export function mountTactical(host, opts = {}) {
       if (r) wantRolls();
       drawHud();
     });
-    $$("[data-atkpick]", hud).forEach(b => b.onmouseenter = () => { atkIdx = +b.dataset.atkpick; if (board) board.render(); });
-    $$("[data-atkadv]", hud).forEach(b => b.onclick = () => { const v = +b.dataset.atkadv; atkAdv = atkAdv === v ? null : v; drawHud(); });
-    $$("[data-eco]", hud).forEach(b => b.onclick = () => toggle(b.dataset.eco.split("|")[0], b.dataset.eco.split("|")[1]));
-    $$("[data-acc]", hud).forEach(b => b.onclick = () => {
-      const [tid, nm] = b.dataset.acc.split("|"); ruleOpen = nm;
+    $$("[data-atkpick]", R).forEach(b => b.onmouseenter = () => { atkIdx = +b.dataset.atkpick; if (board) board.render(); });
+    $$("[data-atkadv]", R).forEach(b => b.onclick = () => { const v = +b.dataset.atkadv; atkAdv = atkAdv === v ? null : v; drawHud(); });
+    $$("[data-eco]", R).forEach(b => b.onclick = () => mineOk(b.dataset.eco.split("|")[0]) && toggle(b.dataset.eco.split("|")[0], b.dataset.eco.split("|")[1]));
+    $$("[data-acc]", R).forEach(b => b.onclick = () => {
+      const [tid, nm] = b.dataset.acc.split("|"); if (!mineOk(tid)) return; ruleOpen = nm;
       if (nm === "Correr") spend(tid, "dash");
       else if (nm === "Esquivar" || nm === "Destrabarse") { spend(tid, "act"); store.commit("token", st => { const t = st.tokens.find(x => x.id === tid); t.conds = (t.conds || []).filter(c => c.id !== (nm === "Esquivar" ? "esquivando" : "destrabado")); t.conds.push({ id: nm === "Esquivar" ? "esquivando" : "destrabado", seq: st.board.seq }); }); }
       else if (nm !== "Atacar" && nm !== "Magia") spend(tid, "act");
       drawHud();
     });
-    $$("[data-rule]", hud).forEach(b => b.onclick = () => { ruleOpen = ruleOpen === b.dataset.rule ? null : b.dataset.rule; drawHud(); });
-    const et = $("#endturn", hud); if (et) et.onclick = endTurn;
-    const dt = $("#dmtarget", hud); if (dt) dt.onchange = () => { dmTarget = dt.value || null; };
-    $$("[data-cast]", hud).forEach(b => b.onclick = () => {
+    $$("[data-rule]", R).forEach(b => b.onclick = () => { ruleOpen = ruleOpen === b.dataset.rule ? null : b.dataset.rule; drawHud(); });
+    const et = $("#endturn", R); if (et) et.onclick = endTurn;
+    const dt = $("#dmtarget", R); if (dt) dt.onchange = () => { dmTarget = dt.value || null; };
+    $$("[data-cast]", R).forEach(b => b.onclick = () => {
       const [id, k] = b.dataset.cast.split("|"), e = EFECTOS[k], t = S().tokens.find(x => x.id === id);
+      if (!mineOk(id)) return;
       const cast = to => {
         if (!to) return;
         const fx = { id: "fx" + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), k, to, at: Date.now() };
@@ -344,30 +380,14 @@ export function mountTactical(host, opts = {}) {
       if (e.self) cast({ c: t.c, r: t.r });
       else { toast(`Elige el objetivo de ${e.n} en la mesa${e.area ? " (" + e.hint + ")" : ""} · Esc para cancelar`); board.pick(e.area || 0, cast); }
     });
-    $$("[data-area]", hud).forEach(b => b.onclick = () => {
-      const amt = Math.max(0, +($("#areadmg", hud) || {}).value || 0); if (!amt || !lastArea) return;
-      const half = b.dataset.area === "half", ids = $$("[data-areaid]:checked", hud).map(x => x.dataset.areaid);
+    $$("[data-area]", R).forEach(b => b.onclick = () => {
+      const amt = Math.max(0, +($("#areadmg", R) || {}).value || 0); if (!amt || !lastArea) return;
+      const half = b.dataset.area === "half", ids = $$("[data-areaid]:checked", R).map(x => x.dataset.areaid);
       ids.forEach(id => applyHP(id, -(half ? Math.floor(amt / 2) : amt)));
       toast(`${half ? "Mitad de daño" : "Daño"} aplicado a ${ids.length}`); lastArea = null; drawHud();
     });
-    const ax = $("#areax", hud); if (ax) ax.onclick = () => { lastArea = null; drawHud(); };
-  }
-
-  // Cajetillas de dados de cada uno, a los lados del tablero; se abren cuando su dueño tira
-  const opened = new Map(); let boxSeen = new Set((S().rolls || []).map(r => r.id)), boxSig = "";
-  function drawBoxes() {
-    const s = S(), onBoard = new Set((s.tokens || []).filter(t => t.kind === "pc").map(t => t.owner));
-    const people = s.users.filter(u => u.role !== "player" || onBoard.has(u.id) || u.id === me());
-    visibleRolls(s).forEach(r => { if (!boxSeen.has(r.id)) { boxSeen.add(r.id); if (r.dice && r.dice.length) { opened.set(r.who, Date.now()); setTimeout(drawBoxes, 4600); } } });
-    const skinOf = id => { const r = [...(s.rolls || [])].reverse().find(x => x.who === id && x.skin); return r ? r.skin : (id === me() ? mySkin() : "rubi"); };
-    const html = people.map(u => { const open = Date.now() - (opened.get(u.id) || 0) < 4500, ch = s.characters.find(c => c.owner === u.id);
-      return `<button class="dbox${open ? " open" : ""}${u.id === me() ? " mine" : ""}" data-dbox="${u.id}" style="--c:${esc(u.color || "#d6aa4e")};--skin:${SKIN_HEX[skinOf(u.id)] || "#a3122a"}" title="${u.id === me() ? "Tus dados: pulsa para tirar" : "Dados de " + esc(u.name)}">
-        <span class="lid"></span><span class="body"><i></i><i></i><i></i></span><small>${esc(ch && u.role === "player" ? ch.name.split(" ")[0] : u.name.split(" ")[0])}</small></button>`; });
-    const half = Math.ceil(html.length / 2), sig = html.join("");
-    if (sig === boxSig) return; boxSig = sig;
-    $(".dboxes.l", host).innerHTML = html.slice(0, half).join(""); $(".dboxes.r", host).innerHTML = html.slice(half).join("");
-    $$("[data-dbox]", host).forEach(b => b.onclick = () => { if (b.dataset.dbox === me()) wantRolls(); });
-  }
+    const ax = $("#areax", R); if (ax) ax.onclick = () => { lastArea = null; drawHud(); };
+    }
   host.addEventListener("click", e => { const b = e.target.closest("[data-death]"); if (b) deathSave(b.dataset.death); });
   // Texto flotante sobre las figuras: daño, curación, estados, fallos, críticos y salvaciones
   const screenOf = id => { if (bw.__screenOf) return bw.__screenOf(id); const g = bw.querySelector(`[data-tok="${id}"]`); if (!g) return null; const r = g.getBoundingClientRect(); return [r.left + r.width / 2, r.top]; };
@@ -398,9 +418,10 @@ export function mountTactical(host, opts = {}) {
     }
   }
   if (opts.sideHost) opts.sideHost.addEventListener("click", e => { const b = e.target.closest("[data-death]"); if (b) deathSave(b.dataset.death); });
-  drawInit(); drawHud(); sideShow(); drawBoxes();
+  drawInit(); drawHud(); sideShow();
   return {
     selected: () => sel,
+    npc: () => npcPick,
     update() {
       const s = S();
       if (!s.board) return;
@@ -412,7 +433,6 @@ export function mountTactical(host, opts = {}) {
       if (s.board.seq !== lastTurnSeen) { sel = sel; drawHud(); }
       const n = (s.rolls || []).length; if (rc && n > rollsSeen && sideTab !== "tir") { const b = $('[data-side="tir"]', host); if (b) b.classList.add("ping"); } rollsSeen = n;
       if (!host.querySelector(".hud input:focus")) drawHud();
-      drawBoxes();
       feedback();
     }
   };
@@ -428,6 +448,20 @@ function condBlock(t, canEdit) {
     ${conds.length ? `<ul class="condtxt">${conds.map(cd => { const e = estado(cd.id); return e ? `<li><b style="color:${e.c}">${esc(etiqueta(cd.id, cd.lvl))}:</b> ${esc(e.t)}</li>` : ""; }).join("")}</ul>` : ""}`;
 }
 /* Tarjeta del turno: movimiento, acción, acción adicional, reacción y acciones del manual */
+/* Consulta (solo lectura): el estado actual de cualquier figura. Los jugadores ven a los enemigos «a ojo». */
+function infoCard(s, t, dm, meId) {
+  const h = hpOf(s, t), c = charOf(s, t), exact = dm || t.kind === "pc", mine = t.owner && t.owner === meId;
+  const pct = h ? Math.max(0, Math.min(100, h.cur / Math.max(1, h.max) * 100)) : 0, shown = exact ? pct : pct > 75 ? 100 : pct > 50 ? 70 : pct > 25 ? 45 : pct > 0 ? 15 : 0;
+  const kind = t.kind === "pc" ? (c ? `${esc(c.cls)} ${c.level} · ${esc(c.species || "")}` : "Personaje") : t.kind === "npc" ? "PNJ" : "Enemigo";
+  const atks = attacksOf(s, t);
+  const e = phase(s) === "live" && s.board.turn === t.id ? eco(s, t) : null;
+  return `<div class="hudcard infocard ${t.kind}"><div class="tch"><b>${esc(nameOf(s, t))}</b><small>${kind}</small></div>
+    ${h ? `<div class="hpbar ${shown <= 25 ? "low" : shown <= 50 ? "mid" : ""}"><i style="width:${shown}%"></i><em>${exact ? `${h.cur}/${h.max} PG${h.temp ? ` +${h.temp}` : ""}` : healthWord(h.cur, h.max)}</em></div>` : ""}
+    <div class="hudmeta">${exact ? `CA ${c ? c.ac : t.ac ?? "—"} · ` : ""}Vel. ${esc(String(c ? c.speed : t.speed || 9))} m${t.init != null && t.init !== "" ? ` · Inic. ${t.init}` : ""}${e ? ` · <b>actuando</b>` : ""}</div>
+    ${(t.conds || []).length ? `<div class="tconds">${t.conds.map(x => { const es = estado(x.id); return es ? `<span class="cchip" style="--c:${es.c}" title="${esc(es.t || "")}">${esc(etiqueta(x.id, x.lvl))}</span>` : ""; }).join("")}</div>` : `<small class="note" style="border:0;padding:0;margin:0">Sin estados.</small>`}
+    ${(dm || t.kind === "pc") && atks.length ? `<div class="infoatk">${atks.slice(0, 6).map(w => `<span>${esc(w.name)} <b>${w.atk >= 0 ? "+" : ""}${w.atk}</b> <small>${esc(w.expr || "")} ${esc(w.type || "")}</small></span>`).join("")}</div>` : ""}
+    ${mine && !dm ? `<small class="note" style="border:0;padding:0;margin:4px 0 0">Tus acciones están en la pestaña «Personaje».</small>` : ""}${dm && t.kind !== "pc" ? `<small class="note" style="border:0;padding:0;margin:4px 0 0">Para jugarlo: pestaña «PNJ».</small>` : ""}</div>`;
+}
 function turnCard(s, t) {
   const e = eco(s, t), max = moveBudget(s, t), pct = Math.min(100, e.mov / Math.max(1, max) * 100);
   const chip = (k, n, on) => `<button class="eco ${on ? "used" : ""}" data-eco="${t.id}|${k}" title="${on ? "Gastada (pulsa para devolverla)" : "Disponible (pulsa para marcarla)"}">${n}</button>`;

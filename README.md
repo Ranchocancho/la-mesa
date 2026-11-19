@@ -323,3 +323,17 @@ Con ideas de referentes: registro de combate de una frase (Baldur's Gate), proba
   - Segunda línea, solo si hace falta: impacto o fallo, el daño hecho (−5 perforante), salva o falla, y los botones del máster («✓ Vale», «✓ Aplicar»).
   - Lo que está pendiente se resalta. El detalle de los dados sigue al tocar la fila.
 - **Plantas**: ahora están en la pestaña Táctica del máster («🏰 Planta baja ▾», junto a Editar y Criaturas).
+
+## Hito 18 · Cada cosa en su sitio: consulta abajo, Personaje e Iniciativa, PNJ del máster
+
+- **Fuera las cajetillas de dados** de los lados de la mesa: las tiradas ya se ven en el lanzamiento de dados.
+- **Barra superior más compacta**: a la derecha, controles apilados de tres en tres a toda la altura (⌖ centrar, ⬇ cenital, 🔊 silencio · volumen vertical · Órbita/Libre, Muros bajos/altos, Plano 2D/Mesa 3D). La iniciativa queda centrada en el espacio libre y se encoge para que quepan todos, sin barra de desplazamiento.
+- **Luz (día/noche/interior), música y niebla** las decide el máster desde su pestaña Táctica, junto a la planta.
+- **Abajo en la mesa, solo consulta**: al tocar una figura (en la mesa, la tira o la iniciativa) se ve su estado actual: vida (a ojo si es enemigo), CA, velocidad, iniciativa y estados. Desde ahí nadie lanza nada, y atacar con una figura que no es tuya está bloqueado.
+- **Jugador, dos pestañas arriba**:
+  - **🧙 Personaje**: lo que puede hacer en su turno (acciones, movimiento, terminar), el objetivo elegido con sus ataques y probabilidad, y debajo la ficha y los dados. Los descansos solo aparecen fuera de la mesa táctica.
+  - **⚔️ Iniciativa**.
+- **Máster, tres pestañas en Táctica**:
+  - **Iniciativa**.
+  - **🎲 Tiradas**: el registro, con todo el control.
+  - **👹 PNJ**: elige criatura (o se abre sola al tocar una), con su vida, estados, ataques, efectos y edición, y sus dados. Lo que tire sale a nombre de esa criatura.
