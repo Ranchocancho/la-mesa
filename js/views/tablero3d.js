@@ -192,6 +192,8 @@ function hpBarSprite(pct, txt, color) {
 // Placa con el nombre y la vida: mismo tamaño en pantalla esté la cámara cerca o lejos, para que siempre se lea
 const PLATE_H = 0.043;
 const TITLES = /^(hermano|hermana|sir|lady|lord|maese|fray|sor|don|doña|capitán|capitana|madre|padre)$/i;
+/** Criaturas: sin el paréntesis («Tumulario (señor del mausoleo)» → «Tumulario»); si sigue largo, la primera palabra. */
+const plateName = n => { const b = String(n || "?").replace(/\s*\(.*?\)/g, "").trim() || "?"; return b.length > 16 ? b.split(/\s+/)[0] : b; };
 /** Nombre corto para la placa: «Brena Martillo-Ceniza» → «Brena», «Hermano Osric» → «Osric». */
 const shortName = n => { const w = (n || "?").trim().split(/\s+/); return w.length > 1 && TITLES.test(w[0]) ? w[1] : w[0].length < 3 && w[1] ? w.slice(0, 2).join(" ") : w[0]; };
 function namePlate(name, pct, txt, color, hl) {
@@ -631,7 +633,7 @@ export function createBoard3D(host, opts) {
       const plateKey = JSON.stringify([d.name || t.name, pctQ, exact && hp && hp.cur, exact && hp && hp.max, hl, word]);
       if (plateKey !== rec.barKey) {
         if (rec.bar) { rec.root.remove(rec.bar); rec.bar.material.map.dispose(); rec.bar.material.dispose(); rec.bar = null; }
-        rec.bar = namePlate(t.kind === "pc" ? shortName(d.name || t.name) : (d.name || t.name || "?"), pctQ, hp ? (exact ? `${hp.cur} / ${hp.max} PG` : word) : "", t.kind === "pc" ? "#d6aa4e" : t.kind === "npc" ? "#7d8fe0" : "#b33a2e", hl);
+        rec.bar = namePlate(t.kind === "pc" ? shortName(d.name || t.name) : plateName(d.name || t.name), pctQ, hp ? (exact ? `${hp.cur} / ${hp.max} PG` : word) : "", t.kind === "pc" ? "#d6aa4e" : t.kind === "npc" ? "#7d8fe0" : "#b33a2e", hl);
         rec.root.add(rec.bar); rec.barKey = plateKey;
       }
       rec.bar.position.y = top;

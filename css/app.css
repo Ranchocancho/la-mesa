@@ -1659,3 +1659,18 @@ b.ininum{display:block}
 .karmed{padding:6px 8px;border-radius:10px;border:1px solid var(--oro);background:rgba(214,170,78,.08);display:flex;flex-direction:column;gap:4px}
 .karmed small{color:#d8c49a}.kpicks{display:flex;flex-wrap:wrap;gap:4px}
 .krest{align-self:flex-start}
+
+/* ---------- Hito 30: conjuros por lista de clase y lo que se abre al subir ---------- */
+.rside .lvh{display:flex;align-items:baseline;justify-content:space-between;gap:6px;flex-wrap:wrap;margin:12px 2px 4px;font-family:var(--display);font-size:14px;color:var(--oro);border-bottom:1px solid var(--linea);padding-bottom:3px;position:sticky;top:0;background:var(--noche);z-index:1}
+.rside .lvh em{font-style:normal;font-family:Georgia,serif;font-size:11.5px;color:var(--tenue)}.rside .lvh em.ok{color:#9be37a}.rside .lvh em.lock{color:#d8a06a}
+.sprow{display:grid!important;grid-template-columns:1fr auto;align-items:center;column-gap:6px}
+.sprow small{grid-column:1}.sprow .spic{grid-column:2;grid-row:1/3;font-style:normal;display:flex;gap:2px;font-size:12px}
+.sprow .spic b{font-weight:400;opacity:.85}
+.sprow.locked{opacity:.55}.sprow.got span{color:#9be37a}
+.spfx{display:flex;flex-wrap:wrap;gap:4px}
+.spfx button{background:var(--piedra2);border:1px solid var(--linea);color:var(--hueso);border-radius:999px;padding:2px 9px;font-size:12px;cursor:pointer}
+.spfx button[aria-pressed="true"]{border-color:var(--oro);background:rgba(214,170,78,.2);color:var(--oro)}
+.rside .sprow{padding:5px 8px;min-height:0;gap:0}
+.rside .sprow span{font-size:14.5px;line-height:1.2}
+.rside .sprow small{justify-self:start;text-align:left;font-size:11.5px;margin:0}
+.rside .sprow .spic{font-size:13px;align-self:center}

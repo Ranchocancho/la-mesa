@@ -1,6 +1,6 @@
 // Reglas: el SRD 5.2.1 en español para todos (libro con buscador, conjuros y monstruos).
 import { store } from "../core/store.js";
-import { isDM } from "../core/session.js";
+import { isDM, currentUser } from "../core/session.js";
 import { srd, CAPITULOS, ESCUELAS, norm, monsterToken } from "../core/srd.js";
 import { $, $$, esc, toast } from "../core/ui.js";
 import { openCreaturePicker } from "./criaturas.js";
@@ -8,7 +8,7 @@ import { TYPES, typeOf, withCustom } from "../core/bestiario.js";
 import { isWallT } from "../data/mapas.js";
 import { getImage } from "../core/images.js";
 
-let el = null, tab = "libro", page = 5, q = "", sel = null, filt = { lvl: "", cls: "", vd: "", ty: "" };
+let el = null, tab = "libro", page = 5, q = "", sel = null, filt = { lvl: "", cls: null, vd: "", ty: "", fx: "" }, PROGM = null;
 const CLASES = ["bardo", "brujo", "clérigo", "druida", "explorador", "hechicero", "mago", "paladín"];
 
 export function mount(root) {
@@ -106,19 +106,70 @@ export function spellCard(s) {
     <dl><dt>Tiempo de lanzamiento</dt><dd>${esc(s.t)}</dd><dt>Alcance</dt><dd>${esc(s.al)}</dd><dt>Componentes</dt><dd>${esc(s.co)}</dd><dt>Duración</dt><dd>${esc(s.du)}</dd></dl>
     <div class="stext">${bookHTML(s.txt)}</div>${s.sup ? `<p class="sup">${rich(s.sup)}</p>` : ""}</div>`;
 }
+/* ---------- Conjuros: listas de clase en el orden oficial (por nivel y alfabético), con lo que se abre al subir ---------- */
+const CAP = c => c[0].toUpperCase() + c.slice(1);
+// Lo que hace cada conjuro, para comparar sin abrirlo
+const fxOf = s => ({
+  atk: !!s.atk, save: !!s.sv, heal: /recupera(?:n)? (?:una cantidad de )?puntos de golpe|recupera(?:n)? \d+d\d+/i.test(s.txt || ""),
+  area: /(esfera|cono|cubo|línea|cilindro|emanación) de \d/i.test(s.txt || ""), conc: /^concentraci/i.test(s.du || ""),
+  bonus: /adicional/i.test(s.t || ""), react: /reacci/i.test(s.t || ""), ritual: /ritual/i.test(s.t || ""), dt: s.dt || ""
+});
+const ICONS = f => [f.atk && ["⚔", "Tirada de ataque"], f.save && ["🛡", "Salvación"], f.heal && ["❤", "Cura"], f.area && ["💥", "Área"], f.conc && ["⏳", "Concentración"], f.bonus && ["⚡", "Acción adicional"], f.react && ["↺", "Reacción"], f.ritual && ["📜", "Ritual"]].filter(Boolean);
+const FX_FILTERS = [["dmg", "Hace daño"], ["heal", "Cura"], ["area", "Área"], ["noconc", "Sin concentración"], ["ritual", "Ritual"], ["react", "Reacción"]];
+/** A qué nivel de personaje se abre cada nivel de conjuro para una clase (de su tabla de progresión). */
+function unlocks(clsKey) {
+  const P = PROGM && PROGM.PROG[clsKey]; if (!P) return null;
+  const out = {};
+  if (clsKey === "Brujo") {
+    const iL = P.cols.indexOf("Nivel de los espacios"), iT = P.cols.indexOf("Trucos");
+    if (iT >= 0) out[0] = 1;
+    for (let L = 1; L <= 5; L++) { const r = P.rows.findIndex(x => +x[iL] >= L); if (r >= 0) out[L] = r + 1; }
+    Object.assign(out, { 6: 11, 7: 13, 8: 15, 9: 17 }); // Arcano místico
+    return out;
+  }
+  const iT = P.cols.indexOf("Trucos"); if (iT >= 0) { const r = P.rows.findIndex(x => +x[iT] > 0); if (r >= 0) out[0] = r + 1; }
+  for (let L = 1; L <= 9; L++) { const i = P.cols.indexOf("s" + L); if (i < 0) continue; const r = P.rows.findIndex(x => +x[i] > 0); if (r >= 0) out[L] = r + 1; }
+  return out;
+}
 function conjuros(body, S) {
-  const list = S.filter(s => (!q || norm(s.n).includes(norm(q))) && (filt.lvl === "" || s.lvl === +filt.lvl) && (!filt.cls || norm(s.cls).includes(norm(filt.cls))));
-  const cur = S.find(s => s.n === sel) || null;
+  if (!PROGM) { import("../data/progresion.js").then(m => { PROGM = m; conjuros(body, S); }); }
+  const s = store.get(), u = currentUser(s), mine = s.characters.filter(c => u && c.owner === u.id);
+  const keyOf = cls => { if (!cls || !PROGM) return null; const k = Object.keys(PROGM.PROG).find(k => k.toLowerCase().startsWith(String(cls).toLowerCase().trim().slice(0, 3))); return k && CLASES.includes(k.toLowerCase()) ? k : null; };
+  // Por defecto, el jugador ve la lista de su personaje (si lanza conjuros); el máster, todas
+  if (filt.who !== (u && u.id)) { filt.who = u && u.id; filt.cls = null; } // cada usuario empieza por su propio personaje
+  if (filt.cls === null && PROGM) { const c = mine.find(c => keyOf(c.cls)); filt.cls = c ? "pj:" + c.id : ""; }
+  const pj = (filt.cls || "").startsWith("pj:") ? s.characters.find(c => c.id === filt.cls.slice(3)) : null;
+  const ck = pj ? keyOf(pj.cls) : filt.cls && !filt.cls.startsWith("pj:") ? CAP(filt.cls) : null, cl = ck ? ck.toLowerCase() : "";
+  const un = ck ? unlocks(ck) : null, have = new Set(((pj && pj.spells && pj.spells.list) || []).map(x => norm(x.name)));
+  const pass = sp => { const f = fxOf(sp); return !filt.fx || (filt.fx === "dmg" ? !!(sp.dmg || f.dt) : filt.fx === "noconc" ? !f.conc : f[filt.fx]); };
+  const list = S.filter(sp => (!q || norm(sp.n).includes(norm(q))) && (filt.lvl === "" || sp.lvl === +filt.lvl) && (!cl || norm(sp.cls).split(/,\s*/).includes(norm(cl))) && pass(sp))
+    .sort((a, b) => a.lvl - b.lvl || a.n.localeCompare(b.n, "es"));
+  const cur = S.find(x => x.n === sel) || null;
+  const byLvl = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map(L => [L, list.filter(x => x.lvl === L)]).filter(([, l]) => l.length);
+  const head = L => {
+    const at = un && un[L];
+    let tag = "";
+    if (at && pj) tag = pj.level >= at ? `<em class="ok">✓ ya a tu alcance</em>` : `<em class="lock">🔒 a nivel ${at} · te ${at - pj.level === 1 ? "falta 1 nivel" : `faltan ${at - pj.level} niveles`}</em>`;
+    else if (at) tag = `<em>desde nivel ${at} de personaje</em>`;
+    else if (ck && un) tag = `<em class="lock">${ck} no llega a este nivel</em>`;
+    return `<h4 class="lvh">${L ? `Nivel ${L}` : "Trucos"}${tag}</h4>`;
+  };
+  const row = sp => { const f = fxOf(sp), at = un && un[sp.lvl], locked = pj && at && pj.level < at, got = have.has(norm(sp.n));
+    return `<button class="place sprow ${cur === sp ? "on" : ""} ${locked ? "locked" : ""} ${got ? "got" : ""}" data-s="${esc(sp.n)}"><span>${got ? "✓ " : ""}${esc(sp.n)}</span><small>${esc(sp.esc)}${f.dt ? " · " + esc(f.dt) : ""}</small><i class="spic">${ICONS(f).map(([i, t]) => `<b title="${t}">${i}</b>`).join("")}</i></button>`; };
   body.innerHTML = `<aside class="rside">
       <input id="rq" type="search" placeholder="Buscar conjuro" value="${esc(q)}">
-      <div class="row"><select id="flvl"><option value="">Todos los niveles</option>${[0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map(l => `<option value="${l}" ${filt.lvl === String(l) ? "selected" : ""}>${l ? "Nivel " + l : "Trucos"}</option>`).join("")}</select>
-        <select id="fcls"><option value="">Todas las clases</option>${CLASES.map(c => `<option ${filt.cls === c ? "selected" : ""}>${c}</option>`).join("")}</select></div>
-      <div class="places">${list.map(s => `<button class="place ${cur === s ? "on" : ""}" data-s="${esc(s.n)}"><span>${esc(s.n)}</span><small>${s.lvl ? "Nv " + s.lvl : "Truco"} · ${s.esc}</small></button>`).join("")}</div>
-      <p class="note" style="margin:0">${list.length} conjuros</p>
+      <select id="fcls" aria-label="Lista de conjuros">${mine.filter(c => keyOf(c.cls)).map(c => `<option value="pj:${c.id}" ${filt.cls === "pj:" + c.id ? "selected" : ""}>🧙 ${esc(c.name)} · ${esc(c.cls)} ${c.level}</option>`).join("")}
+        <option value="" ${!filt.cls ? "selected" : ""}>Todas las clases</option>${CLASES.map(c => `<option value="${c}" ${filt.cls === c ? "selected" : ""}>Lista de ${CAP(c)}</option>`).join("")}</select>
+      <div class="row"><select id="flvl"><option value="">Todos los niveles</option>${[0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map(l => `<option value="${l}" ${filt.lvl === String(l) ? "selected" : ""}>${l ? "Nivel " + l : "Trucos"}</option>`).join("")}</select></div>
+      <div class="spfx">${FX_FILTERS.map(([k, n]) => `<button data-fx="${k}" aria-pressed="${filt.fx === k}">${n}</button>`).join("")}</div>
+      ${pj ? `<p class="note" style="margin:0">Lista de ${esc(ck)} en el orden del SRD. ✓ los que ya tienes · 🔒 lo que se abre al subir.</p>` : ""}
+      <div class="places">${byLvl.map(([L, l]) => head(L) + l.map(row).join("")).join("") || `<p class="empty">Ningún conjuro con esos filtros.</p>`}</div>
+      <p class="note" style="margin:0">${list.length} conjuros · ⚔ ataque · 🛡 salvación · ❤ cura · 💥 área · ⏳ concentración · ⚡ adicional · ↺ reacción · 📜 ritual</p>
     </aside><article class="rpage">${cur ? spellCard(cur) : `<p class="empty">Elige un conjuro de la lista.</p>`}</article>`;
   bindList(body, () => conjuros(body, S));
   $("#flvl", body).onchange = e => { filt.lvl = e.target.value; conjuros(body, S); };
   $("#fcls", body).onchange = e => { filt.cls = e.target.value; conjuros(body, S); };
+  $$("[data-fx]", body).forEach(b => b.onclick = () => { filt.fx = filt.fx === b.dataset.fx ? "" : b.dataset.fx; conjuros(body, S); });
   $$("[data-s]", body).forEach(b => b.onclick = () => { sel = b.dataset.s; conjuros(body, S); });
 }
 

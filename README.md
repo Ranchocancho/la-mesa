@@ -510,3 +510,24 @@ Antes, las criaturas solo tenían el primer daño de sus ataques con arma y el m
 - El antiguo «✨ Efecto» queda marcado como **efecto visual (sin reglas)**.
 
 Lo que sigue en manos del máster: resistencias e inmunidades al aplicar el daño (opciones mitad/doble/nada en Tiradas), la Resistencia legendaria, los estados especiales que el SRD describe con texto (maldiciones, etc.) y qué ataques combina cada Ataque múltiple (se controla el número de ataques).
+
+## Hito 30 · Conjuros por lista de clase, en el orden oficial
+
+- **Reglas → Conjuros** muestra cada lista de clase como en el SRD: **por nivel de conjuro (trucos a 9) y alfabético dentro de cada nivel**, con un encabezado por nivel.
+- Cada nivel dice **desde qué nivel de personaje se abre** para esa clase, sacado de su tabla de progresión (p. ej. Mago: nivel 3 de conjuro desde nivel 5; Paladín: 1, 5, 9, 13, 17; Brujo: niveles 6–9 por Arcano místico a 11, 13, 15 y 17).
+- **El jugador entra directamente en la lista de su personaje**: ✓ los conjuros que ya tiene, «✓ ya a tu alcance» en los niveles que puede usar y «🔒 a nivel 7 · te faltan 2 niveles» en los siguientes, para planear cómo quiere que crezca. El desplegable permite ver cualquier otra lista.
+- Cada conjuro lleva iconos de lo que hace (⚔ ataque, 🛡 salvación, ❤ cura, 💥 área, ⏳ concentración, ⚡ adicional, ↺ reacción, 📜 ritual) y su tipo de daño; filtros rápidos: Hace daño, Cura, Área, Sin concentración, Ritual, Reacción.
+- Arreglado: la subida de nivel no reconocía la clase escrita en femenino «Maga».
+
+## Hito 31 · Escenas nuevas con criaturas del SRD
+
+Las cuatro escenas de ejemplo antiguas (con «enemigos» genéricos sin habilidades) se sustituyen por cuatro nuevas, con criaturas del SRD 5.2.1 con sus estadísticas, PX y acciones reales (pensadas para cuatro personajes de nivel 5):
+
+- **La torre del hechicero** (3 plantas, se sube por la escalera de caracol): vestíbulo con dos **gárgolas** quietas como estatuas y una losa de dardos oculta; biblioteca con un **diablillo** invisible, dos **esqueletos** y un glifo de fuego oculto; cámara de **Valdric (Mago)** con dos esqueletos, una puerta con llave y, tras una runa de relámpagos oculta, el **cofre** (350 po, pergamino de Bola de fuego, Varita de proyectiles mágicos y dos Pociones de curación).
+- **Pelea en la taberna de la Jarra Rota** (22×14): barra, cocina, chimenea y la mesa de los enanos: **Thorgrim Yunquefirme** (Guerrero veterano), **Brokk Barbarroja** (Berserker), **Durin** y **Grumli** (Pendencieros) y **Hilda Martillo-Santo** (Sacerdote).
+- **El cementerio de la colina** (de noche, con niebla de guerra): tumbas abiertas, ángeles de piedra y un mausoleo. **Zombis** (dos bajo tierra), **esqueletos**, un **gul** y, ocultos en el mausoleo, un **ghast** y el **tumulario**. Una fosa oculta en la maleza.
+- **Emboscada en el bosque**: camino que serpentea, arroyo con puente y un árbol caído. **Jefe goblin** en el peñasco, cuatro **goblins** ocultos en la maleza, dos **huargos** (lobos terribles) y un lazo escondido en el camino.
+
+En **Preparar escenas**, el máster tiene **🔄 Renovar escenas de ejemplo**: quita las cuatro antiguas solo si siguen sin tocar (mismo nombre y sin criaturas del SRD) y añade las nuevas. Las escenas propias no se tocan.
+
+Arreglos: los humanoides «Medianos o Pequeños» del SRD (mago, veterano…) salían como Pequeños; las criaturas añadidas ahora llevan sus PX según la tabla oficial por VD; iniciales y placas de nombre sin paréntesis.

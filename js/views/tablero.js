@@ -162,7 +162,7 @@ export function createBoard(host, opts) {
         <circle r="${rad + 3}" class="halo"/>
         ${(k.conds || []).map((cd, i) => { const e = estado(cd.id); return e ? `<circle r="${rad + 5 + i * 3.5}" fill="none" stroke="${e.c}" stroke-width="3"/>` : ""; }).join("")}
         <circle r="${rad}" fill="${dk.color || "#777"}" stroke="${ring}" stroke-width="3"/>
-        ${img ? `<image href="${img}" x="${-rad}" y="${-rad}" width="${rad * 2}" height="${rad * 2}" clip-path="url(#cp-${k.id})" preserveAspectRatio="xMidYMid slice"/>` : `<text class="ini" y="5">${esc((dk.name || "?").split(/\s+/).map(w => w[0]).slice(0, 2).join("").toUpperCase())}</text>`}
+        ${img ? `<image href="${img}" x="${-rad}" y="${-rad}" width="${rad * 2}" height="${rad * 2}" clip-path="url(#cp-${k.id})" preserveAspectRatio="xMidYMid slice"/>` : `<text class="ini" y="5">${esc((dk.name || "?").replace(/\s*\(.*?\)/g, "").split(/\s+/).map(w => w.replace(/[^\p{L}]/gu, "")[0]).filter(Boolean).slice(0, 2).join("").toUpperCase() || "?")}</text>`}
         ${hp ? `<rect x="${-rad}" y="${rad + 3}" width="${rad * 2}" height="6" rx="2" class="hpbg"/><rect x="${-rad}" y="${rad + 3}" width="${rad * 2 * pct}" height="6" rx="2" class="hpfg ${pct <= .25 ? "low" : pct <= .5 ? "mid" : ""}"/>` : ""}
         ${dk.isTurn ? `<circle r="${rad + 7}" class="turn"/>` : ""}
       </g>`;

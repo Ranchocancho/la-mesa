@@ -10,7 +10,8 @@ import { srd } from "../core/srd.js";
 import { $, $$, esc, toast } from "../core/ui.js";
 
 const AB = Object.fromEntries(ABILITIES);
-export const progOf = cls => PROG[cls] || PROG[Object.keys(PROG).find(k => cls && k.toLowerCase().startsWith(String(cls).toLowerCase().slice(0, 4)))] || null;
+// Por las tres primeras letras: así vale el femenino («Maga», «Pícara», «Clériga»…)
+export const progOf = cls => PROG[cls] || PROG[Object.keys(PROG).find(k => cls && k.toLowerCase().startsWith(String(cls).toLowerCase().trim().slice(0, 3)))] || null;
 const rowOf = (P, L) => { const r = (P.rows || [])[L - 1] || []; return Object.fromEntries(P.cols.map((c, i) => [c, r[i] ?? "—"])); };
 const slotsOf = (P, L) => {
   const r = rowOf(P, L);

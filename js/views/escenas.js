@@ -2,7 +2,7 @@
 // Cada escena va asociada a un lugar del mundo o a la biblioteca, para improvisar.
 import { store } from "../core/store.js";
 import { isDM } from "../core/session.js";
-import { blankScene } from "../data/escenas.js";
+import { blankScene, exampleScenes } from "../data/escenas.js";
 import { loadScene } from "../core/mesa.js";
 import { createBoard, TERRAIN } from "./tablero.js";
 import { propEditorHTML, bindPropEditor } from "./propeditor.js";
@@ -49,9 +49,27 @@ function draw() {
     </aside>
     <section class="scenes-main">${openId ? `<div class="board-host"></div>` : `<div class="page"><div class="wrap"><h1 class="title">Preparar escenas</h1>
       <p class="lead">Prepara los combates y situaciones tácticas de cada lugar, o deja escenas genéricas en la biblioteca (una pelea de taberna, una emboscada en el camino…) para cargarlas al momento si la partida se tuerce.</p>
-      <p class="note">Elige una escena a la izquierda para editarla. Durante la partida se cargan desde el panel del máster, en la pestaña Partida.</p></div></div>`}</section>
+      <p class="note">Elige una escena a la izquierda para editarla. Durante la partida se cargan desde el panel del máster, en la pestaña Partida.</p>
+      <div class="panel" style="margin-top:16px"><h2 class="sec">Escenas de ejemplo</h2>
+        <p style="margin:0 0 10px">La torre del hechicero (3 plantas, trampas ocultas y un cofre), pelea con enanos en la taberna de la Jarra Rota, el cementerio de la colina con no muertos y una emboscada goblin en el bosque. Todas con criaturas del SRD y sus acciones reales.</p>
+        <button class="btn gold small" id="renew">🔄 Renovar escenas de ejemplo</button>
+        <p class="note" style="margin:8px 0 0">Quita las cuatro antiguas (taberna, camino, cripta y puente, con sus «enemigos» genéricos) si siguen sin tocar, y añade las nuevas a la biblioteca. Tus escenas no se tocan.</p></div></div></div>`}</section>
     <aside class="scenes-props" ${openId ? "" : "hidden"}></aside>`;
   $$("[data-open]", el).forEach(b => b.onclick = () => { openId = b.dataset.open; sel = null; placing = false; board = null; draw(); });
+  const rn = $("#renew", el);
+  if (rn) rn.onclick = () => {
+    if (!rn.dataset.sure) { rn.dataset.sure = 1; rn.textContent = "¿Seguro? Pulsa otra vez"; return; }
+    const OLD = ["Pelea en la taberna", "Emboscada en el camino", "La cripta bajo el campanario", "Emboscada en el puente"], fresh = exampleScenes();
+    let gone = 0, added = 0;
+    store.commit("board", st => {
+      // Solo las antiguas de ejemplo: mismo nombre y criaturas sin perfil del SRD (las genéricas de antes)
+      const before = st.scenes.length;
+      st.scenes = st.scenes.filter(x => !(OLD.includes(x.name) && (x.tokens || []).every(t => !t.srd)));
+      gone = before - st.scenes.length;
+      fresh.forEach(sc => { if (!st.scenes.some(x => x.name === sc.name)) { st.scenes.push(sc); added++; } });
+    });
+    toast(`Escenas de ejemplo: ${gone} antiguas quitadas, ${added} nuevas en la biblioteca.`);
+  };
   $("#newsc", el).onsubmit = e => {
     e.preventDefault();
     const fill = $("#nsfill", el).value, gen = fill.startsWith("gen:");

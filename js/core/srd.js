@@ -19,8 +19,12 @@ export const findMonster = name => (srdNow.monstruos || []).find(x => norm(x.n) 
 export { norm };
 
 /** Ficha de mesa a partir de un monstruo del compendio. */
+/** PX por valor de desafío (tabla oficial). */
+export const XP_BY_CR = { "0": 10, "1/8": 25, "1/4": 50, "1/2": 100, "1": 200, "2": 450, "3": 700, "4": 1100, "5": 1800, "6": 2300, "7": 2900, "8": 3900, "9": 5000, "10": 5900, "11": 7200, "12": 8400, "13": 10000, "14": 11500, "15": 13000, "16": 15000, "17": 18000, "18": 20000, "19": 22000, "20": 25000, "21": 33000, "22": 41000, "23": 50000, "24": 62000, "25": 75000, "26": 90000, "27": 105000, "28": 120000, "29": 135000, "30": 155000 };
 export function monsterToken(m, c, r) {
-  const size = /Enorme/.test(m.tipo) ? 2.4 : /Gargantu/.test(m.tipo) ? 3 : /Grande/.test(m.tipo) ? 1.6 : /Pequeñ|Diminut/.test(m.tipo) ? 0.7 : 1;
+  // «Mediano o Pequeño» es Mediano (la figura no debe encogerse)
+  const size = /Enorme/.test(m.tipo) ? 2.4 : /Gargantu/.test(m.tipo) ? 3 : /Grande/.test(m.tipo) ? 1.6 : /Mediano/.test(m.tipo) ? 1 : /Pequeñ|Diminut/.test(m.tipo) ? 0.7 : 1;
+  const xp = m.xp != null ? m.xp : XP_BY_CR[m.vd];
   return { id: "t" + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), kind: "foe", name: m.n, srd: m.n, c, r, hp: m.pg, maxhp: m.pg, ac: m.ca,
-    initBonus: parseInt(m.ini) || 0, size, color: "#7a2a22", vd: m.vd, ...(m.xp != null ? { xp: m.xp } : {}), ...(m.img ? { portrait: m.img } : {}), speed: parseFloat(String(m.vel).replace(",", ".")) || 9, attacks: m.atk.map(a => ({ name: a.name, atk: a.atk, dmg: a.dmg, rng: a.rng })) };
+    initBonus: parseInt(m.ini) || 0, size, color: "#7a2a22", vd: m.vd, ...(xp != null ? { xp } : {}), ...(m.img ? { portrait: m.img } : {}), speed: parseFloat(String(m.vel).replace(",", ".")) || 9, attacks: m.atk.map(a => ({ name: a.name, atk: a.atk, dmg: a.dmg, rng: a.rng })) };
 }
