@@ -81,25 +81,27 @@ export function inArea(s, m, caster, center) {
  * - beneficio o estado: lo pone a los objetivos y queda ligado a la concentración.
  * Los conjuros con tirada de ataque usan el ataque normal (combate.js).
  */
-export function cast(casterId, spellName, slot, targetIds) {
-  const s = store.get(), a = s.tokens.find(t => t.id === casterId), c = a && charOf(s, a), d = findSpell(spellName), m = spellMech(d);
-  if (!a || !c || !m) return null;
-  if (!canActNow(s, a.id, m.time === "react" ? "react" : "act")) { toast(`No es el turno de ${c.name}: fuera de su turno solo reacciones.`); return null; }
+export function cast(casterId, spellName, slot, targetIds, P = null) {
+  // P: lanzador que no es un personaje (criatura del SRD): { name, dc, atk, lvl, use } — sin espacios: sus usos los lleva criaturas.js
+  const s = store.get(), a = s.tokens.find(t => t.id === casterId), c = a && !P && charOf(s, a), d = findSpell(spellName), m = spellMech(d);
+  if (!a || !(c || P) || !m) return null;
+  const who = c ? c.name : P.name, cl = c ? c.level : P.lvl;
+  if (!P && !canActNow(s, a.id, m.time === "react" ? "react" : "act")) { toast(`No es el turno de ${who}: fuera de su turno solo reacciones.`); return null; }
   const targets = targetIds.map(id => s.tokens.find(t => t.id === id)).filter(Boolean);
-  if (m.lvl > 0) {
+  if (m.lvl > 0 && !P) {
     if (!slot || !freeSlots(c, m.lvl).includes(slot)) { toast(`No te quedan espacios de nivel ${slot || m.lvl} o superior.`); return null; }
     useSlot(c.id, slot);
   }
   const far = targets.filter(t => !m.self && inRange(m.touch ? { n: 1.5, l: 1.5 } : m.rng, a, t) === "out" && !(m.area && /cono|línea|emanación/.test(m.area.shape)));
   if (far.length && !m.area) toast(`Fuera de alcance (${d.al}): ${far.map(t => (charOf(s, t) || t).name).join(", ")}`);
-  spend(a.id, m.time);
+  if (!P) spend(a.id, m.time);
   // Concentración: el conjuro anterior termina
   if (m.conc) store.commit("token", st => { const k = st.tokens.find(x => x.id === a.id); dropConcentration(st, k); addCond(k, "concentracion", { note: d.n }); });
-  const lbl = `${c.name} lanza ${d.n}${m.lvl > 0 ? ` (nivel ${slot})` : ""}`, dc = spellDC(c);
+  const lbl = `${who} lanza ${d.n}${m.lvl > 0 ? ` (nivel ${slot})` : ""}`, dc = P ? P.dc : spellDC(c);
   // Conjuros con tirada de ataque: un ataque por objetivo, con el daño del espacio usado
   if (m.atk) {
-    const ab = classInfo(c.cls).cast, bonus = ab ? prof(c.level) + mod(c.abilities[ab]) : 0;
-    return targets.map(t => attack(a.id, t.id, { name: d.n, atk: bonus, expr: scaled(m, m.dmg, slot, c.level), type: m.dt, rng: m.touch ? { n: 1.5, l: 1.5, melee: true } : m.rng, spell: true }, null, null))[0] || null;
+    const ab = c && classInfo(c.cls).cast, bonus = P ? P.atk : ab ? prof(c.level) + mod(c.abilities[ab]) : 0;
+    return targets.map(t => attack(a.id, t.id, { name: d.n, atk: bonus, expr: scaled(m, m.dmg, slot, cl), type: m.dt, rng: m.touch ? { n: 1.5, l: 1.5, melee: true } : m.rng, spell: true }, null, null, P ? { free: true } : {}))[0] || null;
   }
   // Beneficios y estados sin salvación (Bendición…)
   if (m.buff && !m.save) {
@@ -107,14 +109,14 @@ export function cast(casterId, spellName, slot, targetIds) {
     return logCast(lbl, a, targets, `${targets.map(t => (charOf(s, t) || t).name).join(", ")}: ${ESTADOS.find(e => e.id === m.buff).t}`);
   }
   if (m.heal) {
-    const expr = scaled(m, m.heal, slot, c.level) + (m.healMod ? `${spellMod(c) >= 0 ? "+" : ""}${spellMod(c)}` : "");
+    const hm = P ? (P.mod || 0) : spellMod(c), expr = scaled(m, m.heal, slot, cl) + (m.healMod ? `${hm >= 0 ? "+" : ""}${hm}` : "");
     const out = [];
     for (const t of targets) { const r = publish({ kind: "heal", label: `${lbl} sobre ${(charOf(s, t) || t).name}`, expr, by: a.id, target: t.id }); heal(t.id, r.total); out.push(r); }
     out.forEach(r => store.commit("roll", st => { const x = st.rolls.find(y => y.id === r.id); if (x) { x.status = "ok"; x.note = `+${r.total} PG`; } }));
     return out[0] || null;
   }
   if (m.save) {
-    const dmgExpr = m.dmg ? scaled(m, m.dmg, slot, c.level) : null;
+    const dmgExpr = m.dmg ? scaled(m, m.dmg, slot, cl) : null;
     const saves = targets.map(t => quickSave(s, t, m.save, dc, m.save === "des" ? (cover(s, a, t).bonus || 0) : 0));
     const base = { kind: "spell", label: `${lbl} · salvación de ${Object.entries(AB_KEY).find(([, k]) => k === m.save)[0].replace(/^./, x => x.toUpperCase())} CD ${dc}`, by: a.id };
     const r = dmgExpr ? publish({ ...base, expr: dmgExpr, dtype: m.dt }) : logCast(base.label, a, targets, null, true);
@@ -126,12 +128,43 @@ export function cast(casterId, spellName, slot, targetIds) {
   }
   if (m.dmg && !m.atk) {
     const n = m.darts ? 3 + Math.max(0, slot - 1) : 0;
-    const expr = m.darts ? `${n}d4+${n}` : scaled(m, m.dmg, slot, c.level);
+    const expr = m.darts ? `${n}d4+${n}` : scaled(m, m.dmg, slot, cl);
     const r = publish({ kind: "spell", label: lbl, expr, dtype: m.dt, by: a.id });
     store.commit("roll", st => { const x = st.rolls.find(y => y.id === r.id); if (x) Object.assign(x, { saves: targets.map(t => ({ t: t.id, name: (charOf(s, t) || t).name, ok: false, auto: true })), half: false, dtype: m.dt, spell: d.n, status: "pending", targets: targets.map(t => t.id), note: m.darts ? `${n} dardos que impactan siempre (repártelos como quieras)` : null }); });
     return r;
   }
   return logCast(lbl, a, targets, d.du && d.du !== "Instantáneo" ? `Duración: ${d.du}` : null);
+}
+
+/**
+ * Acción de una criatura con tirada de salvación (alientos, miradas, venenos…), tal como la escribe el SRD:
+ * una tirada de daño para todos y una salvación por objetivo; el máster lo aplica desde Tiradas (mitad si la supera).
+ */
+export function creatureSave(casterId, a, targetIds) {
+  const s = store.get(), c = s.tokens.find(t => t.id === casterId); if (!c) return null;
+  const targets = targetIds.map(id => s.tokens.find(t => t.id === id)).filter(Boolean);
+  const AB = { fue: "Fuerza", des: "Destreza", con: "Constitución", int: "Inteligencia", sab: "Sabiduría", car: "Carisma" };
+  const saves = targets.map(t => quickSave(s, t, a.sv, a.dc, a.sv === "des" ? (cover(s, c, t).bonus || 0) : 0));
+  const expr = (a.dmg || []).map(d => d.e).join("+"), dtype = [...new Set((a.dmg || []).map(d => d.t))].join(" y ");
+  const label = `${c.name}: ${a.n} · salvación de ${AB[a.sv]} CD ${a.dc}`;
+  const r = expr ? publish({ kind: "spell", label, expr, dtype, by: c.id }) : logCast(label, c, targets, null, true);
+  const conds = (a.fail || "").match(/estados? de/) ? condsFrom(a.fail) : [];
+  store.commit("roll", st => {
+    const x = st.rolls.find(y => y.id === r.id); if (!x) return;
+    Object.assign(x, { saves, half: !!a.half, dc: a.dc, sv: a.sv, conds, dtype: dtype || null, spell: a.n, status: "pending", targets: targets.map(t => t.id), note: a.fail ? "Si falla: " + a.fail.slice(0, 160) : null });
+  });
+  return r;
+}
+const CONDS = ["agarrado", "apresado", "asustado", "aturdido", "cegado", "derribado", "ensordecido", "envenenado", "hechizado", "incapacitado", "inconsciente", "paralizado", "petrificado"];
+function condsFrom(txt) {
+  const out = new Set();
+  for (const m of String(txt).matchAll(/estados? de ([a-záéíóúñ]+)(?: y ([a-záéíóúñ]+))?/gi)) [m[1], m[2]].forEach(w => { if (!w) return; const id = w.toLowerCase().replace(/a$/, "o"); if (CONDS.includes(id)) out.add(id); });
+  return [...out];
+}
+/** Una acción sin tirada (Cambio de forma, Teletransporte…): queda apuntada en la mesa con su texto del SRD. */
+export function creatureNote(casterId, a) {
+  const s = store.get(), c = s.tokens.find(t => t.id === casterId); if (!c) return null;
+  return logCast(`${c.name}: ${a.n}`, c, [], (a.txt || "").slice(0, 220));
 }
 
 /** Apunta en la mesa que se lanzó un conjuro (sin dados). */

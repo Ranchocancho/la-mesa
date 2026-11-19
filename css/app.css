@@ -1644,3 +1644,18 @@ b.ininum{display:block}
 .dcl.ok{border-color:#7fbf5a}.dcl.ko{border-color:#c4513f}
 @keyframes dcn2{from{opacity:0;transform:scale(.6)}to{opacity:1;transform:none}}
 @media (max-width:760px){.dc-well{height:30vh}.dc-read{width:42%}.dr-total b{font-size:52px}.dr-sum{font-size:17px}}
+
+/* ---------- Hito 29: acciones reales de las criaturas (pestaña PNJ) ---------- */
+.kit{display:flex;flex-direction:column;gap:6px;margin-top:6px}
+.kmulti{margin:0;font-size:12.5px;color:#d8c49a;padding:4px 8px;border-radius:8px;background:rgba(214,170,78,.08);border:1px dashed rgba(214,170,78,.35)}
+.kgrp>small{display:block;font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--tenue);margin-bottom:3px}
+.kbtns{display:flex;flex-wrap:wrap;gap:4px}
+.ka{display:inline-flex;flex-direction:column;align-items:flex-start;gap:1px;padding:4px 8px;border-radius:8px;border:1px solid var(--linea);background:var(--piedra2);color:var(--hueso);cursor:pointer;text-align:left;font:inherit;line-height:1.15;max-width:100%}
+.ka b{font-size:12.5px}.ka span{font-size:11px;color:#ffe08a}.ka em{font-style:normal;font-size:10.5px;color:#9be37a}.ka em.off{color:#ff8a76}
+.ka.k-save{border-color:#7a5a9a}.ka.k-spell{border-color:#4a6aa8}.ka.k-text{border-style:dashed}
+.ka:hover:not([disabled]){border-color:var(--oro)}.ka.armed{border-color:var(--oro);background:rgba(214,170,78,.18);box-shadow:0 0 0 1px var(--oro)}
+.ka[disabled]{opacity:.45;cursor:not-allowed}
+.kfreq{display:flex;gap:6px;align-items:flex-start;margin-top:3px}.kfreq>i{font-style:normal;font-size:11px;color:var(--tenue);min-width:74px;padding-top:5px}
+.karmed{padding:6px 8px;border-radius:10px;border:1px solid var(--oro);background:rgba(214,170,78,.08);display:flex;flex-direction:column;gap:4px}
+.karmed small{color:#d8c49a}.kpicks{display:flex;flex-wrap:wrap;gap:4px}
+.krest{align-self:flex-start}

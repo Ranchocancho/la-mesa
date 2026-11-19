@@ -6,6 +6,7 @@ import { charOf } from "./mesa.js";
 import { findMonster } from "./srd.js";
 import { mod, saveBonus, classInfo, prof } from "../data/dnd.js";
 import { toast } from "./ui.js";
+import { kitOf } from "./criaturas.js";
 
 export const AB_NAME = { fue: "Fuerza", des: "Destreza", con: "Constitución", int: "Inteligencia", sab: "Sabiduría", car: "Carisma" };
 export const AB_KEY = Object.fromEntries(Object.entries(AB_NAME).map(([k, n]) => [n.toLowerCase(), k]));
@@ -30,7 +31,8 @@ export function spellMod(c) { const ab = classInfo(c.cls).cast; return ab ? mod(
  */
 export function savePlan(s, t, ab, coverBonus = 0) {
   const c = charOf(s, t), why = [];
-  let bonus = c ? saveBonus(c, ab) : mod(abilitiesOf(s, t)[ab]), adv = 0, extra = "", autoFail = false;
+  const kit = !c && kitOf(t);
+  let bonus = c ? saveBonus(c, ab) : kit && kit.sv && kit.sv[ab] != null ? kit.sv[ab] : mod(abilitiesOf(s, t)[ab]), adv = 0, extra = "", autoFail = false;
   if ((ab === "fue" || ab === "des") && ["paralizado", "aturdido", "inconsciente", "petrificado"].some(x => hasC(t, x))) { autoFail = true; why.push("falla automáticamente (" + ["paralizado", "aturdido", "inconsciente", "petrificado"].find(x => hasC(t, x)) + ")"); }
   if (ab === "des" && hasC(t, "apresado")) { adv--; why.push("desventaja: apresado"); }
   if (ab === "des" && hasC(t, "esquivando")) { adv++; why.push("ventaja: esquivando"); }

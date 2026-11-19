@@ -6,8 +6,9 @@ import { charOf } from "./mesa.js";
 import { damage as hurt } from "./salud.js";
 import { findSpell } from "./srd.js";
 import { classInfo, prof } from "../data/dnd.js";
-import { rangeOf, inRange, cover, modifiers, spend, dist, hasCond, canActNow } from "./turnos.js";
+import { rangeOf, inRange, cover, modifiers, spend, dist, gap, hasCond, canActNow } from "./turnos.js";
 import { toast } from "./ui.js";
+import { kitOf, kitAttacks, gate, spendKit, condsIn, sizeOk } from "./criaturas.js";
 
 const num = s => { const m = String(s || "").match(/[+-−]?\s*\d+/); return m ? +m[0].replace(/\s|−/g, s => s === "−" ? "-" : "") : 0; };
 /** "1d8+4 perforante" → { expr: "1d8+4", type: "perforante" } */
@@ -21,6 +22,9 @@ export const acOf = (s, t) => { const c = charOf(s, t); return c ? +c.ac : +t.ac
 /** Ataques disponibles para una ficha: armas del personaje o ataques del enemigo. */
 export function attacksOf(s, t) {
   const c = charOf(s, t);
+  // Criaturas del compendio: sus ataques reales del SRD (todos los daños, efectos al acertar); si no, los de su ficha
+  const kit = !c && kitOf(t);
+  if (kit) return kitAttacks(kit).map(w => ({ ...w, rng: rangeOf(w) }));
   const list = c ? (c.weapons || []) : (t.attacks || []);
   const out = list.filter(w => w.name || w.atk || w.dmg).map(w => ({ name: w.name || "Ataque", atk: num(w.atk), ...splitDamage(w.dmg), rng: rangeOf(w) }));
   // Conjuros preparados con tirada de ataque (del compendio): ataque = competencia + característica de lanzamiento
@@ -40,25 +44,48 @@ export function attacksOf(s, t) {
 export function attack(attackerId, targetId, weapon, force = null, use = "act", opt = {}) {
   const s = store.get(), a = s.tokens.find(t => t.id === attackerId), t = s.tokens.find(x => x.id === targetId);
   if (!a || !t) return null;
-  if (!canActNow(s, a.id, use)) { toast(`No es el turno de ${nameOf(s, a)}: fuera de su turno solo puede usar reacciones.`); return null; }
+  // opt.free: ya lo ha permitido quien llama (acción legendaria, reacción o conjuro de una criatura)
+  if (!opt.free && !canActNow(s, a.id, use)) { toast(`No es el turno de ${nameOf(s, a)}: fuera de su turno solo puede usar reacciones.`); return null; }
   { const me = currentUser(s); if (!isDM(s) && !(a.owner && me && a.owner === me.id)) { toast("Solo puedes atacar con tu propio personaje."); return null; } }
   const rng = weapon.rng || { n: 1.5, l: 1.5 }, reach = inRange(rng, a, t), cov = cover(s, a, t), mods = modifiers(s, a, t, rng);
-  if (reach === "out") { toast(`${t.name || "El objetivo"} está a ${(dist(a, t) * 1.5).toLocaleString("es-ES")} m: fuera del alcance de ${weapon.name} (${rng.l} m)`); return null; }
+  if (reach === "out") { toast(`${t.name || "El objetivo"} está a ${(gap(a, t) * 1.5).toLocaleString("es-ES")} m: fuera del alcance de ${weapon.name} (${rng.l} m)`); return null; }
   if (cov.level === "total") { toast("Cobertura total: no tienes línea hasta el objetivo"); return null; }
   const adv = force != null ? force : mods.net;
   const why = [...mods.adv.map(x => "ventaja: " + x), ...mods.dis.map(x => "desventaja: " + x)];
   if (force != null && force !== mods.net) why.push(force ? `${force > 0 ? "ventaja" : "desventaja"} elegida a mano` : "sin ventaja ni desventaja (elegido a mano)");
-  if (use) spend(a.id, use);
+  const kitA = kitOf(a);
+  if (kitA && use) { const why2 = gate(s, a, use === "react" ? "react" : use, { attack: true }); if (why2) { toast(why2); return null; } }
+  if (kitA && use) spendKit(a.id, use, { attack: use === "act" }); else if (use) spend(a.id, use);
   let extra = "";
   if (hasCond(a, "bendecido")) { extra += "+1d4"; why.push("+1d4 por Bendición"); }
   if (hasCond(a, "perdicion")) { extra += "-1d4"; why.push("−1d4 por Perdición"); }
   const ex = (a.conds || []).find(c => c.id === "agotamiento"), exn = ex ? 2 * (+ex.lvl || 1) : 0;
   if (exn) why.push(`−${exn} por agotamiento`);
   const atk = weapon.atk - exn;
-  return publish({
+  const r = publish({
     kind: "attack", label: `${use === "react" ? "Ataque de oportunidad: " : ""}${nameOf(s, a)} ataca a ${nameOf(s, t)} · ${weapon.name}`, expr: `1d20${atk >= 0 ? "+" : ""}${atk}${extra}`,
     adv, by: a.id, target: t.id, ac: acOf(s, t) + (cov.bonus || 0), dmg: weapon.expr, dtype: weapon.type,
     why: why.length ? why : null, link: opt.link || null, cov: cov.txt || null, auto: mods.autoCrit ? "Objetivo paralizado o inconsciente a 1,5 m: si impacta, es crítico" : null
+  });
+  // Efectos del SRD al acertar (criaturas): salvación del objetivo (p. ej. la parálisis del gul) o un estado directo (agarre, derribo)
+  if (r && (weapon.rider || weapon.cond) && (r.result === "hit" || r.result === "crit") && r.status === "ok") onHitEffects(a, t, weapon);
+  return r;
+}
+function onHitEffects(a, t, w) {
+  import("./salud.js").then(({ rollSave, addCond }) => {
+    if (w.rider) {
+      if (!sizeOk(w.txt, t) && /criatura (Diminuta|Pequeña|Mediana|Grande|Enorme) o más pequeña/.test(w.rider.fail + " " + w.txt.split("Tirada de salvación")[0].slice(-120))) return;
+      const nm = nameOf(store.get(), t), AB = { fue: "Fuerza", des: "Destreza", con: "Constitución", int: "Inteligencia", sab: "Sabiduría", car: "Carisma" };
+      const res = rollSave(t, w.rider.sv, w.rider.dc, `Salvación de ${AB[w.rider.sv]} de ${nm} (CD ${w.rider.dc}) · ${w.name} de ${a.name}`);
+      const cs = condsIn(w.rider.fail);
+      if (!res.ok && cs.length) { store.commit("token", st => { const k = st.tokens.find(x => x.id === t.id); if (k) cs.forEach(id => addCond(k, id, { src: a.id, note: w.name })); }); toast(`${nm} falla la salvación: ${cs.join(", ")}`); }
+      else if (!res.ok && w.rider.fail) toast(`${nm} falla la salvación: ${w.rider.fail.slice(0, 110)}`);
+      return;
+    }
+    if (w.cond && sizeOk(w.txt, t)) {
+      store.commit("token", st => { const k = st.tokens.find(x => x.id === t.id); if (k) addCond(k, w.cond, { src: a.id, note: w.name }); });
+      toast(`${nameOf(store.get(), t)}: ${w.cond}${/escapar/.test(w.txt) ? ` (${(w.txt.match(/CD \d+ para escapar/) || [""])[0]})` : ""}`);
+    }
   });
 }
 

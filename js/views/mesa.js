@@ -1,5 +1,7 @@
 // La mesa táctica dentro de la Partida: tablero, columna de iniciativa y mini-ficha (HUD) plegable.
 import { combatEvents } from "../core/golpes.js";
+import { kitHTML, bindKit } from "./accionesnpc.js";
+import { loadKits, kitOf, gate as kitGate } from "../core/criaturas.js";
 import { store } from "../core/store.js";
 import { isDM, currentUser } from "../core/session.js";
 import { createBoard, healthWord, moveCost } from "./tablero.js";
@@ -56,6 +58,7 @@ export function mountTactical(host, opts = {}) {
       if (dm && a.kind === "pc") return false;
       sel = id; const r = attack(A.tok, id, w, dm ? atkAdv : null); if (r) { arm(null); atkAdv = null; } actSig = ""; drawHud(); return true;
     }
+    if (A.kind === "npcact") { if (id !== A.tok || A.sp) togglePick(id); sel = id; actSig = ""; drawHud(); return true; } // el máster elige objetivos de la acción de su criatura
     if (dm) return false;
     if (A.kind === "spell") { togglePick(id); sel = id; drawHud(); return true; }
     return false;
@@ -315,7 +318,7 @@ export function mountTactical(host, opts = {}) {
         ${canHurt && h ? `<div class="hpquick"><input type="number" min="0" placeholder="0" data-amt="${t.id}" aria-label="Cantidad"><button class="btn small danger" data-hurt="${t.id}">Daño</button><button class="btn small" data-heal="${t.id}">Curar</button></div>` : ""}
         ${condBlock(t, canHurt)}
         ${t.kind !== "pc" ? atkBlock(s, t, canHurt, sel) : ""}
-        ${canHurt && board && board.pick ? `<details class="castbox"><summary>✨ Lanzar efecto</summary><div class="castlist">${Object.entries(EFECTOS).map(([k, e]) => `<button class="btn small" data-cast="${t.id}|${k}" title="${e.hint || ""}">${e.n}</button>`).join("")}</div></details>` : ""}
+        ${canHurt && board && board.pick ? `<details class="castbox"><summary title="Solo dibuja el efecto en la mesa: no tira dados ni aplica daño">✨ Efecto visual (sin reglas)</summary><div class="castlist">${Object.entries(EFECTOS).map(([k, e]) => `<button class="btn small" data-cast="${t.id}|${k}" title="${e.hint || ""}">${e.n}</button>`).join("")}</div></details>` : ""}
         ${dm && t.kind !== "pc" ? `<details class="tkdetails" ${editOpen ? "open" : ""}><summary>Editar ${t.kind === "npc" ? "PNJ" : "enemigo"}</summary>${tokenEditor(t)}</details>` : ""}</div>`;
     };
     hud.classList.toggle("open", hudOpen);
@@ -335,7 +338,7 @@ export function mountTactical(host, opts = {}) {
         html = `<div class="npcpick">${npcs.map(n => { const h = hpOf(s, n); return `<button class="npcchip ${n.id === pickId ? "on" : ""} ${h && h.cur <= 0 ? "down" : ""} ${cur && cur.id === n.id ? "turn" : ""}" data-npc="${n.id}" title="${esc(n.name)}${h ? ` · ${h.cur}/${h.max}` : ""}">${esc(n.name.split(" ")[0])}${h ? `<small>${h.cur}</small>` : ""}</button>`; }).join("") || `<p class="empty">No hay PNJ ni enemigos en la mesa.</p>`}</div>
           ${t ? npcCard(s, t, live && cur && cur.id === t.id, !!(board && board.pick)) : ""}`;
       }
-      if (html !== actSig) { actSig = html; actHost.innerHTML = html; bindActs(actHost);
+      if (html !== actSig) { actSig = html; actHost.innerHTML = html; bindActs(actHost); bindKit(actHost, () => { actSig = ""; drawHud(); }, () => atkAdv);
         $$("[data-narm]", actHost).forEach(b => b.onclick = () => { const [tid, i] = b.dataset.narm.split("|"), A = armedNow(); arm(A && A.kind === "atk" && A.tok === tid && A.i === +i ? null : { kind: "atk", tok: tid, i: +i }); actSig = ""; drawHud(); });
         $$("[data-ndisarm]", actHost).forEach(b => b.onclick = () => { arm(null); actSig = ""; drawHud(); }); $$("[data-npc]", actHost).forEach(b => b.onclick = () => { npcId = b.dataset.npc; if (board) board.select(npcId); drawHud(); }); }
     }
@@ -445,6 +448,8 @@ export function mountTactical(host, opts = {}) {
   if (opts.sideHost) { const sh = opts.sideHost; if (sh._onDeath) sh.removeEventListener("click", sh._onDeath); sh._onDeath = onDeath; sh.addEventListener("click", onDeath); }
   drawInit(); drawHud(); sideShow();
   // Los avisos con caducidad (reacciones) se refrescan solos aunque nadie toque nada
+  // Acciones reales de las criaturas del SRD: se cargan una vez y se redibuja la ficha
+  loadKits().then(() => { if (!host.isConnected) return; actSig = ""; drawHud(); }).catch(e => console.warn("Acciones del SRD no disponibles", e));
   const tickNow = setInterval(() => { if (!host.isConnected || !$(".tb-now", host)) return clearInterval(tickNow); drawNow(); }, 4000);
   return {
     selected: () => sel,
@@ -507,9 +512,10 @@ function npcCard(s, t, turn, canPick) {
     ${turn ? `<div class="npceco">${chip("act", "⚡ Acción", e.act)}${chip("bonus", "✦ Adic.", e.bonus)}${chip("react", "↺ Reac.", !!e.react)}<em>🦶 ${e.mov.toLocaleString("es-ES")}/${moveBudget(s, t).toLocaleString("es-ES")} m</em><button class="btn gold small" id="endturn">Terminar ▶</button></div>` : ""}
     ${condBlock(t, true)}
     ${phase(s) === "live" && !turn ? `<p class="note npcwait">⏳ No es su turno: espera a que le toque (fuera de su turno, solo reacciones).</p>` : ""}
-    <div class="fweap npcw">${atks.map((w, i) => `<button class="fw ${A && A.kind === "atk" && A.tok === t.id && A.i === i ? "armed" : ""}" data-narm="${t.id}|${i}" ${phase(s) === "live" && !turn ? "disabled" : ""}><b>${esc(w.name)}</b><span>${w.atk >= 0 ? "+" : ""}${w.atk} · ${esc(w.expr)}</span><small>${esc(w.type || "")} · ${w.rng.ranged ? `${w.rng.n}/${w.rng.l} m` : `${w.rng.l} m`}</small></button>`).join("") || `<p class="note" style="margin:0">Sin ataques: añádelos en «Editar».</p>`}</div>
+    <div class="fweap npcw">${atks.map((w, i) => `<button class="fw ${A && A.kind === "atk" && A.tok === t.id && A.i === i ? "armed" : ""}" data-narm="${t.id}|${i}" ${(phase(s) === "live" && !turn) || (kitOf(t) && kitGate(s, t, "act", { attack: true })) ? "disabled" : ""}><b>${esc(w.name)}</b><span>${w.atk >= 0 ? "+" : ""}${w.atk} · ${esc(w.expr)}</span><small>${esc(w.type || "")} · ${w.rng.ranged ? `${w.rng.n}/${w.rng.l} m` : `${w.rng.l} m`}</small></button>`).join("") || `<p class="note" style="margin:0">Sin ataques: añádelos en «Editar».</p>`}</div>
     ${A && A.kind === "atk" && A.tok === t.id ? `<div class="farmed">🎯 Toca al objetivo en la mesa <span><button class="ib ${atkAdv === 1 ? "gold" : ""}" data-atkadv="1">Ventaja</button><button class="ib ${atkAdv === -1 ? "gold" : ""}" data-atkadv="-1">Desv.</button><button class="ib" data-ndisarm>✕</button></span></div>` : ""}
-    <div class="npcmore">${canPick && !(phase(s) === "live" && !turn) ? `<details class="castbox"><summary>✨ Efecto</summary><div class="castlist">${Object.entries(EFECTOS).map(([k, x]) => `<button class="btn small" data-cast="${t.id}|${k}" title="${x.hint || ""}">${x.n}</button>`).join("")}</div></details>` : ""}
+    ${kitHTML(s, t, turn)}
+    <div class="npcmore">${canPick && !kitOf(t) && !(phase(s) === "live" && !turn) ? `<details class="castbox"><summary title="Solo dibuja el efecto en la mesa: no tira dados ni aplica daño">✨ Efecto visual (sin reglas)</summary><div class="castlist">${Object.entries(EFECTOS).map(([k, x]) => `<button class="btn small" data-cast="${t.id}|${k}" title="${x.hint || ""}">${x.n}</button>`).join("")}</div></details>` : ""}
       <details class="tkdetails" ${editOpen ? "open" : ""}><summary>✎ Editar</summary>${tokenEditor(t)}</details></div></div>`;
 }
 function turnCard(s, t) {

@@ -495,3 +495,18 @@ Referentes: Quantum Quest (mesa virtual con dados lanzados sobre la mesa y un pa
 - **Muchos dados** (8d6…): dos filas ordenadas y el desglose de cada dado encima del total.
 - **Materiales**: barniz con reflejos de estudio (sin descargas), así que rubí, zafiro, oro u obsidiana brillan como dados reales. Números grabados el doble de grandes. Cada jugador sigue eligiendo su juego.
 - **Control**: un toque en el tapete salta al resultado; otro lo cierra. Nunca se queda abierto más de 9 s. Los modos Animados, Rápidos y Sin animación siguen igual.
+
+## Hito 29 · Las criaturas actúan según el SRD
+
+Antes, las criaturas solo tenían el primer daño de sus ataques con arma y el menú «✨ Efecto» del máster solo dibujaba el conjuro (sin dados, sin daño, sin gastar nada). Ahora cada una de las **320 criaturas del SRD 5.2.1** tiene sus acciones reales, leídas de su perfil (`js/data/acciones.js`, generado; nada inventado):
+
+- **Ataques completos**: todos los daños («1d8+3 contundente **más** 1d4 de veneno»), alcance y distancia reales, y **efectos al acertar**: salvación automática del objetivo con su estado (la garra del gul paraliza con Con CD 10), agarre o derribo según el tamaño del objetivo.
+- **Acciones con salvación** (alientos, miradas, venenos…): se tocan los objetivos o se marca el área (cono, línea, esfera, emanación). Cada objetivo tira su salvación con sus bonos reales y el máster aplica el daño desde Tiradas (mitad si la supera, estados si falla), igual que los conjuros de los jugadores.
+- **Lanzamiento de conjuros**: los conjuros de cada criatura enlazados al compendio, con **su CD y su ataque de conjuro** y sus usos (**a voluntad, N/día cada uno**). Se resuelven con el mismo motor que los de los jugadores.
+- **Economía del turno impuesta**: una acción por turno; el **Ataque múltiple** permite su número exacto de ataques (el dragón rojo, 3 desgarros). Una acción adicional y una reacción. **Acciones legendarias** solo fuera de su turno y con su contador (3/3), incluidas las que lanzan un conjuro o hacen un ataque.
+- **Recargas**: al empezar el turno de la criatura se tira el d6 de lo gastado (Aliento de fuego, recarga 5–6) y queda apuntado. Botón «↺ Recuperar usos» tras un descanso.
+- **Salvaciones de las criaturas** con sus bonos del perfil (el dragón rojo, Des +6).
+- **Criaturas grandes**: el alcance se mide desde el borde de la criatura, no desde su centro (un dragón Enorme alcanza a 3 m de su borde).
+- El antiguo «✨ Efecto» queda marcado como **efecto visual (sin reglas)**.
+
+Lo que sigue en manos del máster: resistencias e inmunidades al aplicar el daño (opciones mitad/doble/nada en Tiradas), la Resistencia legendaria, los estados especiales que el SRD describe con texto (maldiciones, etc.) y qué ataques combina cada Ataque múltiple (se controla el número de ataques).

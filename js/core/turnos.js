@@ -6,6 +6,7 @@ import { publish, roll } from "./dados.js";
 import { uid } from "./store.js";
 import { currentUser } from "./session.js";
 import { toast } from "./ui.js";
+import { onTurnStart } from "./criaturas.js";
 import { charOf, hpOf, order } from "./mesa.js";
 import { TERRAIN, PROPS, isDoor, doorBlocksSight } from "../data/mapas.js";
 
@@ -60,6 +61,7 @@ function advanceTo(s, t) {
   s.board.turn = t.id; s.board.seq = (s.board.seq || 0) + 1;
   s.board.starts = { ...(s.board.starts || {}), [t.id]: s.board.seq };
   s.board.from = { c: t.c, r: t.r };
+  onTurnStart(s, t); // criaturas: recarga (d6) de lo gastado y acciones legendarias de nuevo
 }
 /** 3. Terminar el turno: pasa a la siguiente criatura en pie; al dar la vuelta, nueva ronda. */
 export function endTurn() {
@@ -120,8 +122,12 @@ export function rangeOf(w) {
   return { n: 1.5, l: 1.5 };
 }
 /** Estado del alcance: "ok" | "long" (desventaja) | "out" */
+/** Casillas que sobresale una criatura desde su casilla central (Grande 2×2 ≈ 0,5; Enorme 3×3 = 1; Gargantuesca 4×4 = 1,5). */
+const reachOut = t => Math.max(0, (Math.ceil(+t.size || 1) - 1) / 2);
+/** Distancia en casillas entre los bordes de dos criaturas (las grandes alcanzan desde su borde, no desde su centro). */
+export const gap = (a, b) => Math.max(0, dist(a, b) - Math.floor(reachOut(a) + reachOut(b)));
 export function inRange(rng, a, b) {
-  const d = dist(a, b) * CELL_M;
+  const d = gap(a, b) * CELL_M;
   return d <= rng.n + 0.01 ? "ok" : d <= rng.l + 0.01 ? "long" : "out";
 }
 
