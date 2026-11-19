@@ -3,6 +3,7 @@
 // También: alcance, cobertura y ventaja/desventaja según los estados, con el motivo escrito.
 import { store } from "./store.js";
 import { publish } from "./dados.js";
+import { toast } from "./ui.js";
 import { charOf, hpOf, order } from "./mesa.js";
 import { TERRAIN, PROPS, isDoor, doorBlocksSight } from "../data/mapas.js";
 
@@ -28,7 +29,9 @@ export function beginCombat() {
 }
 /** Un personaje tira su iniciativa (d20 + Destreza). */
 export function rollInit(tokenId) {
-  const s = store.get(), t = s.tokens.find(x => x.id === tokenId), c = charOf(s, t);
+  const s = store.get(), t = s.tokens.find(x => x.id === tokenId), c = t && charOf(s, t);
+  // Una sola iniciativa por combate: si ya la tiene, no se vuelve a tirar (el máster puede corregirla a mano)
+  if (!t || (t.init != null && t.init !== "")) { if (t) toast(`${c ? c.name : t.name} ya tiene iniciativa (${t.init}).`); return; }
   const m = c ? Math.floor(((+c.abilities.des || 10) - 10) / 2) : +t.initBonus || 0;
   const r = publish({ kind: "init", expr: `1d20${m >= 0 ? "+" : ""}${m}`, label: `Iniciativa de ${c ? c.name : t.name}`, by: t.id });
   store.commit("token", st => { const k = st.tokens.find(x => x.id === tokenId); if (k) k.init = r.total; });

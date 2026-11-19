@@ -303,3 +303,23 @@ Con ideas de referentes: registro de combate de una frase (Baldur's Gate), proba
   - Los jugadores siguen viendo la mesa, con un aviso discreto («El máster está retocando la mesa…»).
   - La mesa 3D monta los cambios de uno en uno y siempre termina con la última versión. Antes, cada retoque cancelaba el montaje en curso y la mesa podía quedarse en «Montando la mesa…».
   - Una pieza que falle ya no deja la mesa vacía.
+
+## Hito 17 · Saber siempre qué toca: barra superior, registro legible y plantas en la pestaña del máster
+
+- **Barra superior de la mesa**, siempre en su sitio, con tres zonas:
+  - **Ahora** (izquierda): ronda, de quién es el turno y quién va después. Dice qué falta por hacer y a quién le toca: tirar iniciativa, confirmar un ataque (máster), tirar el daño de un impacto, decidir un ataque de oportunidad, aplicar el daño, resolver un conjuro, la salvación contra muerte o terminar el turno.
+    - Trae el botón para hacerlo cuando te toca a ti.
+    - En tu turno muestra lo que te queda: acción (A), adicional (+) y metros de movimiento.
+    - Se ilumina en dorado cuando algo depende de ti.
+  - **Orden de turno** (centro): retratos con vida y estados, como antes.
+  - **Cámara y ambiente** (derecha, tras una barra vertical): botones por pares (Centrar/Cenital, Órbita/Muros, Niebla/Sonido, volumen/ambiente) y el cambio Plano 2D / Mesa 3D.
+- **Avisos momentáneos**, como hacen los módulos de turno de otras mesas virtuales:
+  - «¡Es tu turno!» al empezar el tuyo.
+  - «Prepárate: después te toca a ti» al que va a continuación.
+  - Un cartel breve («👉 ¡Impacta! Tira el daño…») cuando algo pasa a depender de ti.
+- **Iniciativa una sola vez por combate**: si ya la tienes, no se puede volver a tirar (el máster la puede corregir a mano). Las tiradas libres de un jugador durante el turno de otro salen marcadas como «fuera de turno».
+- **Registro de tiradas** de un vistazo:
+  - Primera línea: **quién** (con su color), **para qué** («ataca a Bandido · Estoque», «salvación de DES», «iniciativa», «tirada libre 2d6») y el total.
+  - Segunda línea, solo si hace falta: impacto o fallo, el daño hecho (−5 perforante), salva o falla, y los botones del máster («✓ Vale», «✓ Aplicar»).
+  - Lo que está pendiente se resalta. El detalle de los dados sigue al tocar la fila.
+- **Plantas**: ahora están en la pestaña Táctica del máster («🏰 Planta baja ▾», junto a Editar y Criaturas).

@@ -209,7 +209,9 @@ function condTag(conds) {
  */
 export function createBoard3D(host, opts) {
   host.classList.add("board", "board3d");
-  host.innerHTML = `<div class="cam3d" role="toolbar" aria-label="Cámara">
+  // Los controles de cámara y ambiente pueden ir fuera del tablero (en la barra superior de la mesa)
+  const ctl = opts.controlsHost || host;
+  const camHTML = `<div class="cam3d" role="toolbar" aria-label="Cámara y ambiente">
       <button class="btn small" data-cam="center" title="Centrar la cámara en la mesa">⌖ Centrar</button>
       <button class="btn small" data-cam="top" title="Vista desde arriba">⬇ Cenital</button>
       <button class="btn small" data-cam="mode" aria-pressed="false" title="Órbita alrededor del centro o cámara libre">Órbita</button>
@@ -218,7 +220,9 @@ export function createBoard3D(host, opts) {
       ${opts.dm && opts.setSound ? `<select class="btn small" data-snd aria-label="Sonido ambiente">${Object.entries(AMBIENTES).map(([k, v]) => `<option value="${k}">🎵 ${v}</option>`).join("")}</select>` : ""}
       <span class="volbox"><button class="btn small" data-cam="mute" title="Silenciar">${sound.muted ? "🔇" : "🔊"}</button><input type="range" min="0" max="1" step="0.05" value="${sound.volume}" data-vol aria-label="Volumen"></span>
       ${opts.dm ? `<select class="btn small" data-amb aria-label="Ambiente">${Object.entries(AMBIENT).map(([k, v]) => `<option value="${k}">${v.n}</option>`).join("")}</select>` : ""}
-    </div><div class="dragtip" hidden></div><div class="loading3d">Montando la mesa…</div>`;
+    </div>`;
+  host.innerHTML = `${opts.controlsHost ? "" : camHTML}<div class="dragtip" hidden></div><div class="loading3d">Montando la mesa…</div>`;
+  if (opts.controlsHost) opts.controlsHost.innerHTML = camHTML;
   const tip = host.querySelector(".dragtip"), loadingEl = host.querySelector(".loading3d");
   const renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
@@ -261,9 +265,9 @@ export function createBoard3D(host, opts) {
   function setFree(on) {
     free = on; controls.enablePan = on; controls.screenSpacePanning = false; controls.zoomToCursor = on;
     if (!on) { const off = camera.position.clone().sub(controls.target); controls.target.set(0, 0, 0); camera.position.copy(off); }
-    const b = host.querySelector('[data-cam="mode"]'); b.textContent = on ? "Libre" : "Órbita"; b.setAttribute("aria-pressed", on);
+    const b = ctl.querySelector('[data-cam="mode"]'); b.textContent = on ? "Libre" : "Órbita"; b.setAttribute("aria-pressed", on);
   }
-  host.querySelectorAll("[data-cam]").forEach(b => b.onclick = () => {
+  ctl.querySelectorAll("[data-cam]").forEach(b => b.onclick = () => {
     const k = b.dataset.cam;
     if (k === "center") { setFree(false); frame("persp"); }
     if (k === "top") frame("top");
@@ -272,10 +276,10 @@ export function createBoard3D(host, opts) {
     if (k === "mute") { sound.setMuted(!sound.muted); b.textContent = sound.muted ? "🔇" : "🔊"; return; }
     if (k === "walls") { lowWalls = !lowWalls; b.textContent = lowWalls ? "Muros bajos" : "Muros altos"; b.setAttribute("aria-pressed", lowWalls); lastSig = ""; sync(); }
   });
-  const amb = host.querySelector("[data-amb]");
+  const amb = ctl.querySelector("[data-amb]");
   if (amb) amb.onchange = () => opts.setAmbient && opts.setAmbient(amb.value);
-  const snd = host.querySelector("[data-snd]"); if (snd) snd.onchange = () => opts.setSound(snd.value);
-  host.querySelector("[data-vol]").oninput = e => sound.setVolume(+e.target.value);
+  const snd = ctl.querySelector("[data-snd]"); if (snd) snd.onchange = () => opts.setSound(snd.value);
+  ctl.querySelector("[data-vol]").oninput = e => sound.setVolume(+e.target.value);
   // Cámara libre: flechas o WASD mueven el punto de mira por la mesa
   const keys = new Set();
   const kd = e => { if (free && !/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)) keys.add(e.key.toLowerCase()); }, ku = e => keys.delete(e.key.toLowerCase());
@@ -615,7 +619,7 @@ export function createBoard3D(host, opts) {
     applyAmbient(G.ambient || "interior");
     sound.ambient(G.sound || "");
     if (snd) snd.value = G.sound || "";
-    const fb = host.querySelector('[data-cam="fog"]'); if (fb) { fb.setAttribute("aria-pressed", !!G.fog); fb.textContent = G.fog ? "Niebla: sí" : "Niebla: no"; }
+    const fb = ctl.querySelector('[data-cam="fog"]'); if (fb) { fb.setAttribute("aria-pressed", !!G.fog); fb.textContent = G.fog ? "Niebla: sí" : "Niebla: no"; }
     syncTokens(m.tokens).then(() => updateFog(m));
     updateAim(m);
     // Efectos lanzados (en la mesa o en la ficha de quien lanza). Los ve todo el mundo; no se repiten al entrar más tarde.

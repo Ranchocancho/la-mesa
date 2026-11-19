@@ -9,10 +9,13 @@ import { renderStage } from "./presentacion.js";
 import { mountTactical } from "./mesa.js";
 import { renderRolls } from "./tiradas.js";
 import { renderSheet } from "./ficha.js";
+import { floorsHTML, bindFloors } from "./plantasui.js";
+import { floorName, floorsOf } from "../core/plantas.js";
 import { $, $$, esc, toast } from "../core/ui.js";
 
 let el, closing = false, tac = null, tacEdit = false, panelHidden = false, lastKey = null;
 // Panel del máster: dos modos (Táctica de combate | Roleplay); pestañas Iniciativa | Tiradas en táctica y en la columna del jugador
+let floorsOpen = false;
 let dmMode = "rol", dmTab = "ini", plTab = "tir", wasTac = null, rollsSeen = 0;
 
 export function mount(root) {
@@ -71,7 +74,7 @@ function drawStage(force) {
     st.classList.add("tac");
     const k = "tac" + tacEdit + dm;
     const side = dm ? $("#dm-ini", el) : $("#pl-ini", el);
-    if (!tac || lastKey !== k) { lastKey = k; tac = mountTactical(st, { edit: tacEdit, sideHost: side, onWantRolls: wantRolls }); }
+    if (!tac || lastKey !== k) { lastKey = k; tac = mountTactical(st, { edit: tacEdit, sideHost: side, onWantRolls: wantRolls, onSelect: () => { if (floorsOpen && isDM(store.get())) { $("#dmtools", el).innerHTML = toolsBlock(store.get()); bind(store.get()); } } }); }
     else tac.update();
     return;
   }
@@ -110,7 +113,7 @@ function draw() {
     const open = [...$$("details[open]", rol)].map(d => d.dataset.k);
     rol.innerHTML = sessionBlock(state) + directionBlock(state) + tacticalBlock(state) + showBlock(state);
     open.forEach(k => { const d = $(`details[data-k="${k}"]`, rol); if (d) d.open = true; });
-    $("#dmtools", el).innerHTML = toolsBlock(state);
+    if (!typing($("#dmtools", el))) $("#dmtools", el).innerHTML = toolsBlock(state);
     bind(state);
   }
   drawStage();
@@ -121,7 +124,8 @@ function draw() {
 function toolsBlock(state) {
   const live = liveSession(state), b = state.board;
   return `<div class="dmquick"><span class="dmq-s">${live ? `<b>${esc(sessionName(live))}</b>` : "Sin sesión"}${b ? ` · ${esc(b.name)}` : ""}</span>
-    ${b ? `${tactical(state) ? "" : `<button class="btn small gold" data-show='{"type":"tactical"}'>Mostrar la mesa</button>`}<button class="btn small" id="qtedit" aria-pressed="${tacEdit}" title="Editar la mesa (los jugadores siguen viendo la mesa)">✏️ ${tacEdit ? "Terminar" : "Editar"}</button><button class="btn small" id="qtmon" title="Añadir criaturas a la mesa">👹 Criaturas</button>` : ""}</div>`;
+    ${b ? `${tactical(state) ? "" : `<button class="btn small gold" data-show='{"type":"tactical"}'>Mostrar la mesa</button>`}<button class="btn small" id="qtedit" aria-pressed="${tacEdit}" title="Editar la mesa (los jugadores siguen viendo la mesa)">✏️ ${tacEdit ? "Terminar" : "Editar"}</button><button class="btn small" id="qtmon" title="Añadir criaturas a la mesa">👹 Criaturas</button><button class="btn small" id="qtfloor" aria-pressed="${floorsOpen}" title="Plantas del mapa: torres, sótanos…">🏰 ${esc(floorName(b))}${floorsOf(b).length > 1 ? ` <small>${floorsOf(b).length}</small>` : ""} ▾</button>` : ""}</div>
+    ${b && floorsOpen ? `<div class="dmfloors">${floorsHTML(state, tac && tac.selected ? tac.selected() : null)}</div>` : ""}`;
 }
 
 function sessionBlock(state) {
@@ -219,6 +223,8 @@ function bind(state) {
   const toggleEdit = () => { tacEdit = !tacEdit; store.commit("board", st => { if (st.board) st.board.editing = tacEdit || null; }); draw(); };
   on("tedit", toggleEdit);
   on("qtedit", toggleEdit);
+  on("qtfloor", () => { floorsOpen = !floorsOpen; draw(); });
+  { const fbox = $(".dmfloors", el); if (fbox) bindFloors(fbox, tac && tac.selected ? tac.selected() : null, () => { $("#dmtools", el).innerHTML = toolsBlock(store.get()); bind(store.get()); }); }
   on("qtmon", () => import("./reglas.js").then(m => m.openCreaturePicker({ title: "Añadir criaturas a la mesa", onAdd: (x, n) => m.addToBoard(x, n) })));
   $$("[data-clock]", el).forEach(b => b.onclick = () => advanceClock(+b.dataset.clock));
   $$("[data-showlore]", el).forEach(b => b.onclick = () => showEntry(b.dataset.showlore));

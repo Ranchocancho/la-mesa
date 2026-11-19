@@ -16,10 +16,11 @@ import { triggerTrap, announceLoot } from "../core/hechizos.js";
 import { EFECTOS } from "../data/efectos.js";
 import { computeVision, explored } from "../core/vision.js";
 import { renderRolls, visibleRolls } from "./tiradas.js";
-import { attacksOf, attack, acOf, nameOf } from "../core/combate.js";
+import { attacksOf, attack, acOf, nameOf, damageFor } from "../core/combate.js";
 import { phase, current, pending, beginCombat, rollInit, startRounds, endTurn, stopCombat, eco, moveBudget, speedOf, spend, toggle, ACCIONES, rangeOf, inRange, cover, modifiers, dist, metres } from "../core/turnos.js";
 import { srd } from "../core/srd.js";
-import { floorsOf, floorIdx, swapFloor, sendToFloor, addFloor, renameFloor, removeFloor } from "../core/plantas.js";
+import { nowState } from "./ahora.js";
+import { floorIdx } from "../core/plantas.js";
 import { publish, mySkin, SKIN_HEX } from "../core/dados.js";
 
 // Nombres de las miniaturas 3D (los modelos están en assets/kaykit/minis)
@@ -33,7 +34,7 @@ let hudOpen = !(window.matchMedia && window.matchMedia("(max-width: 900px)").mat
 
 export function mountTactical(host, opts = {}) {
   host.innerHTML = `<div class="tactical"><div class="boardwrap"></div><aside class="sidecol"><div class="sidetabs" role="tablist"><button role="tab" data-side="ini">Iniciativa</button><button role="tab" data-side="tir">🎲 Tiradas</button></div><div class="initcol" aria-label="Iniciativa"></div><div class="rollcol" hidden></div></aside><div class="hud"></div>
-    <button class="btn small viewtoggle" id="v3d" title="Cambiar entre la mesa en 3D y el plano en 2D"></button><div class="turnbar" hidden></div><div class="floorbar" hidden></div><div class="editbadge" hidden>✏️ El máster está retocando la mesa…</div><div class="turnbanner" hidden></div><div class="dboxes l"></div><div class="dboxes r"></div></div>`;
+    <div class="topbar"><div class="tb-now" aria-live="polite"></div><div class="turnbar"></div><div class="tb-right"><div class="tb-ctl"></div><button class="btn small" id="v3d" title="Cambiar entre la mesa en 3D y el plano en 2D"></button></div></div><div class="editbadge" hidden>✏️ El máster está retocando la mesa…</div><div class="turnbanner" hidden></div><div class="taskcall" hidden></div><div class="dboxes l"></div><div class="dboxes r"></div></div>`;
   // Para los jugadores, la iniciativa va en su columna fija de la derecha (opts.sideHost) y el tablero ocupa todo el ancho
   if (opts.sideHost) { $(".sidecol", host).remove(); $(".tactical", host).classList.add("noside"); opts.sideHost.innerHTML = `<div class="initcol" aria-label="Iniciativa"></div>`; }
   const sideRoot = opts.sideHost || host;
@@ -46,6 +47,7 @@ export function mountTactical(host, opts = {}) {
   const S = () => store.get();
   const me = () => (currentUser(S()) || {}).id;
   const bopts = {
+    controlsHost: $(".tb-ctl", host),
     model: () => ({ grid: S().board, tokens: S().tokens }),
     dm: isDM(S()), edit: !!opts.edit && isDM(S()),
     // En combate, cada uno mueve su figura solo en su turno; el máster, siempre
@@ -93,7 +95,7 @@ export function mountTactical(host, opts = {}) {
     onSelectProp: id => { selPropId = id; if (id) hudOpen = true; drawHud(); },
     decorate: t => { const c = charOf(S(), t); return { ...(c ? { name: c.name, color: c.color, portrait: c.portrait } : t.portrait ? { portrait: t.portrait } : {}), isTurn: S().board.turn === t.id }; },
     hpOf: t => hpOf(S(), t),
-    onSelect: id => { sel = id; drawHud(); },
+    onSelect: id => { sel = id; drawHud(); if (opts.onSelect) opts.onSelect(id); },
     charOf: t => charOf(S(), t),
     chars: () => S().characters,
     setFog: v => store.commit("board", st => { st.board.fog = v; }),
@@ -108,7 +110,8 @@ export function mountTactical(host, opts = {}) {
   function mountBoard() {
     if (board && board.dispose) board.dispose();
     bw.innerHTML = ""; bw.className = "boardwrap"; board = null;
-    const tg = $("#v3d", host); tg.textContent = use3d() ? "Ver plano 2D" : "Ver mesa 3D"; tg.hidden = !!opts.edit;
+    $(".tb-ctl", host).innerHTML = "";
+    const tg = $("#v3d", host); tg.textContent = use3d() ? "🗺 Plano 2D" : "🎲 Mesa 3D"; tg.hidden = !!opts.edit;
     if (use3d()) import("./tablero3d.js").then(m => { if (!m.webglOK) throw new Error("sin WebGL"); board = m.createBoard3D(bw, bopts); if (sel) board.select(sel); drawHud(); })
       .catch(e => { console.warn("Vista 3D no disponible", e); want3d = false; mountBoard(); });
     else board = createBoard(bw, bopts);
@@ -133,30 +136,6 @@ export function mountTactical(host, opts = {}) {
     return { from: a.id, to: t.id, color: col, label: txt };
   }
 
-  // Plantas del mapa (torres, sótanos…): el máster cambia de planta, con o sin el grupo, o manda una ficha a otra
-  let floorSig = "";
-  function drawFloors() {
-    const s = S(), dm = isDM(s), g = s.board, fb = $(".floorbar", host); if (!g || !fb) return;
-    const fl = floorsOf(g), cur = floorIdx(g);
-    if (!dm && fl.length < 2) { fb.hidden = true; floorSig = ""; return; }
-    const selT = dm && sel && s.tokens.find(t => t.id === sel);
-    const html = `<button class="flcur" data-flopen title="${dm ? "Plantas del mapa" : "Planta en la que estáis"}">🏰 <b>${esc(fl[cur].name)}</b>${fl.length > 1 ? ` <small>${cur + 1}/${fl.length}</small>` : ""}${dm ? " ▾" : ""}</button>
-      ${dm && floorOpen ? `<div class="flpop"><p class="note">Plantas (la de arriba es la más alta)</p>${fl.map((f, i) => ({ f, i })).reverse().map(({ f, i }) => `<div class="flrow${i === cur ? " on" : ""}">
-        <div class="flname">${floorRen === i ? `<input data-flname="${i}" value="${esc(f.name)}" maxlength="40">` : `<b>${esc(f.name)}</b>`}${i === cur ? `<small>a la vista</small>` : `<small>${(f.tokens || []).length} fichas</small>`}<button class="flic" data-flren="${i}" title="Renombrar">✎</button>${i !== cur ? `<button class="flic" data-fldel="${i}" title="Quitar esta planta">🗑</button>` : ""}</div>
-        ${i !== cur ? `<div class="flacts"><button class="btn small gold" data-flgo="${i}" data-carry="pcs" title="Cambia la mesa a esta planta y se lleva a los personajes">Ir con el grupo</button><button class="btn small" data-flgo="${i}" data-carry="none" title="Cambia la mesa a esta planta; los personajes se quedan donde estaban">Ir sin nadie</button>${selT ? `<button class="btn small" data-flsend="${i}" title="La ficha pasa a esa planta; la mesa no cambia">Enviar a ${esc(nameOf(s, selT))}</button>` : ""}</div>` : ""}</div>`).join("")}
-        <div class="row"><button class="btn small" data-fladd="up">＋ Planta encima</button><button class="btn small" data-fladd="down">＋ Sótano</button></div></div>` : ""}`;
-    if (html === floorSig && !fb.hidden) return;
-    if (fb.contains(document.activeElement) && document.activeElement.tagName === "INPUT") return;
-    floorSig = html; fb.hidden = false; fb.innerHTML = html;
-    const go = (fn) => store.commit("board", st => { fn(st); });
-    $("[data-flopen]", fb).onclick = () => { if (!dm) return; floorOpen = !floorOpen; floorRen = null; drawFloors(); };
-    $$("[data-flgo]", fb).forEach(b => b.onclick = () => { const i = +b.dataset.flgo, pcs = b.dataset.carry === "pcs"; go(st => { st.tokens = swapFloor(st.board, st.tokens, i, new Set(pcs ? st.tokens.filter(t => t.kind === "pc").map(t => t.id) : [])); }); floorOpen = false; toast(`Ahora en la mesa: ${floorsOf(S().board)[floorIdx(S().board)].name}`); });
-    $$("[data-flsend]", fb).forEach(b => b.onclick = () => { const i = +b.dataset.flsend, id = sel; go(st => { st.tokens = sendToFloor(st.board, st.tokens, id, i); }); sel = null; toast("Ficha enviada a otra planta"); });
-    $$("[data-fladd]", fb).forEach(b => b.onclick = () => go(st => { addFloor(st.board, b.dataset.fladd === "down"); }));
-    $$("[data-flren]", fb).forEach(b => b.onclick = () => { floorRen = +b.dataset.flren; floorSig = ""; drawFloors(); const i = $("[data-flname]", fb); if (i) { i.focus(); i.select(); } });
-    $$("[data-flname]", fb).forEach(i => { const ok = () => { const v = i.value.trim(), n = +i.dataset.flname; floorRen = null; i.blur(); if (v) go(st => renameFloor(st.board, n, v)); else drawFloors(); }; i.onkeydown = e => { if (e.key === "Enter") ok(); if (e.key === "Escape") { floorRen = null; i.blur(); floorSig = ""; drawFloors(); } }; i.onblur = () => { if (floorRen != null) ok(); }; });
-    $$("[data-fldel]", fb).forEach(b => b.onclick = () => { if (!b.dataset.sure) { b.dataset.sure = 1; b.textContent = "¿Seguro?"; return; } go(st => removeFloor(st.board, +b.dataset.fldel)); });
-  }
   // Destellos de herida/curación en la fila de iniciativa y en la tira superior
   const hpSeen = new Map(), flashes = new Map(); let lastIni = "", lastStrip = "";
   function flashOf(id, h) {
@@ -169,7 +148,6 @@ export function mountTactical(host, opts = {}) {
     return " fx-" + f.k;
   }
   function drawInit() {
-    drawFloors();
     { const eb = $(".editbadge", host); if (eb) eb.hidden = !(S().board && S().board.editing) || isDM(S()); }
     const s = S(), dm = isDM(s), b = s.board, ph = phase(s), cur = current(s);
     const vis = t => dm || !t.hidden;
@@ -211,17 +189,37 @@ export function mountTactical(host, opts = {}) {
   }
 
   // Cola de turnos sobre la mesa y aviso de cambio de turno
+  // Panel «Ahora» (izquierda de la barra superior): qué pasa y quién tiene que hacer qué
+  let nowSig = "", lastTaskKey;
+  function drawNow() {
+    const s = S(), dm = isDM(s), N = nowState(s, me(), dm), box = $(".tb-now", host);
+    const html = `<div class="nowhead">${esc(N.head)}${N.next ? `<small> · después: ${esc(N.next)}${N.nextMine ? " (tú)" : ""}</small>` : ""}</div>
+      <div class="nowtask">${N.who ? `<b class="nowwho">${esc(N.who)}</b>` : ""}<span>${esc(N.text)}</span></div>
+      ${N.eco || N.acts.length ? `<div class="nowrow">${N.eco ? `<span class="noweco"><i class="${N.eco.act ? "used" : ""}" title="Acción">A</i><i class="${N.eco.bonus ? "used" : ""}" title="Acción adicional">+</i><em title="Movimiento">👣 ${esc(N.eco.mov)}</em></span>` : ""}${N.acts.map((a, i) => `<button class="btn small${a.gold ? " gold" : ""}" data-now="${i}">${esc(a.label)}</button>`).join("")}</div>` : ""}`;
+    box.className = `tb-now ${N.tone || ""}${N.mine ? " me" : ""}`;
+    if (html !== nowSig) {
+      nowSig = html; box.innerHTML = html;
+      $$("[data-now]", box).forEach(b => b.onclick = () => { const a = N.acts[+b.dataset.now]; if (!a) return;
+        if (a.k === "begin") { beginCombat(); toast("¡Combate! Todos tiran iniciativa"); }
+        else if (a.k === "init") rollInit(a.id);
+        else if (a.k === "start") startRounds();
+        else if (a.k === "end") endTurn();
+        else if (a.k === "dmg") damageFor(a.id);
+        else if (a.k === "death") deathSave(a.id);
+        else if (a.k === "rolls") wantRolls(); });
+    }
+    // Aviso momentáneo cuando algo pasa a depender de ti (tirar daño, decidir una reacción, confirmar…)
+    const key = N.mine ? N.text : null;
+    if (key && key !== lastTaskKey && lastTaskKey !== undefined && !/^Te queda|^Lo has gastado/.test(key)) {
+      const t = $(".taskcall", host); t.textContent = `👉 ${N.text}`; t.hidden = false; t.classList.remove("go"); void t.offsetWidth; t.classList.add("go");
+      clearTimeout(t._h); t._h = setTimeout(() => (t.hidden = true), 2600);
+    }
+    lastTaskKey = key;
+  }
   function drawTurnBar() {
     const s = S(), ph = phase(s), cur = current(s), dm = isDM(s);
-    const mine = s.tokens.find(t => t.kind === "pc" && t.owner === me());
-    if (ph === "init" && mine && mine.init == null) {
-      tb.hidden = false; lastStrip = ""; $(".tactical", host).classList.add("strip");
-      tb.innerHTML = `<div class="tbinit"><b>⚔️ ¡Combate!</b> Tira tu iniciativa <button class="btn gold" data-iroll2="${mine.id}">🎲 Tirar iniciativa</button></div>`;
-      $("[data-iroll2]", tb).onclick = () => rollInit(mine.id);
-      return;
-    }
-    const host0 = $(".tactical", host);
-    if (!ph) { tb.hidden = true; host0.classList.remove("strip"); lastStrip = ""; return; }
+    drawNow();
+    if (!ph) { if (lastStrip !== "-") { lastStrip = "-"; tb.innerHTML = `<span class="tbidle">Sin combate · el orden de turno aparecerá aquí</span>`; } return; }
     // Tira de iniciativa pegada al borde superior: orden, retrato, vida y estados de cada uno
     const all = order(s).filter(t => (dm || !t.hidden) && !(hpOf(s, t) && hpOf(s, t).cur <= 0 && t.kind !== "pc"));
     const i = cur ? Math.max(0, all.findIndex(t => t.id === cur.id)) : 0, seq = ph === "live" ? [...all.slice(i), ...all.slice(0, i)] : all;
@@ -237,8 +235,7 @@ export function mountTactical(host, opts = {}) {
         ${h ? `<span class="ihb ${shown <= 0.25 ? "low" : shown <= 0.5 ? "mid" : ""}"><i style="width:${Math.round(shown * 100)}%"></i></span>` : ""}
         <span class="tbconds">${(t.conds || []).slice(0, 4).map(cd => { const e = estado(cd.id); return e ? `<i style="background:${e.c}"></i>` : ""; }).join("")}</span></span>`;
     };
-    const stripHTML = `<span class="tbround">${ph === "live" ? `Ronda ${s.board.round}` : "Iniciativa"}</span>${seq.map(chip).join("")}`;
-    tb.hidden = false; host0.classList.add("strip");
+    const stripHTML = seq.map(chip).join("") || `<span class="tbidle">Esperando iniciativas…</span>`;
     if (stripHTML !== lastStrip) {
       lastStrip = stripHTML; tb.innerHTML = stripHTML;
       $$("[data-tsel]", tb).forEach(x => x.onclick = () => { if (board) board.select(x.dataset.tsel); });
@@ -252,6 +249,7 @@ export function mountTactical(host, opts = {}) {
         banner.className = "turnbanner" + (mineNow ? " mine" : ""); banner.hidden = false;
         clearTimeout(banner._h); banner._h = setTimeout(() => (banner.hidden = true), 2200);
         if (mineNow) import("../core/sonido.js").then(m => m.sound.play("holy"));
+        else { const N = nowState(s, me(), isDM(s)); if (N.nextMine) toast("Prepárate: después te toca a ti"); }
         if (board && board.select && mineNow) { sel = null; }
       }
     }
@@ -402,6 +400,7 @@ export function mountTactical(host, opts = {}) {
   if (opts.sideHost) opts.sideHost.addEventListener("click", e => { const b = e.target.closest("[data-death]"); if (b) deathSave(b.dataset.death); });
   drawInit(); drawHud(); sideShow(); drawBoxes();
   return {
+    selected: () => sel,
     update() {
       const s = S();
       if (!s.board) return;

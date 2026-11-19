@@ -122,6 +122,30 @@ function spellTable(s, r, dm) {
 const ICON = { xp: "⭐", loot: "💰", attack: "⚔", damage: "🩸", save: "🛡", check: "🎯", init: "⏱", spell: "✨", cast: "✨", heal: "✚", death: "💀", oa: "⚠", free: "🎲" };
 const first = n => String(n || "").split(" ")[0];
 function who(s, id) { const t = s.tokens.find(x => x.id === id); return t ? first(nameOf(s, t)) : ""; }
+// Quién tira (la figura, o la persona si es una tirada libre) y su color
+function actor(s, r) {
+  const t = r.tok && s.tokens.find(x => x.id === r.tok), c = t && t.kind === "pc" ? s.characters.find(x => x.id === t.char) : null;
+  const u = s.users.find(x => x.id === r.who);
+  const name = t ? first(nameOf(s, t)) : u && u.role !== "player" ? "Máster" : r.whoName ? first(r.whoName) : (u ? first(u.name) : "Alguien");
+  const color = (c && c.color) || (t && t.kind !== "pc" ? (t.kind === "npc" ? "#7d8fe0" : "#c4513f") : (u && u.role !== "player" ? "#9a7be0" : (u && u.color) || "#d6aa4e"));
+  return { name: name || "Máster", color, foe: !!t && t.kind !== "pc" };
+}
+// Para qué era la tirada, en pocas palabras
+function what(s, r) {
+  const t = who(s, r.target), w = (r.label.split(" · ")[1] || "").trim(), oa = /^Ataque de oportunidad/.test(r.label);
+  switch (r.kind) {
+    case "attack": return `${oa ? "ataque de oportunidad" : "ataca"} a <b>${esc(t)}</b>${w ? ` <em>${esc(w)}</em>` : ""}`;
+    case "damage": return `daño a <b>${esc(t)}</b>${r.dtype ? ` <em>${esc(r.dtype)}</em>` : ""}`;
+    case "spell": case "cast": { const m = r.label.match(/lanza (.+?)(?: \(nivel (\d)\))?(?: ·|$)/); return `lanza <em>${esc(m ? m[1] : r.label)}${m && m[2] ? ` · nv ${m[2]}` : ""}</em>`; }
+    case "heal": return `cura${t ? ` a <b>${esc(t)}</b>` : ""} <em>${esc((r.label.match(/lanza (.+?) sobre/) || [, ""])[1])}</em>`;
+    case "init": return "iniciativa";
+    case "death": return "salvación contra muerte";
+    case "oa": return `puede atacar de oportunidad a <b>${esc(t)}</b>`;
+    case "save": case "check": return esc(r.label.replace(/ de [A-ZÁÉÍÓÚ][\wáéíóúñ-]+( [A-ZÁÉÍÓÚ][\wáéíóúñ-]+)*$/, "").replace(/^Salvación de /, "salvación de ").replace(/^Prueba de /, "prueba de "));
+    case "loot": case "xp": return `<b>${esc(r.label)}</b>`;
+    default: return `tirada libre <em>${esc(r.expr || r.label)}</em>`;
+  }
+}
 function title(s, r) {
   const a = who(s, r.tok), t = who(s, r.target), what = (r.label.split(" · ")[1] || "").trim();
   if (r.kind === "attack") return `<b>${esc(a)}</b> → ${esc(t)}${what ? ` <em>${esc(what)}</em>` : ""}`;
@@ -143,26 +167,41 @@ function pill(r, dm, pend) {
 function rowHTML(s, r, dm, me, hasDamage, dmgRow) {
   const pend = r.status === "pending", showRes = dm || !pend || r.kind !== "attack", open = openInfo.has(r.id);
   const d20 = (r.dice || []).find(x => x.d === 20 && !x.drop), nat = d20 && (d20.v === 20 || d20.v === 1) ? d20.v : 0;
-  const val = r.total == null || r.kind === "heal" ? "" : `<span class="rv ${nat === 20 ? "n20" : nat === 1 ? "n1" : ""}">${showRes ? r.total : "?"}</span>`;
+  const A = actor(s, r), sys = r.kind === "loot" || r.kind === "xp";
+  const val = r.total == null || r.kind === "heal" || sys ? "" : `<span class="rv ${nat === 20 ? "n20" : nat === 1 ? "n1" : ""}" title="${esc(r.expr || "")}">${showRes ? r.total : "?"}</span>`;
   const canDmg = r.kind === "attack" && !pend && r.status !== "void" && r.result !== "miss" && r.dmg && !hasDamage(r.id) && (dm || r.who === me.id);
-  const dmgLine = dmgRow ? `<div class="r2 ${dmgRow.status}">🩸 <b>${dmgRow.applied != null ? "−" + dmgRow.applied : dmgRow.total}</b> ${esc(dmgRow.dtype || "")}${dmgRow.crit ? " · crítico" : ""}${dmgRow.note ? ` <small>${esc(dmgRow.note)}</small>` : ""}${dmgRow.status === "pending" && !dm ? ` <small class="wait">· el máster lo confirma</small>` : ""}
-      ${dm && dmgRow.status === "pending" ? (() => { const tr = damageTraits(s.tokens.find(x => x.id === dmgRow.target), dmgRow.dtype); return `<span class="ra2"><button class="ib gold" data-dec="${dmgRow.id}|${tr && tr.k === "resiste" ? "half" : tr && tr.k === "vulnerable" ? "double" : "ok"}" title="Aplicar${tr ? " (" + tr.k + ")" : ""}">✓${tr ? " " + (tr.k === "resiste" ? "½" : tr.k === "vulnerable" ? "×2" : "0") : ""}</button><button class="ib" data-dec="${dmgRow.id}|half" title="Mitad">½</button><button class="ib" data-edit="${dmgRow.id}" title="Cambiar">✎</button><button class="ib danger" data-dec="${dmgRow.id}|void" title="Anular">✕</button></span>`; })() : ""}</div>` : "";
+  // Fuera de turno: tiradas libres de un jugador en pleno combate cuando no le toca
+  const cur = s.board && s.board.combat === "live" && s.board.turn ? s.tokens.find(t => t.id === s.board.turn) : null;
+  const offTurn = r.kind === "free" && cur && r.who && r.seq === s.board.seq && !(cur.owner && cur.owner === r.who) && (s.users.find(u => u.id === r.who) || {}).role === "player";
+  // Segunda línea: el desenlace (impacto, daño hecho, salvación…) y lo que falta por hacer
+  const out = [];
+  if (r.kind === "attack") {
+    if (!showRes) out.push(`<span class="wait">⏳ el máster lo confirma</span>`);
+    else if (r.result) out.push(`<span class="pill ${r.result}">${RESULT[r.result]}</span>${r.ac != null && dm ? `<small>CA ${r.ac}</small>` : ""}`);
+    if (dmgRow) out.push(`<span class="dmgd ${dmgRow.status}">🩸 <b>${dmgRow.applied != null ? "−" + dmgRow.applied : dmgRow.total}</b> ${esc(dmgRow.dtype || "")}${dmgRow.crit ? " · crít." : ""}${dmgRow.applied == null && dmgRow.status === "pending" ? (dm ? "" : ` <span class="wait">⏳ se aplica</span>`) : ""}${dmgRow.note ? ` <small>${esc(dmgRow.note)}</small>` : ""}</span>`);
+    else if (r.result && r.result !== "miss" && !pend && r.status !== "void") out.push(`<span class="wait">falta el daño</span>`);
+  }
+  if (r.kind === "damage" && !dmgRow) out.push(r.applied != null ? `<span class="dmgd ok">🩸 <b>−${r.applied}</b> PG a ${esc(who(s, r.target))}</span>` : `<span class="wait">⏳ ${dm ? "aplica el daño" : "el máster lo aplica"}</span>`);
+  if ((r.kind === "save" || r.kind === "death") && r.result) out.push(`<span class="pill ${r.result === "save" ? "hit" : "miss"}">${r.result === "save" ? "✓ Salva" : "✗ Falla"}${r.dc ? ` · CD ${r.dc}` : ""}</span>`);
+  if (r.kind === "heal") out.push(`<span class="pill heal">✚ +${r.total} PG</span>`);
+  if (r.kind === "death" && r.note) out.push(`<small>${esc(r.note)}</small>`);
+  if (r.status === "void") out.push(`<span class="pill void">Anulada</span>`); else if (r.status === "mod") out.push(`<span class="pill mod" title="${esc(r.note || "")}">✎ cambiada</span>`);
+  if (offTurn) out.push(`<span class="pill off" title="Tirada libre durante el turno de otro">fuera de turno</span>`);
+  const dmgActs = dm && dmgRow && dmgRow.status === "pending" ? (() => { const tr = damageTraits(s.tokens.find(x => x.id === dmgRow.target), dmgRow.dtype); return `<button class="ib gold" data-dec="${dmgRow.id}|${tr && tr.k === "resiste" ? "half" : tr && tr.k === "vulnerable" ? "double" : "ok"}" title="Aplicar el daño${tr ? " (" + tr.k + ")" : ""}">✓ Aplicar${tr ? " " + (tr.k === "resiste" ? "½" : tr.k === "vulnerable" ? "×2" : "0") : ""}</button><button class="ib" data-dec="${dmgRow.id}|half" title="Mitad">½</button><button class="ib" data-edit="${dmgRow.id}" title="Cambiar">✎</button><button class="ib danger" data-dec="${dmgRow.id}|void" title="Anular">✕</button>`; })() : "";
   const acts = [
-    dm && pend && r.kind === "attack" ? `<button class="ib gold" data-dec="${r.id}|ok" title="Confirmar">✓</button><button class="ib" data-dec="${r.id}|flip" title="${r.result === "miss" ? "Que impacte" : "Que falle"}">⇄</button>` : "",
-    dm && pend && r.kind === "damage" ? `<button class="ib gold" data-dec="${r.id}|ok" title="Aplicar">✓</button><button class="ib" data-dec="${r.id}|half" title="Mitad">½</button>` : "",
-    canDmg ? `<button class="ib red" data-dmg="${r.id}" title="Tirar daño">🩸 Daño${r.result === "crit" ? " ×2" : ""}</button>` : "",
-    !dm && pend && (r.kind === "attack" || r.kind === "damage") ? `<small class="wait">el máster lo confirma</small>` : ""
+    dm && pend && r.kind === "attack" ? `<button class="ib gold" data-dec="${r.id}|ok" title="Confirmar">✓ Vale</button><button class="ib" data-dec="${r.id}|flip" title="${r.result === "miss" ? "Que impacte" : "Que falle"}">⇄</button>` : "",
+    dm && pend && r.kind === "damage" ? `<button class="ib gold" data-dec="${r.id}|ok" title="Aplicar">✓ Aplicar</button><button class="ib" data-dec="${r.id}|half" title="Mitad">½</button>` : "",
+    canDmg ? `<button class="ib red" data-dmg="${r.id}" title="Tirar daño">🩸 Tirar daño${r.result === "crit" ? " ×2" : ""}</button>` : "",
+    dmgActs
   ].join("");
-  return `<div class="roll ${r.status} k-${r.kind} ${open ? "open" : ""}" data-row="${r.id}">
-    <div class="r1"><i class="ki" title="${KIND[r.kind] || ""}">${ICON[r.kind] || "🎲"}</i><span class="rt">${title(s, r)}${r.adv ? `<sup class="${r.adv > 0 ? "adv" : "dis"}" title="${r.adv > 0 ? "Ventaja" : "Desventaja"}">${r.adv > 0 ? "▲" : "▼"}</sup>` : ""}${r.secret ? `<sup title="Secreta">🔒</sup>` : ""}</span>
-      ${editing === r.id ? `<input type="number" id="rtot" value="${r.total}" aria-label="Nuevo total"><button class="ib gold" id="rtotok">OK</button>` : val}${pill(r, dm, pend)}${r.status === "void" ? `<span class="pill void">Anulada</span>` : r.status === "mod" ? `<span class="pill mod" title="${esc(r.note || "")}">✎</span>` : ""}${acts ? `<span class="ra2">${acts}</span>` : ""}</div>
-    ${dmgLine}
-    ${r.applied != null && r.kind === "damage" ? `<div class="r2">−${r.applied} PG a ${esc(who(s, r.target))}</div>` : ""}
-    ${r.kind === "death" && r.note ? `<div class="r2">${esc(r.note)}</div>` : ""}
+  return `<div class="roll ${r.status} k-${r.kind} ${open ? "open" : ""}${pend && dm && (r.kind === "attack" || r.kind === "damage") || (dmgRow && dmgRow.status === "pending" && dm) || canDmg ? " todo" : ""}" data-row="${r.id}" style="--who:${esc(A.color)}">
+    <div class="r1"><i class="ki" title="${KIND[r.kind] || ""}">${ICON[r.kind] || "🎲"}</i><span class="rt">${sys ? "" : `<b class="rwho">${esc(A.name)}</b> `}${what(s, r)}${r.adv ? `<sup class="${r.adv > 0 ? "adv" : "dis"}" title="${r.adv > 0 ? "Ventaja" : "Desventaja"}">${r.adv > 0 ? "▲" : "▼"}</sup>` : ""}${r.secret ? `<sup title="Secreta">🔒</sup>` : ""}</span>
+      ${editing === r.id ? `<input type="number" id="rtot" value="${r.total}" aria-label="Nuevo total"><button class="ib gold" id="rtotok">OK</button>` : val}</div>
+    ${out.length || acts ? `<div class="r2">${out.join(" ")}${acts ? `<span class="ra2">${acts}</span>` : ""}</div>` : ""}
     ${r.kind === "xp" ? `<div class="r2">${esc(r.note || "")}${dm && r.status === "pending" ? ` <input type="number" class="xpin" data-xpv="${r.id}" value="${r.xp.share}" aria-label="PX por personaje"><button class="ib gold" data-xpok="${r.id}">⭐ Repartir</button>` : ""}</div>` : ""}
     ${r.saves ? spellTable(s, r, dm) : ""}
     ${r.kind === "oa" && r.status === "pending" && (dm || ((s.tokens.find(t => t.id === r.tok) || {}).owner === me.id)) ? `<div class="r2"><button class="ib gold" data-oa="${r.id}">⚔ Atacar</button><button class="ib" data-oano="${r.id}">Dejar pasar</button></div>` : ""}
-    ${open ? `<div class="rdet"><div class="dice">${(r.dice || []).map(x => `<span class="dv d${x.d} ${x.drop ? "drop" : ""} ${x.d === 20 && x.v === 20 && !x.drop ? "nat20" : ""} ${x.d === 20 && x.v === 1 && !x.drop ? "nat1" : ""}">${x.v}</span>`).join("")}${r.expr && r.expr.match(/[+-]\d+$/) ? `<span class="dmod">${r.expr.match(/[+-]\d+$/)[0]}</span>` : ""}<small>${esc(r.whoName || "")} · ${esc(r.expr || "")}${r.kind === "attack" && dm && r.ac != null ? ` · CA ${r.ac}` : ""}</small></div>
+    ${open ? `<div class="rdet"><div class="dice">${(r.dice || []).map(x => `<span class="dv d${x.d} ${x.drop ? "drop" : ""} ${x.d === 20 && x.v === 20 && !x.drop ? "nat20" : ""} ${x.d === 20 && x.v === 1 && !x.drop ? "nat1" : ""}">${x.v}</span>`).join("")}${r.expr && r.expr.match(/[+-]\d+$/) ? `<span class="dmod">${r.expr.match(/[+-]\d+$/)[0]}</span>` : ""}</div>
       <div class="rl">${esc(r.label)}</div>${r.why ? `<small class="${r.adv > 0 ? "adv" : r.adv < 0 ? "dis" : ""}">${esc(r.why.join(" · "))}</small>` : ""}${r.note && r.kind !== "death" ? `<small>${esc(r.note)}</small>` : ""}
       <div class="rinfo">${rollInfo(s, r)}</div>
       ${dm && r.status !== "void" && !r.applied && r.total != null ? `<div class="r2"><button class="ib" data-edit="${r.id}">✎ Cambiar total</button><button class="ib danger" data-dec="${r.id}|void">✕ Anular</button></div>` : ""}</div>` : ""}
