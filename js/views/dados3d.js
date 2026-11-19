@@ -192,7 +192,7 @@ export function throwDice(scene, dice, at, opts = {}) {
   // Simulación completa por adelantado (grabamos el recorrido)
   const frames = [], hits = [];
   let lastVy = bodies.map(() => 0);
-  for (let s = 0; s < 420; s++) {
+  for (let s = 0; s < 300; s++) {
     world.step(1 / 60);
     frames.push(bodies.map(b => [b.position.x, b.position.y, b.position.z, b.quaternion.x, b.quaternion.y, b.quaternion.z, b.quaternion.w]));
     bodies.forEach((b, i) => { if (lastVy[i] < -4 && b.velocity.y > 0) hits.push(s); lastVy[i] = b.velocity.y; });

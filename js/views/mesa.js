@@ -405,7 +405,9 @@ export function mountTactical(host, opts = {}) {
     });
     const ax = $("#areax", R); if (ax) ax.onclick = () => { lastArea = null; drawHud(); };
     }
-  host.addEventListener("click", e => { const b = e.target.closest("[data-death]"); if (b) deathSave(b.dataset.death); });
+  // Un solo oyente por contenedor (la mesa se vuelve a montar a menudo y no deben acumularse)
+  const onDeath = e => { const b = e.target.closest("[data-death]"); if (b) deathSave(b.dataset.death); };
+  if (host._onDeath) host.removeEventListener("click", host._onDeath); host._onDeath = onDeath; host.addEventListener("click", onDeath);
   // Texto flotante sobre las figuras: daño, curación, estados, fallos, críticos y salvaciones
   const screenOf = id => { if (bw.__screenOf) return bw.__screenOf(id); const g = bw.querySelector(`[data-tok="${id}"]`); if (!g) return null; const r = g.getBoundingClientRect(); return [r.left + r.width / 2, r.top]; };
   const snapOf = s => new Map(s.tokens.map(t => { const h = hpOf(s, t); return [t.id, { hp: h ? h.cur : null, conds: (t.conds || []).map(c => c.id), pc: t.kind === "pc" }]; }));
@@ -434,7 +436,7 @@ export function mountTactical(host, opts = {}) {
       if (r.kind === "death" && r.result) { const p = screenOf(r.tok); if (p) floatAt(p[0], p[1], r.result === "save" ? "✓ Resiste" : "✗ Se apaga", r.result === "save" ? "save" : "fail", { delay: wait }); }
     }
   }
-  if (opts.sideHost) opts.sideHost.addEventListener("click", e => { const b = e.target.closest("[data-death]"); if (b) deathSave(b.dataset.death); });
+  if (opts.sideHost) { const sh = opts.sideHost; if (sh._onDeath) sh.removeEventListener("click", sh._onDeath); sh._onDeath = onDeath; sh.addEventListener("click", onDeath); }
   drawInit(); drawHud(); sideShow();
   return {
     selected: () => sel,

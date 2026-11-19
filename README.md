@@ -398,3 +398,20 @@ Con ideas de referentes: registro de combate de una frase (Baldur's Gate), proba
   - Los PX marcan quién podría subir (★).
   - En 🎭 Roleplay → «⬆ Subidas de nivel», el máster concede el nivel (a uno, a todos los que tienen PX o por hitos) cuando acaba la escena o la sesión.
   - El jugador recibe un aviso y sube desde su ficha.
+
+## Hito 22 · El combate no se atasca
+
+- **Causa del «máster tirando sin parar»**:
+  - Cada tirada de cualquiera se animaba para todos, una detrás de otra, unos 7 s cada una.
+  - Al empezar el combate había una tirada por enemigo; luego, cada ataque y cada daño.
+  - Llegaban más rápido de lo que se mostraban, así que la cola no se vaciaba.
+  - Con la pestaña en segundo plano, todo se acumulaba y se reproducía después.
+- **Ahora**:
+  - **Iniciativa de las criaturas en una sola tirada** (secreta, un d20 por criatura, con la lista de resultados).
+  - **Las tiradas que esperan caen juntas** en una sola bandeja (hasta 6), con la lista «Mirra 14 · Lobo 9…».
+  - **Nada se acumula**: lo que lleva más de 12 s esperando se descarta (queda en el registro). Con la pestaña oculta no se anima nada y, al volver, solo se ve lo último.
+  - **Más rápido**: menos tiempo de dados quietos y de resultado. Tope de 6 s por tirada pase lo que pase. En ordenadores lentos la animación no se alarga.
+  - **Animación de dados a elegir** en la bandeja (solo en tu pantalla): 🎬 Animados · ⚡ Rápidos · 🚫 Sin animación (los resultados siguen en el registro y sobre la mesa).
+- **Arreglado**:
+  - El botón de salvación contra muerte acumulaba oyentes al volver a montar la mesa: una pulsación podía lanzar varias salvaciones.
+  - La ficha del jugador se suscribía de nuevo a cada entrada en la Partida.

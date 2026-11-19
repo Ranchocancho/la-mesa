@@ -2,7 +2,9 @@
 // En su turno, cada criatura tiene movimiento (su velocidad), una acción, una acción adicional y una reacción por ronda.
 // También: alcance, cobertura y ventaja/desventaja según los estados, con el motivo escrito.
 import { store } from "./store.js";
-import { publish } from "./dados.js";
+import { publish, roll } from "./dados.js";
+import { uid } from "./store.js";
+import { currentUser } from "./session.js";
 import { toast } from "./ui.js";
 import { charOf, hpOf, order } from "./mesa.js";
 import { TERRAIN, PROPS, isDoor, doorBlocksSight } from "../data/mapas.js";
@@ -19,13 +21,15 @@ export const pending = s => s.tokens.filter(t => !t.hidden && (t.init == null ||
 
 /** 1. Iniciar combate: se borra la iniciativa y los enemigos tiran la suya (en secreto, la ve el máster). */
 export function beginCombat() {
-  const foes = store.get().tokens.filter(t => t.kind !== "pc");
+  const s0 = store.get(), foes = s0.tokens.filter(t => t.kind !== "pc");
   store.commit("board", s => { s.tokens.forEach(t => { t.init = null; t.eco = null; }); s.board.combat = "init"; s.board.turn = null; s.board.round = 0; s.board.seq = (s.board.seq || 0) + 1; });
-  for (const t of foes) {
-    const b = +t.initBonus || 0;
-    const r = publish({ kind: "init", expr: `1d20${b >= 0 ? "+" : ""}${b}`, label: `Iniciativa de ${t.name}`, by: t.id, secret: true });
-    store.commit("token", s => { const k = s.tokens.find(x => x.id === t.id); if (k) k.init = r.total; });
-  }
+  if (!foes.length) return;
+  // Todas las criaturas tiran a la vez: una sola tirada (secreta) con un d20 por criatura
+  const res = foes.map(t => { const b = +t.initBonus || 0, r = roll(`1d20${b >= 0 ? "+" : ""}${b}`); return { id: t.id, name: t.name, total: r.total, dice: r.dice }; });
+  const me = currentUser(s0);
+  store.commit("roll", st => { st.rolls = st.rolls || []; st.rolls.push({ id: uid("tir"), at: Date.now(), who: me ? me.id : null, whoName: me ? me.name : "", kind: "init",
+    label: `Iniciativa de las criaturas (${foes.length})`, expr: `${foes.length}d20`, dice: res.flatMap(x => x.dice), total: null, nat: null, secret: true, status: "ok", inits: res.map(({ id, name, total }) => ({ id, name, total })), skin: "obsidiana" }); });
+  store.commit("token", s => res.forEach(x => { const k = s.tokens.find(t => t.id === x.id); if (k) k.init = x.total; }));
 }
 /** Un personaje tira su iniciativa (d20 + Destreza). */
 export function rollInit(tokenId) {

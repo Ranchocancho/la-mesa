@@ -1,9 +1,10 @@
 // La cajetilla de dados: cuando alguien tira, sube un desplegable desde abajo con una cámara fija sobre
 // su bandeja. Todos ven rodar los mismos dados (misma semilla) y el resultado en grande.
 import * as THREE from "three";
+import { store } from "../core/store.js";
 import { throwDice, skinFor, SKINS, TW, TD } from "./dados3d.js";
 import { sound } from "../core/sonido.js";
-import { RESULT } from "../core/dados.js";
+import { RESULT, diceAnim } from "../core/dados.js";
 import { esc } from "../core/ui.js";
 
 let box = null, renderer = null, scene = null, camera = null, tick = null, raf = 0, lastT = 0;
@@ -48,7 +49,7 @@ function size() {
 }
 
 function loop(t) {
-  const dt = Math.min(0.05, (t - (lastT || t)) / 1000); lastT = t;
+  const dt = Math.min(0.12, (t - (lastT || t)) / 1000); lastT = t; // en ordenadores lentos, la animación no se alarga
   if (tick && !tick(dt)) { tick = null; }
   renderer.render(scene, camera);
   raf = tick ? requestAnimationFrame(loop) : 0;
@@ -56,23 +57,29 @@ function loop(t) {
 
 function finish(now) {
   if (!box) return;
-  clearTimeout(box._t);
+  clearTimeout(box._t); clearTimeout(box._safe);
   box.classList.remove("on", "nat20", "nat1", "show");
-  setTimeout(() => { tick = null; busy = false; next(); }, now ? 50 : 450);
+  setTimeout(() => { tick = null; busy = false; next(); }, now ? 50 : 250);
 }
 
 function next() {
   if (busy || !queue.length) return;
+  // Nunca se acumulan: lo viejo se descarta y, con la pestaña oculta, no se anima nada (al volver, solo lo último)
+  const now = Date.now();
+  for (let i = queue.length - 1; i >= 0; i--) if (now - queue[i].t > 12000) queue.splice(i, 1);
+  if (document.hidden) { if (queue.length > 1) queue.splice(0, queue.length - 1); return; }
+  if (!queue.length) return;
   // Tiradas pedidas por el máster a varios: se esperan un momento y caen juntas en la misma bandeja
   const head = queue[0];
   if (head.r.link && head.r.char && !head.waited) { head.waited = true; setTimeout(next, 900); return; }
   busy = true;
-  const group = head.r.link && head.r.char ? queue.filter(x => x.r.link === head.r.link) : [head];
+  // Si hay varias esperando, caen todas juntas en una sola bandeja (como tirar a la vez en la mesa)
+  const group = head.r.link && head.r.char ? queue.filter(x => x.r.link === head.r.link) : queue.slice(0, 6);
   group.forEach(g => queue.splice(queue.indexOf(g), 1));
   const s = head.s;
   const r = group.length > 1 ? { ...head.r, id: group.map(g => g.r.id).join("+"), dice: group.flatMap(g => g.r.dice), total: null, group: group.map(g => g.r),
-    whoName: "Tirada de grupo", label: (head.r.label || "").replace(/ de [^·]+$/, "") } : head.r;
-  if (!box) build();
+    whoName: "Varias tiradas", label: group.every(g => g.r.link && g.r.link === head.r.link) ? (head.r.label || "").replace(/ de [^·]+$/, "") : group.map(g => g.r.label || g.r.expr).join(" · ") } : head.r;
+  if (!box) { build(); box._safe = setTimeout(() => finish(false), 6000); }
   const who = r.group ? null : s.users.find(u => u.id === r.who);
   const skin = skinFor(r);
   box.style.setProperty("--skin", "#" + SKINS[skin].c.toString(16).padStart(6, "0"));
@@ -93,8 +100,8 @@ function next() {
     scene.children.filter(o => o.userData.dice).forEach(o => scene.remove(o));
     const before = new Set(scene.children);
     tick = throwDice(scene, r.dice, new THREE.Vector3(0, 0, 0), {
-      seed: r.id, skin, aim, toward: camera.position.clone(), total: r.total, quiet: true, stay: 3,
-      drama: r.kind === "attack" || r.kind === "save",
+      seed: r.id, skin, aim, toward: camera.position.clone(), total: r.total, quiet: true, stay: diceAnim() === "fast" ? 0.5 : 1.6,
+      drama: !queue.length && (r.kind === "attack" || r.kind === "save"),
       onEvent: e => {
         if (e === "hit") return sound.play("clack");
         reveal(r);
@@ -110,10 +117,12 @@ function next() {
 function reveal(r) {
   const res = box.querySelector(".dc-res"), d20 = (r.dice || []).find(x => x.d === 20 && !x.drop);
   const nat = d20 && (d20.v === 20 || d20.v === 1) ? d20.v : null;
+  if (r.inits && !r.group) r = { ...r, group: r.inits.map(x => ({ tok: x.id, label: "de " + x.name, total: x.total })) };
   res.querySelector("b").textContent = r.group ? "" : r.total;
   res.classList.toggle("multi", !!r.group);
-  if (r.group) { const nm = x => (x.label.match(/ de (.+)$/) || [, "?"])[1].split(" ")[0]; res.querySelector("small").innerHTML = r.group.map(x => `<span class="${x.result ? (x.result === "save" ? "ok" : "ko") : ""}">${esc(nm(x))} <b>${x.total}</b>${x.result ? (x.result === "save" ? " ✓" : " ✗") : ""}</span>`).join("");
-    box.classList.add("show"); clearTimeout(box._t); box._t = setTimeout(() => finish(false), 4200); return; }
+  if (r.group) { const st = store.get(), nm = x => { const t = x.tok && st.tokens.find(k => k.id === x.tok), c = t && t.kind === "pc" && st.characters.find(k => k.id === t.char);
+      return ((c || t || {}).name || (x.label.match(/ de (.+)$/) || [, x.whoName || "?"])[1]).split(" ")[0]; }; res.querySelector("small").innerHTML = r.group.map(x => `<span class="${x.result ? (x.result === "save" ? "ok" : "ko") : ""}">${esc(nm(x))} <b>${x.total}</b>${x.result ? (x.result === "save" ? " ✓" : " ✗") : ""}</span>`).join("");
+    box.classList.add("show"); clearTimeout(box._t); box._t = setTimeout(() => finish(false), queue.length ? 1600 : 2800); return; }
   const bits = [];
   if (nat === 20) bits.push("¡20 natural!");
   if (nat === 1) bits.push("Pifia");
@@ -125,14 +134,15 @@ function reveal(r) {
   if (nat === 20) box.classList.add("nat20");
   if (nat === 1) box.classList.add("nat1");
   clearTimeout(box._t);
-  box._t = setTimeout(() => finish(false), 3400);
+  box._t = setTimeout(() => finish(false), queue.length || diceAnim() === "fast" ? 1000 : 2200);
 }
 
 /** Añade una tirada a la cola del desplegable. */
 export function showRoll(r, s) {
-  if (!r || !r.dice || !r.dice.length) return;
-  queue.push({ r, s });
+  if (!r || !r.dice || !r.dice.length || diceAnim() === "off") return; // sin animación: solo el registro y los textos sobre la mesa
+  queue.push({ r, s, t: Date.now() });
   if (queue.length > 10) queue.splice(0, queue.length - 10); // si llegan muchas de golpe, solo las últimas
   next();
 }
+document.addEventListener("visibilitychange", () => { if (!document.hidden) next(); });
 addEventListener("resize", () => { if (box && box.classList.contains("on")) size(); });

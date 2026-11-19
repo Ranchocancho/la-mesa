@@ -19,7 +19,7 @@ import { $, $$, esc, toast } from "../core/ui.js";
 
 let el, closing = false, tac = null, tacEdit = false, panelHidden = false, lastKey = null;
 // Panel del máster: dos modos (Táctica de combate | Roleplay); pestañas Iniciativa | Tiradas en táctica y en la columna del jugador
-let floorsOpen = false;
+let floorsOpen = false, offAim = null;
 let dmMode = "rol", dmTab = "ini", plTab = "pj", wasTac = null, rollsSeen = 0;
 
 export function mount(root) {
@@ -34,7 +34,7 @@ export function mount(root) {
       <div class="sidetabs pltabs" role="tablist"><button role="tab" data-ptab="pj">🧙 Personaje</button><button role="tab" data-ptab="ini">⚔️ Iniciativa</button><button role="tab" data-ptab="tir">🎲 Tiradas</button></div>
       <section class="pl-pj" id="pl-pj"><div class="pl-act" id="pl-act" hidden></div><div class="pl-sheet" id="pl-sheet"></div><div class="pl-dice" id="pl-dice"></div></section>
       <section class="pl-ini" id="pl-ini" hidden></section><section class="pl-log" id="pl-log" hidden></section></aside>`;
-  onAim(() => { if (el && !isDM(store.get())) renderSheet($("#pl-sheet", el)); });
+  if (offAim) offAim(); offAim = onAim(() => { if (el && !isDM(store.get())) renderSheet($("#pl-sheet", el)); });
   $$("[data-mode]", el).forEach(b => b.onclick = () => { dmMode = b.dataset.mode; tabs(); });
   $$("[data-dtab]", el).forEach(b => b.onclick = () => { dmTab = b.dataset.dtab; tabs(); });
   $$("[data-ptab]", el).forEach(b => b.onclick = () => { plTab = b.dataset.ptab; tabs(); });
@@ -45,7 +45,7 @@ export function mount(root) {
   draw();
   return {
     update(state, label, remote) { if (label === "field" && !remote) return drawStage(); draw(); },
-    unmount() { el = null; tac = null; }
+    unmount() { el = null; tac = null; if (offAim) { offAim(); offAim = null; } }
   };
 }
 

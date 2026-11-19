@@ -6,6 +6,8 @@ import { currentUser, isDM } from "./session.js";
 export const rnd = sides => 1 + Math.floor(Math.random() * sides);
 // Juego de dados de este jugador (se guarda en su navegador y viaja con cada tirada)
 export const mySkin = () => { try { return localStorage.getItem("lamesa:dados") || "rubi"; } catch (e) { return "rubi"; } };
+export const diceAnim = () => { try { return localStorage.getItem("lamesa:anim") || "full"; } catch (e) { return "full"; } };
+export const setDiceAnim = v => { try { localStorage.setItem("lamesa:anim", v); } catch (e) { /* */ } };
 export const setMySkin = k => { try { localStorage.setItem("lamesa:dados", k); } catch (e) { /* */ } };
 
 /** Interpreta "2d6+1d4+3" → [{n,d,kh?,kl?}|{k:num}] */

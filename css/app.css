@@ -1446,3 +1446,4 @@ b.ininum{display:block}
 .lvlc small{color:var(--tenue)}.lvlc.ready{border-color:#8a6a2a;color:#ffe7b0}.lvlc.on{border-color:var(--oro);background:#33281b;color:var(--oro)}
 .flvl{display:block;margin:6px 0;padding:6px 10px;border-radius:8px;background:#3a2a12;border:1px solid var(--oro);color:#ffe7b0;font-size:13px;text-decoration:none}
 .trayo #trmod{width:48px}
+.trayo #tranim{max-width:110px;height:26px;font-size:11.5px}

@@ -1,7 +1,7 @@
 // Tabla de tiradas compartida y bandeja de dados. Todos ven las tiradas; el máster confirma, cambia o anula.
 import { store } from "../core/store.js";
 import { isDM, currentUser } from "../core/session.js";
-import { publish, RESULT, mySkin, setMySkin } from "../core/dados.js";
+import { publish, RESULT, mySkin, setMySkin, diceAnim, setDiceAnim } from "../core/dados.js";
 import { decide, damageFor, nameOf, attack, attacksOf, oaOpen, answerOA } from "../core/combate.js";
 import { applySpell } from "../core/hechizos.js";
 import { spend } from "../core/turnos.js";
@@ -59,6 +59,7 @@ export function renderRolls(el, o) {
       <div class="trayo"><select id="trskin" aria-label="Tus dados" title="Tus dados">${Object.entries(SKIN_NAMES).map(([k, n]) => `<option value="${k}" ${mySkin() === k ? "selected" : ""}>🎲 ${n}</option>`).join("")}</select>
         <input type="number" id="trmod" placeholder="+0" aria-label="Modificador" title="Modificador">
         <button class="btn small" id="tradv" aria-pressed="${adv === 1}" title="Ventaja (d20)">Vent.</button><button class="btn small" id="trdis" aria-pressed="${adv === -1}" title="Desventaja (d20)">Desv.</button>
+        <select id="tranim" title="Animación de dados (solo en tu pantalla)" aria-label="Animación de dados">${[["full", "🎬 Animados"], ["fast", "⚡ Rápidos"], ["off", "🚫 Sin animación"]].map(([k, n]) => `<option value="${k}" ${diceAnim() === k ? "selected" : ""}>${n}</option>`).join("")}</select>
         ${dm ? `<button class="btn small" id="trsec" aria-pressed="${secret}" title="Solo la ves tú">Secreta</button>` : ""}
 </div>
     </div>`}
@@ -78,6 +79,7 @@ export function renderRolls(el, o) {
   };
   $("#trgo", el).onclick = () => throwNow(null);
   $("#trskin", el).onchange = e => setMySkin(e.target.value);
+  $("#tranim", el).onchange = e => { setDiceAnim(e.target.value); toast(e.target.value === "off" ? "Dados sin animación: verás los resultados en el registro" : "Animación de dados cambiada"); };
   const cl = $("#trclear", el); if (cl) cl.onclick = () => { pool = {}; renderRolls(el); };
   $("#trexpr", el).onkeydown = e => { if (e.key === "Enter") $("#trgo", el).click(); };
   $("#tradv", el).onclick = () => { adv = adv === 1 ? 0 : 1; renderRolls(el); };
@@ -138,7 +140,7 @@ function what(s, r) {
     case "damage": return `daño a <b>${esc(t)}</b>${r.dtype ? ` <em>${esc(r.dtype)}</em>` : ""}`;
     case "spell": case "cast": { const m = r.label.match(/lanza (.+?)(?: \(nivel (\d)\))?(?: ·|$)/); return `lanza <em>${esc(m ? m[1] : r.label)}${m && m[2] ? ` · nv ${m[2]}` : ""}</em>`; }
     case "heal": return `cura${t ? ` a <b>${esc(t)}</b>` : ""} <em>${esc((r.label.match(/lanza (.+?) sobre/) || [, ""])[1])}</em>`;
-    case "init": return "iniciativa";
+    case "init": return r.inits ? `iniciativa de ${r.inits.length} criaturas` : "iniciativa";
     case "death": return "salvación contra muerte";
     case "oa": return `puede atacar de oportunidad a <b>${esc(t)}</b>`;
     case "save": case "check": return esc(r.label.replace(/ de [A-ZÁÉÍÓÚ][\wáéíóúñ-]+( [A-ZÁÉÍÓÚ][\wáéíóúñ-]+)*$/, "").replace(/^Salvación de /, "salvación de ").replace(/^Prueba de /, "prueba de "));
@@ -194,6 +196,7 @@ function rowHTML(s, r, dm, me, hasDamage, dmgRow) {
   if (r.kind === "damage" && !dmgRow) out.push(r.applied != null ? `<span class="dmgd ok">🩸 <b>−${r.applied}</b> PG a ${esc(who(s, r.target))}</span>` : `<span class="wait">⏳ ${dm ? "aplica el daño" : "el máster lo aplica"}</span>`);
   if ((r.kind === "save" || r.kind === "death") && r.result) out.push(`<span class="pill ${r.result === "save" ? "hit" : "miss"}">${r.result === "save" ? "✓ Salva" : "✗ Falla"}${r.dc ? ` · CD ${r.dc}` : ""}</span>`);
   if (r.kind === "heal") out.push(`<span class="pill heal">✚ +${r.total} PG</span>`);
+  if (r.inits) out.push(r.inits.map(x => `<span class="rqans">${esc(x.name.split(" ")[0])} <b>${x.total}</b></span>`).join(" "));
   if (r.kind === "death" && r.note) out.push(`<small>${esc(r.note)}</small>`);
   if (r.status === "void") out.push(`<span class="pill void">Anulada</span>`); else if (r.status === "mod") out.push(`<span class="pill mod" title="${esc(r.note || "")}">✎ cambiada</span>`);
   if (offTurn) out.push(`<span class="pill off" title="Tirada libre durante el turno de otro">fuera de turno</span>`);
