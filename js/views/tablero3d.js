@@ -174,6 +174,19 @@ function labelSprite(text, sub, pct, color) {
   return s;
 }
 
+// Barra de vida siempre visible sobre cada figura (exacta para el máster y los personajes; aproximada para los enemigos)
+function hpBarSprite(pct, txt, color) {
+  const c = document.createElement("canvas"); c.width = 192; c.height = 40; const g = c.getContext("2d");
+  g.fillStyle = "rgba(14,10,8,.88)"; g.beginPath(); g.roundRect(2, 4, 188, 32, 10); g.fill();
+  g.strokeStyle = color; g.lineWidth = 2.5; g.stroke();
+  const w = 176 * Math.max(0, Math.min(1, pct));
+  g.fillStyle = "#3a1b16"; g.beginPath(); g.roundRect(8, 10, 176, 20, 6); g.fill();
+  if (w > 0) { const gr = g.createLinearGradient(0, 10, 0, 30); const base = pct > 0.5 ? ["#9bd06a", "#4f7d2a"] : pct > 0.25 ? ["#f0c85a", "#a37a1e"] : ["#ff7a62", "#a3291c"]; gr.addColorStop(0, base[0]); gr.addColorStop(1, base[1]); g.fillStyle = gr; g.beginPath(); g.roundRect(8, 10, Math.max(8, w), 20, 6); g.fill(); }
+  if (txt) { g.font = "bold 19px Georgia"; g.textAlign = "center"; g.textBaseline = "middle"; g.lineWidth = 4; g.strokeStyle = "rgba(0,0,0,.85)"; g.strokeText(txt, 96, 21); g.fillStyle = "#fff"; g.fillText(txt, 96, 21); }
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
+  const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, depthTest: false, transparent: true }));
+  s.scale.set(2.9, 0.6, 1); s.renderOrder = 9; return s;
+}
 function condTag(conds) {
   const list = conds.map(cd => ({ e: estado(cd.id || cd), lvl: cd.lvl })).filter(x => x.e);
   const c = document.createElement("canvas"), rowH = 50; c.width = 400; c.height = rowH * list.length + 10;
@@ -343,7 +356,7 @@ export function createBoard3D(host, opts) {
       fm.castShadow = fm.receiveShadow = true; grp.add(fm);
     }
     // Escenografía
-    for (const p of g.props || []) {
+    for (const p of g.props || []) { try {
       if (!propVisible(p, opts.dm)) continue;
       const x = cx(p.c), z = cz(p.r);
       let obj = null;
@@ -395,7 +408,7 @@ export function createBoard3D(host, opts) {
         grp.add(light); newTorches.push({ light, power: L.power, base: 34 * L.power, seed: Math.random() * 10 });
       }
       grp.add(w);
-    }
+    } catch (e) { console.warn("Pieza sin montar", p.k, e); } }
     if (my !== build) return;
     // Sustituir el escenario anterior de golpe (sin parpadeos)
     world.children.slice().forEach(o => world.remove(o));
@@ -424,6 +437,11 @@ export function createBoard3D(host, opts) {
     sel.rotation.x = -Math.PI / 2; sel.position.y = 0.05; sel.visible = false; rec.root.add(sel); rec.sel = sel;
     const turn = new THREE.Mesh(new THREE.CylinderGeometry(1.7, 1.7, 7, 32, 1, true), new THREE.MeshBasicMaterial({ color: 0xffc860, transparent: true, opacity: 0.12, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending }));
     turn.position.y = 3.5; turn.visible = false; rec.root.add(turn); rec.turn = turn;
+    // Efecto de herida o curación: onda en la peana y columna de luz
+    const pulse = new THREE.Mesh(new THREE.RingGeometry(1.3, 1.75, 48), new THREE.MeshBasicMaterial({ color: 0xff3a2a, transparent: true, opacity: 0, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending }));
+    pulse.rotation.x = -Math.PI / 2; pulse.position.y = 0.32; pulse.visible = false; rec.root.add(pulse); rec.pulse = pulse;
+    const beam = new THREE.Mesh(new THREE.CylinderGeometry(1.5, 1.6, 6, 32, 1, true), new THREE.MeshBasicMaterial({ color: 0x6cff8a, transparent: true, opacity: 0, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending }));
+    beam.position.y = 3; beam.visible = false; rec.root.add(beam); rec.beam = beam; rec.fxT = 0;
     tokGroup.add(rec.root);
     rec.miniKey = miniFor(t, opts.charOf(t));
     await dressToken(rec, t);
@@ -521,6 +539,10 @@ export function createBoard3D(host, opts) {
         rec.hitT = 1; if (fxReady) sound.play("hit");
         if (rec.mixer) { play(rec, "Hit_A", true); setTimeout(() => { if (!rec.down) play(rec, "Idle"); }, 700); }
       }
+      if (hp && rec.lastHp != null && hp.cur !== rec.lastHp) {
+        rec.fxT = 1; rec.fxHeal = hp.cur > rec.lastHp;
+        rec.pulse.material.color.set(rec.fxHeal ? 0x5cff7a : 0xff3a2a); rec.beam.material.color.set(rec.fxHeal ? 0x6cff8a : 0xff4a2a);
+      }
       rec.lastHp = hp ? hp.cur : null;
       if (down !== rec.down) {
         if (down && rec.lastHp != null) sound.play("down");
@@ -548,7 +570,7 @@ export function createBoard3D(host, opts) {
           else o.material = o.userData.baseMat;
         } });
       }
-      if (rec.tag) rec.tag.position.y = (selected === t.id || (opts.decorate(t) || {}).isTurn ? 5.7 : 4.6) * (+t.size || 1) + 0.4;
+      if (rec.tag) rec.tag.position.y = (selected === t.id || (opts.decorate(t) || {}).isTurn ? 5.7 : 4.75) * (+t.size || 1) + 0.45;
       const d = opts.decorate(t) || {};
       rec.turn.visible = !!d.isTurn;
       rec.sel.visible = selected === t.id;
@@ -564,15 +586,32 @@ export function createBoard3D(host, opts) {
         }
         rec.labelKey = labelKey;
       }
+      const vis = !!hp && !showLabel && !t.hidden;
+      const pctQ = hp ? (exact ? hp.cur / Math.max(1, hp.max) : (r => r > 0.75 ? 1 : r > 0.5 ? 0.7 : r > 0.25 ? 0.45 : r > 0 ? 0.18 : 0)(hp.cur / Math.max(1, hp.max))) : 0;
+      const barKey = vis ? JSON.stringify([pctQ, exact && hp.cur, exact && hp.max]) : "";
+      if (barKey !== rec.barKey) {
+        if (rec.bar) { rec.root.remove(rec.bar); rec.bar.material.map.dispose(); rec.bar = null; }
+        if (vis) { rec.bar = hpBarSprite(pctQ, exact ? `${hp.cur}/${hp.max}` : "", t.kind === "pc" ? "#d6aa4e" : t.kind === "npc" ? "#7d8fe0" : "#b33a2e"); rec.bar.position.y = 4.15 * (+t.size || 1) + 0.25; rec.root.add(rec.bar); }
+        rec.barKey = barKey;
+      }
     }
   }
 
+  // Las obras se hacen de una en una: si el máster edita mientras tanto, se monta la última versión al acabar
+  // (antes, cada cambio cancelaba la obra en curso y, editando seguido, los jugadores nunca veían la mesa)
+  let building = false, pendingG = null;
+  function queueBuild(g) {
+    if (building) { pendingG = g; return; }
+    building = true;
+    Promise.resolve().then(() => buildWorld(g)).catch(e => console.warn("Mesa 3D: no se pudo montar del todo", e))
+      .finally(() => { building = false; loadingEl.hidden = true; if (pendingG && !disposed) { const n = pendingG; pendingG = null; queueBuild(n); } });
+  }
   function sync() {
     if (disposed) return;
     const m = opts.model(); if (!m || !m.grid) return;
     const first = !G; G = m.grid;
     const sig = JSON.stringify([G.cols, G.rows, G.terrain, G.props, lowWalls]);
-    if (sig !== lastSig) { lastSig = sig; buildWorld(G); if (first) frame("persp"); }
+    if (sig !== lastSig) { lastSig = sig; queueBuild(G); if (first) frame("persp"); }
     applyAmbient(G.ambient || "interior");
     sound.ambient(G.sound || "");
     if (snd) snd.value = G.sound || "";
@@ -783,6 +822,14 @@ export function createBoard3D(host, opts) {
       } else if (rec.face != null && !drag) {
         const diff = ((rec.face - rec.root.rotation.y + Math.PI * 3) % (Math.PI * 2)) - Math.PI;
         rec.root.rotation.y += diff * Math.min(1, dt * 4);
+      }
+      if (rec.fxT > 0) {
+        rec.fxT = Math.max(0, rec.fxT - dt / 1.1); const k = 1 - rec.fxT;
+        rec.pulse.visible = rec.beam.visible = rec.fxT > 0;
+        rec.pulse.scale.setScalar(1 + k * 1.4); rec.pulse.material.opacity = rec.fxT * 0.95;
+        rec.beam.material.opacity = Math.sin(Math.min(1, k * 1.4) * Math.PI) * (rec.fxHeal ? 0.32 : 0.22);
+        rec.beam.scale.set(1 - k * 0.3, rec.fxHeal ? 0.6 + k * 0.7 : 1, 1 - k * 0.3); rec.beam.position.y = rec.fxHeal ? 1.8 + k * 2.5 : 3;
+        if (rec.bar) rec.bar.scale.set(2.9 * (1 + 0.25 * rec.fxT), 0.6 * (1 + 0.25 * rec.fxT), 1);
       }
       if (rec.sel && rec.sel.visible) rec.sel.material.opacity = 0.55 + 0.3 * Math.sin(time * 4);
       if (rec.turn && rec.turn.visible) rec.turn.material.opacity = 0.09 + 0.06 * Math.sin(time * 3);

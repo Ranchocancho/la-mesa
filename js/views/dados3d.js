@@ -37,7 +37,7 @@ function geometry(d) {
   else if (d === 10) g = d10Geometry();
   else if (d === 12) g = new THREE.DodecahedronGeometry(1.15);
   else g = new THREE.IcosahedronGeometry(1.2);
-  g.computeVertexNormals();
+  g.scale(K, K, K); g.computeVertexNormals();
   const p = g.attributes.position, faces = new Map(), verts = [], vIndex = new Map(), tris = [];
   const vid = v => { const k = v.toArray().map(x => x.toFixed(4)).join(","); if (!vIndex.has(k)) { vIndex.set(k, verts.length); verts.push(v.clone()); } return vIndex.get(k); };
   for (let i = 0; i < p.count; i += 3) {
@@ -50,7 +50,7 @@ function geometry(d) {
   }
   const list = [...faces.values()].map(f => ({ n: f.n, c: f.pts.reduce((s, q) => s.add(q), new THREE.Vector3()).multiplyScalar(1 / f.pts.length) }));
   // Forma de colisión: el box es exacto; el resto, poliedro convexo
-  const shape = d === 6 ? new CANNON.Box(new CANNON.Vec3(0.675, 0.675, 0.675))
+  const shape = d === 6 ? new CANNON.Box(new CANNON.Vec3(0.675 * K, 0.675 * K, 0.675 * K))
     : new CANNON.ConvexPolyhedron({ vertices: verts.map(v => new CANNON.Vec3(v.x, v.y, v.z)), faces: tris });
   return (GEO[d] = { g, faces: list, shape });
 }
@@ -59,18 +59,20 @@ function labelTex(text, ink) {
   const k = text + ink; if (LABEL.has(k)) return LABEL.get(k);
   const c = document.createElement("canvas"); c.width = c.height = 128;
   const g = c.getContext("2d"); g.textAlign = "center"; g.textBaseline = "middle";
-  g.font = `bold ${text.length > 2 ? 46 : 66}px Georgia`;
-  g.fillStyle = "rgba(0,0,0,.35)"; g.fillText(text, 66, 70);
-  g.fillStyle = ink; g.fillText(text, 64, 67);
-  if (text === "6" || text === "9") g.fillRect(44, 104, 40, 6);
-  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4; LABEL.set(k, t); return t;
+  // Números grandes con contorno: que se lean desde arriba aunque el dado sea pequeño
+  g.font = `900 ${text.length > 2 ? 58 : text.length > 1 ? 74 : 86}px Georgia`;
+  const light = /^#(f|e|d)/i.test(ink);
+  g.lineJoin = "round"; g.lineWidth = 12; g.strokeStyle = light ? "rgba(0,0,0,.72)" : "rgba(255,245,220,.75)";
+  g.strokeText(text, 64, 68); g.fillStyle = ink; g.fillText(text, 64, 68);
+  if (text === "6" || text === "9") { g.fillStyle = ink; g.fillRect(42, 110, 44, 7); }
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; LABEL.set(k, t); return t;
 }
 function makeDie(d, skin, labels, dropped) {
   const { g, faces } = geometry(d), S = SKINS[skin] || SKINS.rubi;
   const mat = new THREE.MeshStandardMaterial({ color: dropped ? 0x55504a : S.c, emissive: S.e, roughness: S.r, metalness: S.m, flatShading: true, transparent: true, opacity: dropped ? 0.6 : S.o });
   const body = new THREE.Mesh(g, mat); body.castShadow = true;
   const die = new THREE.Group(); die.add(body);
-  const size = d === 4 ? 0.7 : d === 6 ? 0.9 : d === 20 ? 0.56 : d === 12 ? 0.7 : 0.66;
+  const size = K * (d === 4 ? 0.78 : d === 6 ? 1.05 : d === 20 ? 0.66 : d === 12 ? 0.82 : d === 10 ? 0.74 : 0.76);
   faces.forEach((f, i) => {
     const m = new THREE.Mesh(new THREE.PlaneGeometry(size, size), new THREE.MeshBasicMaterial({ map: labelTex(labels[i], S.ink), transparent: true, depthWrite: false }));
     m.position.copy(f.c).add(f.n.clone().multiplyScalar(0.015)); m.lookAt(m.position.clone().add(f.n));
@@ -93,15 +95,17 @@ function feltTex() {
   const c = document.createElement("canvas"); c.width = c.height = 128; const g = c.getContext("2d");
   g.fillStyle = "#2a3f2a"; g.fillRect(0, 0, 128, 128);
   for (let i = 0; i < 3000; i++) { g.fillStyle = `rgba(${Math.random() > 0.5 ? "255,255,255" : "0,0,0"},${Math.random() * 0.05})`; g.fillRect(Math.random() * 128, Math.random() * 128, 1, 1); }
-  FELT = new THREE.CanvasTexture(c); FELT.colorSpace = THREE.SRGBColorSpace; FELT.wrapS = FELT.wrapT = THREE.RepeatWrapping; FELT.repeat.set(3, 3); return FELT;
+  FELT = new THREE.CanvasTexture(c); FELT.colorSpace = THREE.SRGBColorSpace; FELT.wrapS = FELT.wrapT = THREE.RepeatWrapping; FELT.repeat.set(6, 2); return FELT;
 }
-const TRAY = 10; // lado de la bandeja
+// Bandeja alargada: los dados entran por la izquierda y la cruzan rodando (como una mesa de craps)
+export const TW = 24, TD = 7;
+const K = 1.22; // escala de los dados (más grandes = números legibles)
 function tray() {
   const g = new THREE.Group();
-  const felt = new THREE.Mesh(new THREE.BoxGeometry(TRAY, 0.2, TRAY), new THREE.MeshStandardMaterial({ map: feltTex(), roughness: 1, transparent: true }));
+  const felt = new THREE.Mesh(new THREE.BoxGeometry(TW, 0.2, TD), new THREE.MeshStandardMaterial({ map: feltTex(), roughness: 1, transparent: true }));
   felt.position.y = 0.12; felt.receiveShadow = true; g.add(felt);
   const wood = new THREE.MeshStandardMaterial({ color: 0x5a3a1e, roughness: 0.55, metalness: 0.05, transparent: true });
-  for (const [x, z, w, d] of [[0, -TRAY / 2, TRAY + 0.8, 0.4], [0, TRAY / 2, TRAY + 0.8, 0.4], [-TRAY / 2, 0, 0.4, TRAY], [TRAY / 2, 0, 0.4, TRAY]]) {
+  for (const [x, z, w, d] of [[0, -TD / 2, TW + 0.8, 0.4], [0, TD / 2, TW + 0.8, 0.4], [-TW / 2, 0, 0.4, TD], [TW / 2, 0, 0.4, TD]]) {
     const r = new THREE.Mesh(new THREE.BoxGeometry(w, 1.2, d), wood); r.position.set(x, 0.6, z); r.castShadow = r.receiveShadow = true; g.add(r);
   }
   return g;
@@ -116,6 +120,22 @@ function burstFx(scene, at, color, n = 70) {
   const pts = new THREE.Points(geo, new THREE.PointsMaterial({ map: new THREE.CanvasTexture(c), color, size: 0.7, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
   scene.add(pts); let t = 0;
   return dt => { t += dt; for (let i = 0; i < n; i++) { vel[i][1] -= 14 * dt; pos[i * 3] += vel[i][0] * dt; pos[i * 3 + 1] += vel[i][1] * dt; pos[i * 3 + 2] += vel[i][2] * dt; } geo.attributes.position.needsUpdate = true; pts.material.opacity = Math.max(0, 1 - t / 1.6); if (t > 1.6) { scene.remove(pts); geo.dispose(); return false; } return true; };
+}
+// Al pararse: anillo de luz en el tapete y una chapa con el valor encima de cada dado
+function haloFx(parent, p, color) {
+  const ring = new THREE.Mesh(new THREE.RingGeometry(0.55, 0.85, 40), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.9, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide }));
+  ring.rotation.x = -Math.PI / 2; ring.position.set(p.x, 0.26, p.z); parent.add(ring);
+  let t = 0;
+  return dt => { t += dt; const k = t / 0.9; ring.scale.setScalar(1 + k * 1.6); ring.material.opacity = Math.max(0, 0.9 * (1 - k)); if (k >= 1) { parent.remove(ring); return false; } return true; };
+}
+function badge(text, color) {
+  const c = document.createElement("canvas"); c.width = 128; c.height = 80; const g = c.getContext("2d");
+  g.fillStyle = "rgba(14,9,5,.82)"; g.strokeStyle = color; g.lineWidth = 5;
+  g.beginPath(); g.roundRect(6, 6, 116, 68, 30); g.fill(); g.stroke();
+  g.font = "900 50px Georgia"; g.textAlign = "center"; g.textBaseline = "middle"; g.fillStyle = "#fff"; g.fillText(text, 64, 43);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
+  const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, depthTest: false, transparent: true, opacity: 0 }));
+  s.scale.set(1.5, 0.94, 1); s.renderOrder = 15; return s;
 }
 function bigText(text, color) {
   const c = document.createElement("canvas"); c.width = 512; c.height = 128; const g = c.getContext("2d");
@@ -147,44 +167,44 @@ export function throwDice(scene, dice, at, opts = {}) {
   // Mundo físico: suelo de la bandeja y cuatro bandas
   const world = new CANNON.World({ gravity: new CANNON.Vec3(0, -70, 0) });
   world.allowSleep = true;
-  const dieMat = new CANNON.Material(), feltMat = new CANNON.Material();
-  world.addContactMaterial(new CANNON.ContactMaterial(dieMat, feltMat, { friction: 0.35, restitution: 0.35 }));
+  const dieMat = new CANNON.Material(), feltMat = new CANNON.Material(), railMat = new CANNON.Material();
+  world.addContactMaterial(new CANNON.ContactMaterial(dieMat, feltMat, { friction: 0.24, restitution: 0.3 }));
+  world.addContactMaterial(new CANNON.ContactMaterial(dieMat, railMat, { friction: 0.1, restitution: 0.6 }));
   world.addContactMaterial(new CANNON.ContactMaterial(dieMat, dieMat, { friction: 0.2, restitution: 0.4 }));
   const ground = new CANNON.Body({ mass: 0, material: feltMat, shape: new CANNON.Plane() }); ground.quaternion.setFromEuler(-Math.PI / 2, 0, 0); ground.position.set(0, 0.22, 0); world.addBody(ground);
-  for (const [x, z, w, d] of [[0, -TRAY / 2, TRAY, 0.4], [0, TRAY / 2, TRAY, 0.4], [-TRAY / 2, 0, 0.4, TRAY], [TRAY / 2, 0, 0.4, TRAY]]) {
-    const b = new CANNON.Body({ mass: 0, material: feltMat, shape: new CANNON.Box(new CANNON.Vec3(w / 2, 6, d / 2)) }); b.position.set(x, 6, z); world.addBody(b);
+  for (const [x, z, w, d] of [[0, -TD / 2, TW, 0.4], [0, TD / 2, TW, 0.4], [-TW / 2, 0, 0.4, TD], [TW / 2, 0, 0.4, TD]]) {
+    const b = new CANNON.Body({ mass: 0, material: railMat, shape: new CANNON.Box(new CANNON.Vec3(w / 2, 6, d / 2)) }); b.position.set(x, 6, z); world.addBody(b);
   }
-  // Desde qué lado se lanzan: desde la cámara (o en la dirección del gesto del jugador)
-  let dir = opts.aim ? new THREE.Vector3(opts.aim.x, 0, opts.aim.z) : (opts.toward ? at.clone().sub(opts.toward).setY(0) : new THREE.Vector3(0, 0, -1));
-  if (dir.lengthSq() < 1e-4) dir.set(0, 0, -1); dir.normalize();
-  const power = opts.aim ? Math.max(0.5, Math.min(1.6, opts.aim.power || 1)) : 0.9 + R() * 0.3;
-  const side = new THREE.Vector3(-dir.z, 0, dir.x);
+  // Se lanzan desde el borde izquierdo y cruzan la bandeja a lo largo (rebotan en la banda del fondo)
+  const power = opts.aim ? Math.max(0.6, Math.min(1.4, opts.aim.power || 1)) : 0.95 + R() * 0.25;
+  // En la mano: filas de hasta 3 a lo ancho, separadas para que no nazcan solapados
+  const n = list.length, rows = Math.min(3, n);
   const bodies = list.map((x, i) => {
-    const b = new CANNON.Body({ mass: 1, material: dieMat, shape: geometry(x.d).shape, angularDamping: 0.28, linearDamping: 0.08, sleepSpeedLimit: 0.45, sleepTimeLimit: 0.2 });
-    const off = (i - (list.length - 1) / 2) * 1.6;
-    const start = dir.clone().multiplyScalar(-TRAY * 0.42).add(side.clone().multiplyScalar(off * 0.6 + (R() - 0.5) * 1.5));
-    b.position.set(start.x, 3 + R() * 2 + i * 0.4, start.z);
+    const b = new CANNON.Body({ mass: 1, material: dieMat, shape: geometry(x.d).shape, angularDamping: 0.16, linearDamping: 0.04, sleepSpeedLimit: 0.4, sleepTimeLimit: 0.25 });
+    const col = Math.floor(i / rows), row = i % rows, inRow = Math.min(rows, n - col * rows);
+    const z = inRow > 1 ? -1.9 + (3.8 * row) / (inRow - 1) : (R() - 0.5) * 2;
+    b.position.set(-TW / 2 + 1.6 + col * 2 + R() * 0.3, 1.9 + R() * 0.8, z + (R() - 0.5) * 0.3);
     b.quaternion.setFromEuler(R() * 6.28, R() * 6.28, R() * 6.28);
-    const v = dir.clone().multiplyScalar(18 * power + R() * 4).add(side.clone().multiplyScalar((R() - 0.5) * 5));
-    b.velocity.set(v.x, -2 - R() * 3, v.z);
-    b.angularVelocity.set((R() - 0.5) * 30, (R() - 0.5) * 30, (R() - 0.5) * 30);
+    b.velocity.set((31 + R() * 8) * power, -1 - R() * 2, (R() - 0.5) * 7);
+    b.angularVelocity.set((R() - 0.5) * 24, (R() - 0.5) * 10, -12 - R() * 16);
     world.addBody(b); return b;
   });
   // Simulación completa por adelantado (grabamos el recorrido)
   const frames = [], hits = [];
   let lastVy = bodies.map(() => 0);
-  for (let s = 0; s < 300; s++) {
+  for (let s = 0; s < 420; s++) {
     world.step(1 / 60);
     frames.push(bodies.map(b => [b.position.x, b.position.y, b.position.z, b.quaternion.x, b.quaternion.y, b.quaternion.z, b.quaternion.w]));
     bodies.forEach((b, i) => { if (lastVy[i] < -4 && b.velocity.y > 0) hits.push(s); lastVy[i] = b.velocity.y; });
     if (s > 40 && bodies.every(b => b.sleepState === CANNON.Body.SLEEPING)) break;
   }
+  if (opts.onSim) opts.onSim(frames);
   // Rotular: la cara que ha quedado arriba muestra el resultado de la tirada
   const last = frames[frames.length - 1];
   list.forEach((x, i) => {
     const q = new THREE.Quaternion(last[i][3], last[i][4], last[i][5], last[i][6]), faces = geometry(x.d).faces;
     let best = 0, by = -2; faces.forEach((f, k) => { const y = f.n.clone().applyQuaternion(q).y; if (y > by) { by = y; best = k; } });
-    const want = Math.max(0, Math.min(faces.length - 1, x.want));
+    const want = Math.max(0, Math.min(faces.length - 1, x.want)); x.text = x.labels[want];
     if (best !== want) { const t = x.labels[best]; x.labels[best] = x.labels[want]; x.labels[want] = t; }
   });
   // Escena: bandeja + dados
@@ -206,6 +226,19 @@ export function throwDice(scene, dice, at, opts = {}) {
     while (hitIdx < hits.length && hits[hitIdx] <= f) { if (opts.onEvent) opts.onEvent("hit"); hitIdx++; }
     if (!done && f >= frames.length - 1) {
       done = true; t = frames.length / 60;
+      const hex = "#" + (SKINS[opts.skin] || SKINS.rubi).c.toString(16).padStart(6, "0");
+      list.forEach((x, i) => {
+        if (x.drop) return;
+        const p = meshes[i].die.position, die = meshes[i].die;
+        extra.push(haloFx(group, p, x.nat === 20 ? 0xffd86a : x.nat === 1 ? 0xff4a3a : 0xfff1d6));
+        // Pequeño "salto" del dado al revelar su cara
+        let k = 0; extra.push(dt2 => { k += dt2 / 0.35; die.scale.setScalar(1 + Math.sin(Math.min(1, k) * Math.PI) * 0.16); return k < 1; });
+        if (list.length > 1) {
+          const b = badge(x.text, x.nat === 20 ? "#ffd86a" : x.nat === 1 ? "#ff6a5a" : hex);
+          b.position.set(p.x, p.y + 1.7, p.z - 1.1); group.add(b); fade.push(b.material); b.material.userData.o = 1;
+          let u = 0; extra.push(dt2 => { u += dt2 / 0.25; b.material.opacity = Math.min(1, u); return u < 1; });
+        }
+      });
       const top = at.clone().add(new THREE.Vector3(0, 5, 0));
       if (opts.total != null && !opts.quiet) { label = bigText(String(opts.total), nat === 20 ? "#ffd86a" : nat === 1 ? "#ff6a5a" : "#fff"); label.position.copy(top); scene.add(label); }
       if (nat === 20 && opts.quiet) extra.push(burstFx(scene, at.clone().setY(1.5), 0xffd86a, 140));

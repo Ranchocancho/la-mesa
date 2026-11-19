@@ -53,12 +53,12 @@ export function renderRolls(el) {
   const pe = poolExpr(0);
   el.innerHTML = `<div class="tray">
       <div class="trayd">${[4, 6, 8, 10, 12, 20, 100].map(d => `<button class="die d${d} ${pool[d] ? "inpool" : ""}" data-d="${d}" title="Añadir un d${d} a la mano">d${d}${pool[d] ? `<i>${pool[d]}</i>` : ""}</button>`).join("")}</div>
-      <div class="pad" id="trpad" title="Arrastra y suelta para lanzar">${pe ? `<b>${pe}</b><span>Arrastra para lanzar</span>` : `<span><b>Arrastra aquí para lanzar</b> · 1d20 o los dados que elijas</span>`}</div>
-      <div class="trayo"><select id="trskin" aria-label="Tus dados">${Object.entries(SKIN_NAMES).map(([k, n]) => `<option value="${k}" ${mySkin() === k ? "selected" : ""}>🎲 ${n}</option>`).join("")}</select>${pe ? `<button class="btn small" id="trclear">Vaciar</button>` : ""}
-        <input type="number" id="trmod" placeholder="+0" aria-label="Modificador">
-        <button class="btn small" id="tradv" aria-pressed="${adv === 1}" title="Ventaja (d20)">Ventaja</button><button class="btn small" id="trdis" aria-pressed="${adv === -1}" title="Desventaja (d20)">Desv.</button>
+      <div class="trayh"><span class="trhand" title="Clic en un dado para añadirlo · clic derecho para quitarlo">${pe ? `<b>${pe}</b>` : `<em>1d20</em> <small>o elige dados</small>`}</span>${pe ? `<button class="btn small" id="trclear" title="Vaciar la mano">✕</button>` : ""}<button class="btn small gold" id="trgo">🎲 Tirar</button></div>
+      <div class="trayo"><select id="trskin" aria-label="Tus dados" title="Tus dados">${Object.entries(SKIN_NAMES).map(([k, n]) => `<option value="${k}" ${mySkin() === k ? "selected" : ""}>🎲 ${n}</option>`).join("")}</select>
+        <input type="number" id="trmod" placeholder="+0" aria-label="Modificador" title="Modificador">
+        <button class="btn small" id="tradv" aria-pressed="${adv === 1}" title="Ventaja (d20)">Vent.</button><button class="btn small" id="trdis" aria-pressed="${adv === -1}" title="Desventaja (d20)">Desv.</button>
         ${dm ? `<button class="btn small" id="trsec" aria-pressed="${secret}" title="Solo la ves tú">Secreta</button>` : ""}
-        <input id="trexpr" placeholder="2d6+3" aria-label="Expresión de dados"><button class="btn small gold" id="trgo">Tirar</button></div>
+        <input id="trexpr" placeholder="2d6+3" aria-label="Expresión de dados"></div>
     </div>
     <div class="rolls">${list.filter(r => !(r.kind === "damage" && r.link && list.some(x => x.id === r.link))).map(r => rowHTML(s, r, dm, me, hasDamage, list.find(x => x.kind === "damage" && x.link === r.id))).join("") || `<p class="empty">Aún no se ha tirado nada. ¡Que rueden los dados!</p>`}</div>`;
 
@@ -74,16 +74,6 @@ export function renderRolls(el) {
     adv = 0; pool = {}; $("#trexpr", el).value = ""; renderRolls(el);
   };
   $("#trgo", el).onclick = () => throwNow(null);
-  // Lanzar con la mano: dirección y fuerza del arrastre sobre el tapete
-  const pad = $("#trpad", el); let g0 = null;
-  pad.onpointerdown = e => { g0 = { x: e.clientX, y: e.clientY, t: performance.now() }; pad.setPointerCapture(e.pointerId); pad.classList.add("grab"); };
-  pad.onpointermove = e => { if (g0) pad.style.setProperty("--sx", `${(e.clientX - g0.x) / 6}px`) || pad.style.setProperty("--sy", `${(e.clientY - g0.y) / 6}px`); };
-  pad.onpointerup = e => {
-    pad.classList.remove("grab"); if (!g0) return;
-    const dx = e.clientX - g0.x, dy = e.clientY - g0.y, len = Math.hypot(dx, dy), ms = Math.max(60, performance.now() - g0.t); g0 = null;
-    if (len < 12) return throwNow(null);
-    throwNow({ fx: dx / len, fy: -dy / len, power: Math.max(0.5, Math.min(1.6, (len / ms) * 1.4)) });
-  };
   $("#trskin", el).onchange = e => setMySkin(e.target.value);
   const cl = $("#trclear", el); if (cl) cl.onclick = () => { pool = {}; renderRolls(el); };
   $("#trexpr", el).onkeydown = e => { if (e.key === "Enter") $("#trgo", el).click(); };

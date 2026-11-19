@@ -1,3 +1,4 @@
+import { cloneFloors } from "../core/plantas.js";
 // Escenas tácticas de ejemplo y utilidades para crear escenas nuevas.
 const id = p => p + "-" + Math.random().toString(36).slice(2, 8);
 const k = (c, r) => c + "," + r;
@@ -79,7 +80,8 @@ export const exampleScenes = () => [taberna(), camino(), cripta(), puente()];
 
 /** Copia una escena preparada a la mesa en directo, colocando al grupo en su punto de inicio. */
 export function sceneToBoard(scene, characters, keepPCs) {
-  const board = { scene: scene.id, name: scene.name, cols: scene.cols, rows: scene.rows, terrain: { ...scene.terrain }, props: scene.props.map(p => ({ ...p })), ambient: scene.ambient || "interior", sound: scene.sound || "", turn: null, round: 0 };
+  const floors = cloneFloors(scene, { newIds: true });
+  const board = { scene: scene.id, name: scene.name, cols: scene.cols, rows: scene.rows, terrain: { ...scene.terrain }, props: scene.props.map(p => ({ ...p })), ambient: scene.ambient || "interior", sound: scene.sound || "", turn: null, round: 0, ...(floors ? { floors, floor: scene.floor || 0 } : {}) };
   const foes = scene.tokens.map(t => ({ ...t, id: id("t"), init: null }));
   const spots = ring(scene.start || { c: 1, r: 1 }, scene);
   const pcs = characters.map((ch, i) => {

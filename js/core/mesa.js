@@ -2,6 +2,7 @@
 import { store } from "./store.js";
 import { sceneToBoard, blankScene } from "../data/escenas.js";
 import { presence } from "./presence.js";
+import { cloneFloors } from "./plantas.js";
 
 export const hpOf = (s, t) => {
   if (t.kind === "pc") { const c = s.characters.find(x => x.id === t.char); return c ? { cur: c.hp.cur, max: c.hp.max, temp: c.hp.temp } : null; }
@@ -39,7 +40,8 @@ export const removePC = charId => store.commit("board", s => {
 export const saveBoardAsScene = (name, placeId) => store.commit("board", s => {
   const b = s.board; if (!b) return;
   s.scenes.push({ id: "esc-" + Math.random().toString(36).slice(2, 8), name, place: placeId || null, cols: b.cols, rows: b.rows, terrain: { ...b.terrain }, props: b.props.map(p => ({ ...p })),
-    ambient: b.ambient || "interior", sound: b.sound || "", tokens: s.tokens.filter(t => t.kind !== "pc").map(t => ({ ...t, init: null })), start: (s.tokens.find(t => t.kind === "pc") || { c: 1, r: 1 }) });
+    ambient: b.ambient || "interior", sound: b.sound || "", tokens: s.tokens.filter(t => t.kind !== "pc").map(t => ({ ...t, init: null })), start: (s.tokens.find(t => t.kind === "pc") || { c: 1, r: 1 }),
+    ...(cloneFloors(b, { dropPCs: true }) ? { floors: cloneFloors(b, { dropPCs: true }), floor: b.floor || 0 } : {}) });
 });
 
 const d20 = () => 1 + Math.floor(Math.random() * 20);

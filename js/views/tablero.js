@@ -51,8 +51,9 @@ export function createBoard(host, opts) {
   const inside = h => { const g = opts.model().grid; return h.c >= 0 && h.r >= 0 && h.c < g.cols && h.r < g.rows; };
 
   /* ---------- Historial (deshacer / rehacer) ---------- */
-  const snap = () => { const m = opts.model(); return JSON.stringify({ cols: m.grid.cols, rows: m.grid.rows, terrain: m.grid.terrain || {}, props: m.grid.props || [], tokens: m.tokens }); };
-  const restore = j => { const d = JSON.parse(j); opts.mutate("board", mm => { Object.assign(mm.grid, { cols: d.cols, rows: d.rows, terrain: d.terrain, props: d.props }); mm.tokens.splice(0, mm.tokens.length, ...d.tokens); }); };
+  const snap = () => { const m = opts.model(); return JSON.stringify({ fl: m.grid.floor || 0, cols: m.grid.cols, rows: m.grid.rows, terrain: m.grid.terrain || {}, props: m.grid.props || [], tokens: m.tokens }); };
+  const restore = j => { const d = JSON.parse(j); opts.mutate("board", mm => { if ((mm.grid.floor || 0) !== (d.fl || 0)) return; // no deshacer sobre otra planta
+    Object.assign(mm.grid, { cols: d.cols, rows: d.rows, terrain: d.terrain, props: d.props }); mm.tokens.splice(0, mm.tokens.length, ...d.tokens); }); };
   /** Toda edición pasa por aquí: guarda el estado anterior para poder deshacer. */
   const edit = fn => { hist.undo.push(snap()); if (hist.undo.length > 60) hist.undo.shift(); hist.redo = []; opts.mutate("board", fn); tools(); };
   const undo = () => { if (!hist.undo.length) return; hist.redo.push(snap()); restore(hist.undo.pop()); tools(); };
@@ -145,14 +146,15 @@ export function createBoard(host, opts) {
       const img = dk.portrait && imgCache.get(dk.portrait);
       if (dk.portrait && !imgCache.has(dk.portrait)) { imgCache.set(dk.portrait, null); getImage(dk.portrait).then(u => { imgCache.set(dk.portrait, u); render(); }); }
       const ring = k.kind === "pc" ? "#d6aa4e" : k.kind === "npc" ? "#7d8fe0" : "#b33a2e";
-      const pct = hp ? Math.max(0, Math.min(1, hp.cur / Math.max(1, hp.max))) : 1;
+      const raw = hp ? Math.max(0, Math.min(1, hp.cur / Math.max(1, hp.max))) : 1;
+      const pct = opts.dm || k.kind === "pc" ? raw : raw > 0.75 ? 1 : raw > 0.5 ? 0.7 : raw > 0.25 ? 0.45 : raw > 0 ? 0.18 : 0; // a los enemigos se les ve "a ojo"
       return `<g class="tok ${down ? "down" : ""} ${k.hidden ? "hid" : ""} ${selected === k.id ? "sel" : ""} ${opts.canMove(k) ? "mov" : ""}" data-tok="${k.id}" transform="translate(${x},${y})">
         <clipPath id="cp-${k.id}"><circle r="${rad - 2}"/></clipPath>
         <circle r="${rad + 3}" class="halo"/>
         ${(k.conds || []).map((cd, i) => { const e = estado(cd.id); return e ? `<circle r="${rad + 5 + i * 3.5}" fill="none" stroke="${e.c}" stroke-width="3"/>` : ""; }).join("")}
         <circle r="${rad}" fill="${dk.color || "#777"}" stroke="${ring}" stroke-width="3"/>
         ${img ? `<image href="${img}" x="${-rad}" y="${-rad}" width="${rad * 2}" height="${rad * 2}" clip-path="url(#cp-${k.id})" preserveAspectRatio="xMidYMid slice"/>` : `<text class="ini" y="5">${esc((dk.name || "?").split(/\s+/).map(w => w[0]).slice(0, 2).join("").toUpperCase())}</text>`}
-        ${hp && (opts.dm || k.kind === "pc") ? `<rect x="${-rad}" y="${rad + 2}" width="${rad * 2}" height="4" class="hpbg"/><rect x="${-rad}" y="${rad + 2}" width="${rad * 2 * pct}" height="4" class="hpfg ${pct <= .25 ? "low" : pct <= .5 ? "mid" : ""}"/>` : ""}
+        ${hp ? `<rect x="${-rad}" y="${rad + 3}" width="${rad * 2}" height="6" rx="2" class="hpbg"/><rect x="${-rad}" y="${rad + 3}" width="${rad * 2 * pct}" height="6" rx="2" class="hpfg ${pct <= .25 ? "low" : pct <= .5 ? "mid" : ""}"/>` : ""}
         ${dk.isTurn ? `<circle r="${rad + 7}" class="turn"/>` : ""}
       </g>`;
     }).join("");

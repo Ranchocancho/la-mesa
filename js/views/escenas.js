@@ -11,6 +11,7 @@ import { openCreaturePicker } from "./criaturas.js";
 import { isWallT } from "../data/mapas.js";
 import { tokenEditor, bindTokenEditor } from "./mesa.js";
 import { $, $$, esc, toast } from "../core/ui.js";
+import { floorsOf, floorIdx, swapFloor, addFloor, renameFloor, removeFloor } from "../core/plantas.js";
 import { srdNow, monsterToken, findMonster } from "../core/srd.js";
 
 let el = null, openId = null, board = null, sel = null, selProp = null, placing = false, preview3d = false;
@@ -97,6 +98,9 @@ function side() {
       <label class="field" style="margin-top:8px">Lugar<select id="scplace"><option value="">Biblioteca (sin lugar)</option>${s.world.places.map(p => `<option value="${p.id}" ${sc.place === p.id ? "selected" : ""}>${esc(p.name)}</option>`).join("")}</select></label>
       <div class="tkgrid" style="margin-top:8px"><label class="field">Columnas<input type="number" min="5" max="40" id="sccols" value="${sc.cols}"></label><label class="field">Filas<input type="number" min="5" max="30" id="scrows" value="${sc.rows}"></label></div>
       <div class="row" style="margin-top:10px"><button class="btn small" id="scstart" aria-pressed="${placing}">${placing ? "Toca una casilla…" : "⚑ Punto de inicio del grupo"}</button></div>
+      <div class="scfloors" style="margin-top:10px"><small class="note">🏰 Plantas del mapa (torres, sótanos…)</small>
+        ${floorsOf(sc).map((f, i) => ({ f, i })).reverse().map(({ f, i }) => `<div class="scfl${i === floorIdx(sc) ? " on" : ""}"><input data-scfln="${i}" value="${esc(f.name)}" aria-label="Nombre de la planta">${i === floorIdx(sc) ? `<small>editando</small>` : `<button class="btn small" data-scflgo="${i}">Editar</button><button class="flic" data-scfldel="${i}" title="Quitar">🗑</button>`}</div>`).join("")}
+        <div class="row"><button class="btn small" data-scfladd="up">＋ Planta encima</button><button class="btn small" data-scfladd="down">＋ Sótano</button></div></div>
       <div class="row" style="margin-top:10px"><button class="btn small" id="sc3d" aria-pressed="${preview3d}">${preview3d ? "✏️ Editar en 2D" : "🎲 Ver en 3D"}</button></div>
       <div class="row" style="margin-top:10px"><button class="btn gold small" id="scload">Cargar en la mesa</button><button class="btn small" id="scdup">Duplicar</button><button class="btn small danger" id="scdel">Eliminar</button></div>
     </div>
@@ -118,6 +122,10 @@ function side() {
         busy.add(c + "," + r); const t = monsterToken(m, c, r); if (n > 1) t.name = `${m.n} ${placed + 1}`; x.tokens.push(t); placed++;
       } });
   } });
+  $$("[data-scflgo]", box).forEach(b => b.onclick = () => { M(x => { x.tokens = swapFloor(x, x.tokens, +b.dataset.scflgo); }); sel = null; selProp = null; if (board && board.fit) board.fit(); });
+  $$("[data-scfladd]", box).forEach(b => b.onclick = () => M(x => { addFloor(x, b.dataset.scfladd === "down"); }));
+  $$("[data-scfln]", box).forEach(i => i.onchange = () => M(x => renameFloor(x, +i.dataset.scfln, i.value.trim())));
+  $$("[data-scfldel]", box).forEach(b => b.onclick = () => { if (!b.dataset.sure) { b.dataset.sure = 1; b.textContent = "¿Seguro?"; return; } M(x => removeFloor(x, +b.dataset.scfldel)); });
   $("#sc3d", box).onclick = () => { preview3d = !preview3d; board = null; draw(); };
   $("#scstart", box).onclick = () => { placing = !placing; side(); };
   $("#scload", box).onclick = () => { loadScene(openId); location.hash = "partida"; toast("Escena cargada en la mesa"); };

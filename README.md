@@ -282,3 +282,24 @@ Con ideas de referentes: registro de combate de una frase (Baldur's Gate), proba
 - **3D**:
   - Las antorchas ya no parpadean deprisa: respiran despacio.
   - Muros y suelos son mates y con menos relieve, así que los reflejos ya no «bailan» por las paredes.
+
+## Hito 16 · Dados que ruedan, panel del máster en dos modos, plantas y vida a la vista
+
+- **Dados**: bandeja alargada (como una mesa de craps). Los dados entran por la izquierda y cruzan el tapete rebotando en las bandas. Son más grandes y llevan números con contorno. Al pararse, cada dado da un pequeño salto con un anillo de luz y, si hay varios, una chapa con su valor. El desplegable ocupa la mitad que antes (≈24 % de alto) y el total sale a la izquierda.
+- **Tiradas sin tapete de arrastrar**: botonera de dados (clic suma, clic derecho quita), «la mano» con lo elegido y **Tirar**. El d100 se queda: el SRD lo usa en tablas como la de Teletransporte, las bagatelas o la Baraja misteriosa. Se lanza como dos d10 (decenas y unidades).
+- **Panel del máster con dos modos** (en su columna secreta, la única):
+  - **⚔️ Táctica de combate**: barra rápida (Editar la mesa, Criaturas) y pestañas **Iniciativa | Tiradas**. Ya no hay columna de iniciativa dentro del tablero.
+  - **🎭 Roleplay**: sesión, dirección, escenas preparadas, escena táctica y mostrar al grupo.
+  - El panel cambia solo a Táctica al sacar la mesa y vuelve a Roleplay al retirarla.
+- **Columna del jugador**: la ficha manda (ocupa casi todo). Debajo, pestañas **🎲 Tiradas | ⚔️ Iniciativa**.
+- **Tira de iniciativa** pegada al borde superior de la mesa durante el combate. Muestra el orden, quién actúa, la vida y los estados de cada uno; toca un retrato para seleccionarlo.
+- **Filas de iniciativa mínimas**: número, nombre, puntos de estado y una barra de vida. Para los enemigos, la barra y el texto son aproximados («Herido»…).
+- **Vida siempre visible** sobre cada figura (3D y 2D), exacta para el máster y los personajes, a ojo para los enemigos. Las heridas y curaciones lanzan una onda en la peana, una columna de luz (roja o verde) y un destello en la fila y en la tira de iniciativa.
+- **Plantas del mapa** (torres, sótanos):
+  - En la mesa, el selector 🏰 permite añadir una planta encima o un sótano, y renombrarlas o quitarlas.
+  - **Ir con el grupo** cambia de planta llevándose a los personajes. **Ir sin nadie** cambia de planta sin moverlos. **Enviar a…** manda solo la ficha seleccionada a otra planta.
+  - Las escenas preparadas también tienen plantas (panel derecho del editor) y se guardan y cargan con ellas.
+- **Editar la mesa en plena partida**:
+  - Los jugadores siguen viendo la mesa, con un aviso discreto («El máster está retocando la mesa…»).
+  - La mesa 3D monta los cambios de uno en uno y siempre termina con la última versión. Antes, cada retoque cancelaba el montaje en curso y la mesa podía quedarse en «Montando la mesa…».
+  - Una pieza que falle ya no deja la mesa vacía.

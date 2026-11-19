@@ -1,7 +1,7 @@
 // La cajetilla de dados: cuando alguien tira, sube un desplegable desde abajo con una cámara fija sobre
 // su bandeja. Todos ven rodar los mismos dados (misma semilla) y el resultado en grande.
 import * as THREE from "three";
-import { throwDice, skinFor, SKINS } from "./dados3d.js";
+import { throwDice, skinFor, SKINS, TW, TD } from "./dados3d.js";
 import { sound } from "../core/sonido.js";
 import { RESULT } from "../core/dados.js";
 import { esc } from "../core/ui.js";
@@ -25,10 +25,10 @@ function build() {
   scene = new THREE.Scene();
   scene.background = new THREE.Color(0x1a110a);
   camera = new THREE.PerspectiveCamera(32, 2, 0.1, 200);
-  camera.position.set(0, 13.5, 9.2); camera.lookAt(0, 0, 0.4);
+  camera.position.set(0, 20, 3.2); camera.lookAt(0, 0, 0.2);
   scene.add(new THREE.HemisphereLight(0xfff1d6, 0x2a1a10, 0.55));
   const key = new THREE.DirectionalLight(0xfff0d8, 1.7); key.position.set(-6, 18, 8); key.castShadow = true;
-  key.shadow.mapSize.set(1024, 1024); Object.assign(key.shadow.camera, { left: -9, right: 9, top: 9, bottom: -9, near: 1, far: 50 });
+  key.shadow.mapSize.set(1024, 1024); Object.assign(key.shadow.camera, { left: -14, right: 14, top: 7, bottom: -7, near: 1, far: 60 });
   scene.add(key);
   const warm = new THREE.PointLight(0xffa04a, 40, 30); warm.position.set(6, 6, -4); scene.add(warm);
   // Interior de la cajetilla: piel oscura bajo la bandeja
@@ -40,8 +40,10 @@ function size() {
   const c = renderer.domElement, w = c.clientWidth, h = c.clientHeight;
   if (!w || !h) return;
   renderer.setSize(w, h, false); camera.aspect = w / h;
-  // Que la bandeja (10 unidades) llene el hueco tanto en móvil (vertical) como en escritorio
-  camera.fov = w / h < 1.3 ? 52 : 36;
+  // Encaja la bandeja alargada en el hueco: lo que pida más ángulo, el ancho o el fondo
+  const dist = camera.position.length(), a = w / h;
+  const vW = 2 * Math.atan(Math.tan(Math.atan((TW / 2 + 0.7) / dist)) / a), vD = 2 * Math.atan((TD / 2 + 0.8) / dist);
+  camera.fov = THREE.MathUtils.radToDeg(Math.max(vW, vD));
   camera.updateProjectionMatrix();
 }
 
@@ -84,7 +86,7 @@ function next() {
     scene.children.filter(o => o.userData.dice).forEach(o => scene.remove(o));
     const before = new Set(scene.children);
     tick = throwDice(scene, r.dice, new THREE.Vector3(0, 0, 0), {
-      seed: r.id, skin, aim, toward: camera.position.clone(), total: r.total, quiet: true, stay: 2.6,
+      seed: r.id, skin, aim, toward: camera.position.clone(), total: r.total, quiet: true, stay: 3,
       drama: r.kind === "attack" || r.kind === "save",
       onEvent: e => {
         if (e === "hit") return sound.play("clack");
@@ -113,7 +115,7 @@ function reveal(r) {
   if (nat === 20) box.classList.add("nat20");
   if (nat === 1) box.classList.add("nat1");
   clearTimeout(box._t);
-  box._t = setTimeout(() => finish(false), 3200);
+  box._t = setTimeout(() => finish(false), 3400);
 }
 
 /** Añade una tirada a la cola del desplegable. */

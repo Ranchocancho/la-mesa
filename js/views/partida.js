@@ -11,15 +11,28 @@ import { renderRolls } from "./tiradas.js";
 import { renderSheet } from "./ficha.js";
 import { $, $$, esc, toast } from "../core/ui.js";
 
-let rollsOpen = false, el, closing = false, tac = null, tacEdit = false, panelHidden = false, lastKey = null;
+let el, closing = false, tac = null, tacEdit = false, panelHidden = false, lastKey = null;
+// Panel del máster: dos modos (Táctica de combate | Roleplay); pestañas Iniciativa | Tiradas en táctica y en la columna del jugador
+let dmMode = "rol", dmTab = "ini", plTab = "tir", wasTac = null, rollsSeen = 0;
 
 export function mount(root) {
   el = document.createElement("div");
   el.className = "partida";
-  el.innerHTML = `<section class="stagebox"><div id="stage" class="stage-area"></div><div class="stagebar" id="sbar"></div></section><aside class="dmpanel" id="dmp" aria-label="Panel del máster"></aside>
-    <aside class="plpanel" id="plp" aria-label="Tu columna: iniciativa, ficha y dados" hidden><section class="pl-ini" id="pl-ini" hidden></section><section class="pl-sheet" id="pl-sheet"></section><section class="pl-dice" id="pl-dice"></section></aside>`;
+  el.innerHTML = `<section class="stagebox"><div id="stage" class="stage-area"></div><div class="stagebar" id="sbar"></div></section>
+    <aside class="dmpanel" id="dmp" aria-label="Panel del máster"><div class="dmmode" role="tablist"><button role="tab" data-mode="tac">⚔️ Táctica de combate</button><button role="tab" data-mode="rol">🎭 Roleplay</button></div>
+      <div class="dm-tac" id="dm-tac"><div class="dmtools" id="dmtools"></div><div class="sidetabs" role="tablist"><button role="tab" data-dtab="ini">Iniciativa</button><button role="tab" data-dtab="tir">🎲 Tiradas</button></div>
+        <section class="dm-ini" id="dm-ini"></section><section class="dm-dice" id="dm-dice" hidden></section></div>
+      <div class="dm-rol" id="dm-rol"></div></aside>
+    <aside class="plpanel" id="plp" aria-label="Tu columna: ficha, tiradas e iniciativa" hidden><section class="pl-sheet" id="pl-sheet"></section>
+      <div class="pl-tabs"><div class="sidetabs" role="tablist"><button role="tab" data-ptab="tir">🎲 Tiradas</button><button role="tab" data-ptab="ini">⚔️ Iniciativa</button></div>
+        <section class="pl-dice" id="pl-dice"></section><section class="pl-ini" id="pl-ini" hidden></section></div></aside>`;
+  $$("[data-mode]", el).forEach(b => b.onclick = () => { dmMode = b.dataset.mode; tabs(); });
+  $$("[data-dtab]", el).forEach(b => b.onclick = () => { dmTab = b.dataset.dtab; tabs(); });
+  $$("[data-ptab]", el).forEach(b => b.onclick = () => { plTab = b.dataset.ptab; tabs(); });
+  rollsSeen = (store.get().rolls || []).length;
   root.appendChild(el);
   closing = false; tac = null; lastKey = null;
+  { const s0 = store.get(); if (isDM(s0) && !tacEdit && s0.board && s0.board.editing) store.commit("board", st => { if (st.board) st.board.editing = null; }); }
   draw();
   return {
     update(state, label, remote) { if (label === "field" && !remote) return drawStage(); draw(); },
@@ -29,23 +42,41 @@ export function mount(root) {
 
 const tactical = s => { const p = presentationFor(s); return p && p.type === "tactical" && s.board; };
 
+function wantRolls() { if (isDM(store.get())) { dmMode = "tac"; dmTab = "tir"; } else plTab = "tir"; tabs(); }
+
+// Muestra la pestaña elegida de cada columna (y avisa con un destello si llegan tiradas a la pestaña oculta)
+function tabs() {
+  if (!el) return;
+  const s = store.get(), dm = isDM(s), tacOn = !!tactical(s);
+  const sel = (q, v, attr) => $$(q, el).forEach(b => b.setAttribute("aria-selected", b.dataset[attr] === v));
+  sel("[data-mode]", dmMode, "mode"); sel("[data-dtab]", dmTab, "dtab");
+  $("#dm-tac", el).hidden = dmMode !== "tac"; $("#dm-rol", el).hidden = dmMode !== "rol";
+  $("#dm-ini", el).hidden = dmTab !== "ini"; $("#dm-dice", el).hidden = dmTab !== "tir";
+  if (!tacOn) plTab = "tir";
+  sel("[data-ptab]", plTab, "ptab");
+  $('[data-ptab="ini"]', el).hidden = !tacOn;
+  $("#pl-dice", el).hidden = plTab !== "tir"; $("#pl-ini", el).hidden = plTab !== "ini";
+  const n = (s.rolls || []).length;
+  if (n > rollsSeen) { const b = dm ? (dmMode !== "tac" || dmTab !== "tir" ? $('[data-dtab="tir"]', el) : null) : (plTab !== "tir" ? $('[data-ptab="tir"]', el) : null); if (b) { b.classList.remove("ping"); void b.offsetWidth; b.classList.add("ping"); } }
+  rollsSeen = n;
+  if (dm && dmMode === "tac" && dmTab === "tir") renderRolls($("#dm-dice", el));
+  if (dm && dmMode === "tac" && dmTab === "ini" && !tacOn) $("#dm-ini", el).innerHTML = `<div class="dmnotac"><p>No hay ninguna mesa táctica a la vista.</p><button class="btn small gold" data-gorol>🎭 Ir a Roleplay → Escena táctica</button></div>`;
+  const g = $("[data-gorol]", el); if (g) g.onclick = () => { dmMode = "rol"; tabs(); };
+}
+
 function drawStage(force) {
   const st = $("#stage", el); if (!st) return;
-  const s = store.get();
+  const s = store.get(), dm = isDM(s);
   if (tactical(s)) {
     st.classList.add("tac");
-    const k = "tac" + tacEdit + isDM(s);
-    const side = isDM(s) ? null : $("#pl-ini", el);
-    if (side) side.hidden = false;
-    if (!tac || lastKey !== k) { lastKey = k; tac = mountTactical(st, { edit: tacEdit, sideHost: side }); }
+    const k = "tac" + tacEdit + dm;
+    const side = dm ? $("#dm-ini", el) : $("#pl-ini", el);
+    if (!tac || lastKey !== k) { lastKey = k; tac = mountTactical(st, { edit: tacEdit, sideHost: side, onWantRolls: wantRolls }); }
     else tac.update();
     return;
   }
   tac = null; st.classList.remove("tac");
-  const pi = $("#pl-ini", el); if (pi) { pi.hidden = true; pi.innerHTML = ""; }
-  let dr = $(".rolldrawer", el.querySelector(".stagebox"));
-  if (rollsOpen) { if (!dr) { dr = document.createElement("div"); dr.className = "rolldrawer"; el.querySelector(".stagebox").style.position = "relative"; el.querySelector(".stagebox").appendChild(dr); } renderRolls(dr); }
-  else if (dr) dr.remove();
+  const pi = $("#pl-ini", el); if (pi) pi.innerHTML = "";
   const key = JSON.stringify(presentationFor(s)) + JSON.stringify(s.world.places.map(p => [p.map, p.summary, p.items.length]));
   if (!force && key === lastKey && st.childElementCount) return;
   lastKey = key; renderStage(st);
@@ -63,21 +94,34 @@ function draw() {
   const typing = box => box && box.contains(document.activeElement) && /INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName);
   if (!typing($("#sbar", el))) $("#sbar", el).innerHTML = `${live ? `<b>${esc(sessionName(live))}</b> en curso${live.test ? ` · <span class="tag secret">SOLO MÁSTERES</span>` : ""}` : "No hay ninguna partida en curso"}
     ${live ? `<span class="quicknote"><input id="qnote" placeholder="📜 Anotar en la crónica…" aria-label="Nota para la crónica"><button class="btn small" id="qnotego">Anotar</button></span>` : ""}
-    <span class="grow"></span>${tactical(state) || !dm ? "" : `<button class="btn small" id="rollsbtn" aria-pressed="${rollsOpen}">🎲 Tiradas</button>`}${dm ? `<button class="btn small" id="togglepanel">${panelHidden ? "Mostrar panel" : "Ocultar panel"}</button>` : ""}<a class="btn small" href="#mundo">Mapa del mundo</a>`;
+    <span class="grow"></span>${dm ? `<button class="btn small" id="togglepanel">${panelHidden ? "Mostrar panel" : "Ocultar panel"}</button>` : ""}<a class="btn small" href="#mundo">Mapa del mundo</a>`;
   const qn = $("#qnote", el), qg = $("#qnotego", el);
   if (qg) { const go = () => { if (qn.value.trim()) { addEntry(live.id, qn.value); qn.value = ""; toast("Anotado en la crónica"); } }; qg.onclick = go; qn.onkeydown = e => { if (e.key === "Enter") go(); }; }
-  const rb = $("#rollsbtn", el); if (rb) rb.onclick = () => { rollsOpen = !rollsOpen; draw(); };
   const tp = $("#togglepanel", el);
   if (tp) tp.onclick = () => { panelHidden = !panelHidden; draw(); if (tac) setTimeout(() => tac.update(), 50); };
-  const panel = $("#dmp", el);
+  const panel = $("#dmp", el), rol = $("#dm-rol", el);
   panel.hidden = !dm || panelHidden;
-  if (dm && !panelHidden && !(closing && typing(panel))) {
-    const open = [...$$("details[open]", panel)].map(d => d.dataset.k);
-    panel.innerHTML = sessionBlock(state) + directionBlock(state) + tacticalBlock(state) + showBlock(state);
-    open.forEach(k => { const d = $(`details[data-k="${k}"]`, panel); if (d) d.open = true; });
+  // Al aparecer la mesa táctica, el panel pasa solo a «Táctica»; al retirarla, vuelve a «Roleplay»
+  const tacOn = !!tactical(state);
+  if (wasTac !== null && tacOn !== wasTac && dm) dmMode = tacOn ? "tac" : "rol";
+  if (wasTac === null && dm) dmMode = tacOn ? "tac" : "rol";
+  wasTac = tacOn;
+  if (dm && !panelHidden && !typing(rol)) {
+    const open = [...$$("details[open]", rol)].map(d => d.dataset.k);
+    rol.innerHTML = sessionBlock(state) + directionBlock(state) + tacticalBlock(state) + showBlock(state);
+    open.forEach(k => { const d = $(`details[data-k="${k}"]`, rol); if (d) d.open = true; });
+    $("#dmtools", el).innerHTML = toolsBlock(state);
     bind(state);
   }
   drawStage();
+  tabs();
+}
+
+// Barra rápida del modo Táctica: lo que el máster necesita a mano en mitad del combate
+function toolsBlock(state) {
+  const live = liveSession(state), b = state.board;
+  return `<div class="dmquick"><span class="dmq-s">${live ? `<b>${esc(sessionName(live))}</b>` : "Sin sesión"}${b ? ` · ${esc(b.name)}` : ""}</span>
+    ${b ? `${tactical(state) ? "" : `<button class="btn small gold" data-show='{"type":"tactical"}'>Mostrar la mesa</button>`}<button class="btn small" id="qtedit" aria-pressed="${tacEdit}" title="Editar la mesa (los jugadores siguen viendo la mesa)">✏️ ${tacEdit ? "Terminar" : "Editar"}</button><button class="btn small" id="qtmon" title="Añadir criaturas a la mesa">👹 Criaturas</button>` : ""}</div>`;
 }
 
 function sessionBlock(state) {
@@ -170,8 +214,12 @@ function bind(state) {
   });
   on("clear", () => show(null));
   on("xpfill", () => { const v = $("#xpall", el).value, why = $("#xpwhy", el).value; $$("[data-xpc]", el).forEach(i => (i.value = v)); $$("[data-xpr]", el).forEach(i => { if (!i.value) i.value = why; }); });
-  on("tblank", () => { tacEdit = true; blankBoard(); });
-  on("tedit", () => { tacEdit = !tacEdit; draw(); });
+  on("tblank", () => { tacEdit = true; blankBoard(); store.commit("board", st => { if (st.board) st.board.editing = true; }); });
+  // Mientras el máster retoca la mesa, los jugadores la siguen viendo (con un aviso discreto)
+  const toggleEdit = () => { tacEdit = !tacEdit; store.commit("board", st => { if (st.board) st.board.editing = tacEdit || null; }); draw(); };
+  on("tedit", toggleEdit);
+  on("qtedit", toggleEdit);
+  on("qtmon", () => import("./reglas.js").then(m => m.openCreaturePicker({ title: "Añadir criaturas a la mesa", onAdd: (x, n) => m.addToBoard(x, n) })));
   $$("[data-clock]", el).forEach(b => b.onclick = () => advanceClock(+b.dataset.clock));
   $$("[data-showlore]", el).forEach(b => b.onclick = () => showEntry(b.dataset.showlore));
   on("nobackdrop", () => setBackdrop(null));
