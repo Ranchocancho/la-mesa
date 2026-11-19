@@ -415,3 +415,83 @@ Con ideas de referentes: registro de combate de una frase (Baldur's Gate), proba
 - **Arreglado**:
   - El botón de salvación contra muerte acumulaba oyentes al volver a montar la mesa: una pulsación podía lanzar varias salvaciones.
   - La ficha del jugador se suscribía de nuevo a cada entrada en la Partida.
+
+## Hito 22b · Ataques de oportunidad según las reglas
+
+- Solo los provoca la criatura que **se mueve por sí misma en su turno** y sale del alcance de un enemigo con la reacción disponible.
+- Recolocar figuras (el máster ordenando la mesa), mover a alguien fuera de su turno (movimiento forzado) o editar la mesa ya no provoca avisos.
+- Los avisos antiguos sin turno asociado se dan por caducados.
+
+## Hito 22c · Combate limpio y en orden
+
+- **Un clic nunca mueve una figura** en la mesa 3D ni en el plano 2D. Antes, un pequeño temblor del ratón al seleccionar una figura (sobre todo pulsando en su carta de pie) la desplazaba una o dos casillas y podía disparar un ataque de oportunidad sin que nadie se moviera. Ahora hace falta arrastrar de verdad, y soltar en la misma casilla no mueve nada.
+- **Las reacciones nunca bloquean**:
+  - Caducan al cambiar el turno, o a los 30 s si nadie decide (se entiende que lo deja pasar).
+  - El panel «Ahora» se refresca solo.
+- **Cada combate empieza de cero**:
+  - Al iniciar o terminar un combate se cierran los ataques, daños, conjuros y reacciones que quedaran a medias.
+  - Se borran el origen del movimiento y los estados de turno (esquivando, destrabado).
+  - El panel «Ahora» solo mira lo del combate en curso.
+- **El orden de turno se respeta**:
+  - En combate, una criatura solo ataca, lanza conjuros o usa efectos en su turno; fuera de él, solo reacciones. Vale también para el máster y sus PNJ.
+  - En la pestaña PNJ, los ataques de una criatura a la que no le toca salen desactivados, con el aviso «No es su turno».
+
+## Hito 23 · Asistente de subida de nivel (reglas 2024)
+
+- **Datos de las 12 clases** sacados del SRD 5.2.1 en español (`js/data/progresion.js`):
+  - Los rasgos de cada nivel con su descripción.
+  - Las columnas de la tabla de clase: recursos (furias, inspiración, canalizar divinidad, forma salvaje, puntos de hechicería, concentración, ataque furtivo…), trucos, conjuros preparados y espacios por nivel (Brujo con sus espacios de pacto).
+  - La subclase del SRD de cada clase con sus rasgos.
+  - Las dotes (generales, de estilo de combate y dones épicos) con sus requisitos.
+- **El máster concede el nivel; el jugador sube con un asistente paso a paso**:
+  1. **Qué ganas**: los rasgos reales de ese nivel (automáticos, de subclase o «tendrás que elegir») y los números que cambian.
+  2. **Puntos de golpe**: valor fijo o tirada del dado de golpe + Constitución.
+  3. **Subclase** (nivel 3): la del SRD con sus rasgos, u otra del manual escrita a mano.
+  4. **Dote o mejora de característica**, en los niveles que toca a cada clase (Guerrero también 6 y 14; Pícaro también 10): +2/+1+1 con tope 20, o una dote con sus requisitos comprobados (u otra del manual).
+  5. **Don épico** (nivel 19): con su +1 (tope 30).
+  6. **Magia**: espacios que cambian, nivel máximo de conjuro, trucos y conjuros nuevos a elegir de la lista de tu clase (buscador), con la regla de cambio de conjuros de cada clase.
+  7. **Resumen antes/después** y confirmar: se actualizan nivel, PG, características, subclase, rasgos (a la pestaña Rasgos), espacios y conjuros. Queda un historial de subidas.
+- **🔭 Lo que viene**: en la ficha, tarjetas con los próximos 3 niveles (subclase, dotes, rasgos, recursos y espacios).
+- Las subclases en femenino («Campeona», «Ladrona») se reconocen como las del SRD.
+
+## Hito 24 · El lore a mano durante la partida
+
+- **📍 Aquí** (panel del máster, Roleplay): dónde está el grupo. Se marca solo al mostrar un lugar o cargar una escena suya, o eligiéndolo en el desplegable. Muestra quién hay (PNJ), facciones, eventos pendientes, dioses o batallas y escenas tácticas de ese lugar, de lo que contiene y de su región. Lo de los alrededores sale con borde discontinuo.
+- **🔎 Ficha flotante**: botón 🔎 (también en la barra de Táctica) o tecla **/**. Busca en todo el lore y abre una ficha encima de la mesa: resumen, secretos (solo máster), lugar, relaciones navegables (‹ para volver), «Mostrar a todos» y «Abrir en el Lore». Los jugadores también pueden usarla con /: solo ven lo revelado.
+- **Estado de PNJ y facciones**: vivo, herido, preso, desaparecido, muerto, y actitud aliado, neutral u hostil. Se cambia en la ficha flotante o en el Lore (solo lo ve el máster).
+- **¿Qué ha cambiado en el mundo?** Al cerrar la sesión aparecen los PNJ y facciones que han salido (vistos, mostrados o de los lugares visitados). Los cambios se apuntan en la sesión («Doran: Vivo → Muerto»), se pueden añadir al resumen y quedan en la página de la sesión en el Lore.
+- No cambia las reglas de Firestore: todo va en la sesión (documento de campaña) y en las entradas del lore.
+
+## Hito 25 · Cronología del mundo
+
+- Nueva sección **⏳ Cronología** en el Lore: una línea temporal que se desliza de izquierda a derecha (arrastrando, con la rueda, con las flechas ‹ › o con el dedo en el móvil). Cada hito tiene fecha, título, texto breve e ilustración en miniatura. Las **épocas** (p. ej. «Era de la Corona») aparecen como separadores verticales.
+- El máster crea hitos con **+ Hito**: fecha en texto («Años 640–643»), un número de **orden** para colocarlo en la línea y una época opcional. Tiene, como el resto del lore, parte pública, secretos, imagen y relaciones.
+- **▶ Contar en la mesa**: el hito sale en grande en la Partida (ilustración, fecha y texto) con la línea de miniaturas debajo. El máster avanza con › o salta a cualquier hito, y lo que cuenta queda revelado. También está en «Mostrar al grupo → ⏳ Cronología».
+- Los jugadores solo ven los hitos revelados, sin secretos. La demo trae cinco hitos de ejemplo (con una demo ya empezada no aparecen: hay que restablecerla).
+
+## Hito 26 · La mesa con más vida
+
+- **Ataques que se ven**, iguales para todos en 2D y en 3D. Cuerpo a cuerpo sale un tajo de luz delante del objetivo; a distancia, una flecha con estela; los conjuros lanzan un proyectil del color del daño (fuego naranja, frío cian, necrótico violeta…). Si acierta, saltan chispas y la figura se sacude; si falla, la flecha se pasa de largo. Encima aparece el resultado: **¡Impacto!**, **¡CRÍTICO!**, **Fallo**, y **Salva** o **Falla** en las salvaciones. Tiene sonido propio (tajo, cuerda de arco, crítico) y espera a que terminen los dados.
+- **Daño y curación flotantes**: «−9» en rojo o «+6» en verde sobre la figura cada vez que cambian sus PG.
+- **Ambiente 3D**: motas de polvo en interior, luciérnagas de noche y polen de día. Se desactivan si el sistema pide reducir el movimiento.
+- **Plano 2D más limpio**: los objetos ya no llevan un círculo oscuro detrás, fichas y objetos tienen relieve y hay una viñeta de luz según el ambiente (cálida en interior, azulada de noche).
+- **📏 Regla** en 2D (botón junto al zoom) y en 3D (junto a la cámara): arrastra de una casilla a otra y verás metros y casillas, con cada diagonal a 1,5 m como en las reglas de 2024. La medida se queda a la vista hasta la siguiente.
+- Solo afecta al dibujo: no cambia los datos ni las reglas de Firestore.
+
+## Hito 27 · Figuras que se leen
+
+- Cartulinas un 30 % más grandes (ocupan casi toda la casilla): la ilustración se ve mejor.
+- Cada figura lleva encima una **placa con su nombre y su vida que mantiene el mismo tamaño en pantalla**, esté la cámara cerca o lejos. Los personajes muestran el nombre corto («Brena», «Osric»). Quien está seleccionado o tiene el turno lleva la placa resaltada en dorado.
+- Los enemigos siguen mostrando la vida «a ojo» a los jugadores (Ileso, Herido, Malherido…).
+
+## Hito 28 · El tapete de dados, rehecho
+
+Referentes: Quantum Quest (mesa virtual con dados lanzados sobre la mesa y un panel que explica la tirada), Baldur's Gate 3 (CD visible, bonos que «llenan» el total y veredicto rotundo, pero sin su lentitud), Dice So Nice (dados 3D con materiales de verdad) y Dicey Dungeons (números enormes y legibles al instante).
+
+- **Se lanza, se coloca y se lee.** Los dados se lanzan con ganas: salen disparados, rebotan en las bandas, saltan y giran. Mientras ruedan tienen un tamaño proporcionado al tapete para tener sitio; solo crecen al colocarse. Al pararse, **se elevan y se colocan en fila mirando a la cámara**, grandes y con la cara del resultado resaltada; las demás caras se atenúan. Con ventaja o desventaja, el dado descartado queda al lado, oscuro y más pequeño.
+- **Lectura a la derecha**: dado + bonos con un contador que llena el total («13 +5 → 18»), contra qué («contra CD 14», «contra CA 12», «daño fuego») y un **sello**: ÉXITO, FALLO, IMPACTO, ¡CRÍTICO!, PIFIA o ¡20 NATURAL!
+- **Tiradas en grupo** (pedidas por el máster): los dados de todos caen juntos y cada uno lleva debajo el **nombre, el total y ✓ o ✗**. Arreglado un fallo por el que a veces una respuesta salía aparte.
+- **Hordas**: la iniciativa de muchas criaturas (o más de 6 tiradas a la vez) ya no lanza un montón de dados; aparece una **lista ordenada de mayor a menor**.
+- **Muchos dados** (8d6…): dos filas ordenadas y el desglose de cada dado encima del total.
+- **Materiales**: barniz con reflejos de estudio (sin descargas), así que rubí, zafiro, oro u obsidiana brillan como dados reales. Números grabados el doble de grandes. Cada jugador sigue eligiendo su juego.
+- **Control**: un toque en el tapete salta al resultado; otro lo cierra. Nunca se queda abierto más de 9 s. Los modos Animados, Rápidos y Sin animación siguen igual.

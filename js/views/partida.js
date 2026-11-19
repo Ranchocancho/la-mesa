@@ -16,6 +16,10 @@ import { AMBIENTES } from "../core/sonido.js";
 const LUCES = { dia: "☀️ Día", interior: "🕯 Interior", noche: "🌙 Noche" };
 import { floorName, floorsOf } from "../core/plantas.js";
 import { $, $$, esc, toast } from "../core/ui.js";
+import { hereOf, setHere, contextOf, sessionCast, markChange, changesOf, changeText, fieldsOf, badges, VITAL, STANCE, touch } from "../core/contexto.js";
+import { placePath, placeOf, LORE, timeline, tellTimeline } from "../core/lore.js";
+const openCard = id => import("./fichalore.js").then(m => m.openLoreCard(id));
+const openSearch = () => import("./fichalore.js").then(m => m.openLoreSearch());
 
 let el, closing = false, tac = null, tacEdit = false, panelHidden = false, lastKey = null;
 // Panel del máster: dos modos (Táctica de combate | Roleplay); pestañas Iniciativa | Tiradas en táctica y en la columna del jugador
@@ -43,10 +47,18 @@ export function mount(root) {
   closing = false; tac = null; lastKey = null;
   { const s0 = store.get(); if (isDM(s0) && !tacEdit && s0.board && s0.board.editing) store.commit("board", st => { if (st.board) st.board.editing = null; }); }
   draw();
+  document.addEventListener("keydown", slashKey);
   return {
     update(state, label, remote) { if (label === "field" && !remote) return drawStage(); draw(); },
-    unmount() { el = null; tac = null; if (offAim) { offAim(); offAim = null; } }
+    unmount() { el = null; tac = null; if (offAim) { offAim(); offAim = null; } document.removeEventListener("keydown", slashKey); import("./fichalore.js").then(m => m.closeLore()); }
   };
+}
+
+// «/» abre el buscador del lore (sin robar la tecla si estás escribiendo)
+function slashKey(ev) {
+  if (ev.key !== "/" || ev.ctrlKey || ev.metaKey || ev.altKey) return;
+  const t = ev.target; if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return;
+  ev.preventDefault(); openSearch();
 }
 
 const tactical = s => { const p = presentationFor(s); return p && p.type === "tactical" && s.board; };
@@ -123,7 +135,7 @@ function draw() {
   wasTac = tacOn;
   if (dm && !panelHidden && !typing(rol)) {
     const open = [...$$("details[open]", rol)].map(d => d.dataset.k);
-    rol.innerHTML = sessionBlock(state) + levelBlock(state) + directionBlock(state) + tacticalBlock(state) + showBlock(state);
+    rol.innerHTML = sessionBlock(state) + hereBlock(state) + levelBlock(state) + directionBlock(state) + tacticalBlock(state) + showBlock(state);
     open.forEach(k => { const d = $(`details[data-k="${k}"]`, rol); if (d) d.open = true; });
     if (!typing($("#dmtools", el))) $("#dmtools", el).innerHTML = toolsBlock(state);
     bind(state);
@@ -136,18 +148,45 @@ function draw() {
 // Barra del modo Táctica: una sola franja de botones cuadrados con icono (el texto, en la ayuda al pasar el ratón)
 function toolsBlock(state) {
   const b = state.board;
-  if (!b) return `<div class="dmquick"><span class="dmq-s">Sin mesa táctica · cárgala en 🎭 Roleplay</span><button class="qb" data-askroll title="Pedir una tirada a los jugadores">🎲</button></div>`;
+  if (!b) return `<div class="dmquick"><span class="dmq-s">Sin mesa táctica · cárgala en 🎭 Roleplay</span><button class="qb" data-askroll title="Pedir una tirada a los jugadores">🎲</button><button class="qb" data-lsearch title="Buscar en el lore (tecla /)">🔎</button></div>`;
   const q = (id, ic, tip, on, extra = "") => `<button class="qb" ${id.startsWith("data-") ? id : `id="${id}"`} title="${tip}" ${on != null ? `aria-pressed="${!!on}"` : ""} ${extra}>${ic}</button>`;
   return `<div class="dmquick">
     ${tactical(state) ? "" : `<button class="btn small gold" data-show='{"type":"tactical"}'>Mostrar la mesa</button>`}
     ${q("qtedit", "✏️", tacEdit ? "Terminar de editar la mesa" : "Editar la mesa (los jugadores siguen viéndola)", tacEdit)}
     ${q("qtmon", "👹", "Añadir criaturas")}
     ${q("data-askroll", "🎲", "Pedir una tirada (habilidad, característica o salvación)")}
+    ${q("data-lsearch", "🔎", "Buscar en el lore (tecla /)")}
     ${q("qtfog", "🌫", b.fog ? "Niebla de guerra: activada" : "Niebla de guerra: desactivada", !!b.fog)}
     <select class="qsel" id="qtluz" title="Luz de la mesa" aria-label="Luz">${Object.entries(LUCES).map(([k, n]) => `<option value="${k}" ${(b.ambient || "interior") === k ? "selected" : ""}>${n}</option>`).join("")}</select>
     <select class="qsel" id="qtsnd" title="Música y sonido ambiente" aria-label="Sonido ambiente">${Object.entries(AMBIENTES).map(([k, n]) => `<option value="${k}" ${(b.sound || "") === k ? "selected" : ""}>🎵 ${n}</option>`).join("")}</select>
     <button class="qb wide" id="qtfloor" aria-pressed="${floorsOpen}" title="Plantas del mapa: torres, sótanos…">🏰 ${esc(floorName(b))}${floorsOf(b).length > 1 ? ` <small>${floorsOf(b).length}</small>` : ""}</button></div>
     ${floorsOpen ? `<div class="dmfloors">${floorsHTML(state, tac && tac.selected ? tac.selected() : null)}</div>` : ""}`;
+}
+
+// Aquí: dónde está el grupo y lo que hay alrededor (PNJ, facciones, eventos y escenas del lugar), a un toque
+function hereBlock(state) {
+  const live = liveSession(state); if (!live) return "";
+  const here = hereOf(state), path = id => placePath(state, id).map(x => x.name).join(" › ");
+  const sel = `<select id="herepl" aria-label="Dónde está el grupo"><option value="">— Elige dónde estáis —</option>${state.world.places.map(p => `<option value="${p.id}" ${here && here.id === p.id ? "selected" : ""}>${esc(path(p.id))}</option>`).join("")}</select>`;
+  if (!here) return `<div class="panel herepanel"><h2 class="sec">📍 Aquí</h2>${sel}<button class="btn small" data-lsearch>🔎 Buscar en el lore</button>
+    <p class="note" style="margin:6px 0 0">Se marca solo al mostrar un lugar o cargar una escena suya. Verás quién hay y qué puede pasar.</p></div>`;
+  const c = contextOf(state, here.id);
+  const chip = e => `<button class="hchip${c.near(e) ? " far" : ""}${e.vital === "muerto" ? " dead" : ""}" data-lcard="${e.id}" title="${c.near(e) ? "De los alrededores" : "De este lugar"}">${LORE[e.kind].icon} ${esc(e.name)}${badges(e)}</button>`;
+  const grp = (t, l) => l.length ? `<div class="hgrp"><small>${t}</small><div class="hchips">${l.slice(0, 10).map(chip).join("")}${l.length > 10 ? `<button class="hchip" data-lsearch>+${l.length - 10}</button>` : ""}</div></div>` : "";
+  return `<div class="panel herepanel"><h2 class="sec">📍 Aquí <button class="lnk" data-lcard="${here.id}">${esc(here.name)}</button><button class="qb sm" data-lsearch title="Buscar en el lore (tecla /)">🔎</button></h2>${sel}
+    ${grp("Quién hay", c.npc)}${grp("Facciones", c.faction)}${grp("Puede pasar", c.event)}${grp("Dioses y batallas", c.other)}
+    ${c.scenes.length ? `<div class="hgrp"><small>Escenas tácticas</small><div class="hchips">${c.scenes.map(x => `<button class="hchip" data-load="${x.id}" title="Cargar en la mesa">⚔️ ${esc(x.name)}</button>`).join("")}</div></div>` : ""}
+    ${!c.npc.length && !c.faction.length && !c.event.length ? `<p class="note" style="margin:6px 0 0">No hay nada del lore asociado a este lugar. Asigna el lugar a PNJ o facciones en el Lore.</p>` : ""}</div>`;
+}
+
+// ¿Qué ha cambiado? Al cerrar la sesión se repasa a quién habéis visto: vivo, muerto, hostil… y queda apuntado
+function changesBlock(state) {
+  const live = liveSession(state), cast = sessionCast(state), ch = changesOf(live);
+  if (!cast.length && !ch.length) return "";
+  const pick = (e, f) => `<select data-chg="${e.id}:${f}" aria-label="${f === "vital" ? "Estado" : "Actitud"} de ${esc(e.name)}">${Object.entries(f === "vital" ? VITAL : STANCE).map(([k, [i, n]]) => `<option value="${k}" ${(e[f] || (f === "vital" ? "vivo" : "neutral")) === k ? "selected" : ""}>${i} ${n}</option>`).join("")}</select>`;
+  return `<h2 class="sec" style="margin-top:14px">¿Qué ha cambiado en el mundo?</h2>
+    <div class="chglist">${cast.map(e => `<div class="chgrow"><button class="lnk" data-lcard="${e.id}">${LORE[e.kind].icon} ${esc(e.name)}</button>${fieldsOf(e.kind).map(f => pick(e, f)).join("")}</div>`).join("")}</div>
+    ${ch.length ? `<p class="note" style="margin:6px 0 0">Cambios de hoy: ${ch.map(c => esc(changeText(c))).join(" · ")} <button class="btn small" id="chg2recap">Añadir al resumen</button></p>` : `<p class="note" style="margin:6px 0 0">Los PNJ y facciones que han salido hoy. Cambia lo que haga falta: se guarda al momento.</p>`}`;
 }
 
 // Subidas de nivel: las concede el máster cuando conviene (al acabar una escena o la sesión), con PX o por hitos
@@ -171,6 +210,7 @@ function sessionBlock(state) {
     <label class="field">Título<input id="ctitle" placeholder="La cripta bajo el campanario" value="${esc(live.title)}"></label>
     <label class="field" style="margin-top:10px">Qué pasó (será el «Anteriormente…» de la próxima)<textarea id="crecap" rows="6">${esc(live.recap || notesOf(state, live.id))}</textarea></label>
     ${notesOf(state, live.id) && !live.recap ? `<p class="note" style="margin:6px 0 0">Lo he rellenado con las notas de la crónica. Retócalo a tu gusto.</p>` : ""}
+    ${changesBlock(state)}
     <h2 class="sec" style="margin-top:14px">Experiencia</h2>
     <div class="xpgrid xpall"><input type="number" id="xpall" min="0" placeholder="PX" aria-label="PX para todos"><input id="xpwhy" placeholder="Motivo (p. ej. derrotar a los esqueletos)" aria-label="Motivo"><button class="btn small" id="xpfill">A todos</button></div>
     <div class="xplist">${state.characters.map(c => `<div class="xpgrid"><span>${esc(c.name)}</span><input type="number" min="0" data-xpc="${c.id}" placeholder="0" aria-label="PX para ${esc(c.name)}"><input data-xpr="${c.id}" placeholder="Motivo" aria-label="Motivo para ${esc(c.name)}"></div>`).join("")}</div>`}
@@ -223,6 +263,7 @@ function showBlock(state) {
     <div class="showlist">
       <button class="btn" data-show='{"type":"recap"}'${on("recap")} ${lastClosed(state) ? "" : "disabled"}>Anteriormente…</button>
       <button class="btn" data-show='{"type":"world"}'${on("world")}>Mapa del mundo</button>
+      ${timeline(state, true).length ? `<button class="btn" data-tlstart${on("timeline")}>⏳ Cronología</button>` : ""}
     </div>
     ${(state.world.regions || []).length ? `<h2 class="sec" style="margin-top:16px">Regiones</h2><div class="showlist">${state.world.regions.map(r => `<button class="btn small" data-showreg="${r.id}"${on("region", { region: r.id })}><i class="regdot" style="background:${esc(r.color)}"></i> ${esc(r.name)}${r.visible ? "" : " · oculta"}</button>`).join("")}</div>` : ""}
     <h2 class="sec" style="margin-top:16px">Lugares</h2>
@@ -267,7 +308,13 @@ function bind(state) {
   { const fbox = $(".dmfloors", el); if (fbox) bindFloors(fbox, tac && tac.selected ? tac.selected() : null, () => { $("#dmtools", el).innerHTML = toolsBlock(store.get()); bind(store.get()); }); }
   on("qtmon", () => import("./reglas.js").then(m => m.openCreaturePicker({ title: "Añadir criaturas a la mesa", onAdd: (x, n) => m.addToBoard(x, n) })));
   $$("[data-clock]", el).forEach(b => b.onclick = () => advanceClock(+b.dataset.clock));
-  $$("[data-showlore]", el).forEach(b => b.onclick = () => showEntry(b.dataset.showlore));
+  $$("[data-showlore]", el).forEach(b => b.onclick = () => { touch(b.dataset.showlore); showEntry(b.dataset.showlore); });
+  $$("[data-lsearch]", el).forEach(b => b.onclick = openSearch);
+  $$("[data-tlstart]", el).forEach(b => b.onclick = () => { const st = store.get(), t = timeline(st, true); if (!(st.presentation && st.presentation.type === "timeline") && t.length) tellTimeline((t.find(e => e.revealed) || t[0]).id); });
+  $$("[data-lcard]", el).forEach(b => b.onclick = () => openCard(b.dataset.lcard));
+  { const h = $("#herepl", el); if (h) h.onchange = () => setHere(h.value); }
+  $$("[data-chg]", el).forEach(b => b.onchange = () => { const [id, f] = b.dataset.chg.split(":"); markChange(id, f, b.value); });
+  on("chg2recap", () => { const r = $("#crecap", el); if (!r) return; const t = changesOf(liveSession(store.get())).map(changeText).join("\n"); if (!r.value.includes(t)) r.value = (r.value.trim() + "\n\nCambios en el mundo:\n" + t).trim(); });
   on("nobackdrop", () => setBackdrop(null));
   $$("[data-pc]", el).forEach(b => b.onchange = () => b.checked ? addPC(b.dataset.pc) : removePC(b.dataset.pc));
   on("tmon", () => import("./reglas.js").then(m => m.openCreaturePicker({ title: "Añadir criaturas a la mesa", onAdd: (x, n) => m.addToBoard(x, n) })));
@@ -276,8 +323,8 @@ function bind(state) {
     const b = $("#tsave", el);
     if (!b.dataset.sure) { b.dataset.sure = 1; b.outerHTML = `<span class="savescene"><input id="tsname" placeholder="Nombre de la escena" value="${esc(state.board.name)}"><button class="btn small gold" id="tsok">Guardar</button></span>`; $("#tsok", el).onclick = () => { saveBoardAsScene($("#tsname", el).value.trim() || state.board.name, null); toast("Guardada en la biblioteca de escenas"); }; }
   });
-  $$("[data-load]", el).forEach(b => b.onclick = () => { tacEdit = false; loadScene(b.dataset.load); });
-  $$("[data-show]", el).forEach(b => b.onclick = () => show(JSON.parse(b.dataset.show)));
+  $$("[data-load]", el).forEach(b => b.onclick = () => { tacEdit = false; const sc = store.get().scenes.find(x => x.id === b.dataset.load); loadScene(b.dataset.load); if (sc && sc.place && placeOf(store.get(), sc.place)) setHere(sc.place); });
+  $$("[data-show]", el).forEach(b => b.onclick = () => { const p = JSON.parse(b.dataset.show); show(p); if (p.place) setHere(p.place); });
   $$("[data-showreg]", el).forEach(b => b.onclick = () => store.commit("present", s => { const r = (s.world.regions || []).find(x => x.id === b.dataset.showreg); if (r) { r.visible = true; s.presentation = { type: "region", region: r.id }; } }));
 }
 

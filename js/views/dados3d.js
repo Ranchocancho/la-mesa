@@ -49,6 +49,9 @@ function geometry(d) {
     tris.push([vid(a), vid(b), vid(c)]);
   }
   const list = [...faces.values()].map(f => ({ n: f.n, c: f.pts.reduce((s, q) => s.add(q), new THREE.Vector3()).multiplyScalar(1 / f.pts.length) }));
+  // Hacia dónde queda «arriba» el número de cada cara (para girar el dado y que se lea derecho)
+  const o = new THREE.Object3D();
+  list.forEach(f => { o.position.copy(f.c); o.lookAt(f.c.clone().add(f.n)); f.q = o.quaternion.clone(); f.up = new THREE.Vector3(0, 1, 0).applyQuaternion(o.quaternion); });
   // Forma de colisión: el box es exacto; el resto, poliedro convexo
   const shape = d === 6 ? new CANNON.Box(new CANNON.Vec3(0.675 * K, 0.675 * K, 0.675 * K))
     : new CANNON.ConvexPolyhedron({ vertices: verts.map(v => new CANNON.Vec3(v.x, v.y, v.z)), faces: tris });
@@ -57,28 +60,29 @@ function geometry(d) {
 const LABEL = new Map();
 function labelTex(text, ink) {
   const k = text + ink; if (LABEL.has(k)) return LABEL.get(k);
-  const c = document.createElement("canvas"); c.width = c.height = 128;
+  const c = document.createElement("canvas"); c.width = c.height = 256;
   const g = c.getContext("2d"); g.textAlign = "center"; g.textBaseline = "middle";
-  // Números grandes con contorno: que se lean desde arriba aunque el dado sea pequeño
-  g.font = `900 ${text.length > 2 ? 58 : text.length > 1 ? 74 : 86}px Georgia`;
+  // Números grandes y «grabados»: tinta clara con canto oscuro (o al revés), que se lean de un vistazo
+  g.font = `900 ${text.length > 2 ? 112 : text.length > 1 ? 146 : 176}px Georgia, "Times New Roman", serif`;
   const light = /^#(f|e|d)/i.test(ink);
-  g.lineJoin = "round"; g.lineWidth = 12; g.strokeStyle = light ? "rgba(0,0,0,.72)" : "rgba(255,245,220,.75)";
-  g.strokeText(text, 64, 68); g.fillStyle = ink; g.fillText(text, 64, 68);
-  if (text === "6" || text === "9") { g.fillStyle = ink; g.fillRect(42, 110, 44, 7); }
+  g.lineJoin = "round"; g.lineWidth = 22; g.strokeStyle = light ? "rgba(0,0,0,.82)" : "rgba(255,248,230,.85)";
+  g.strokeText(text, 128, 138); g.fillStyle = ink; g.fillText(text, 128, 138);
+  if (text === "6" || text === "9") { g.fillStyle = ink; g.fillRect(84, 222, 88, 12); }
   const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; LABEL.set(k, t); return t;
 }
 function makeDie(d, skin, labels, dropped) {
   const { g, faces } = geometry(d), S = SKINS[skin] || SKINS.rubi;
-  const mat = new THREE.MeshStandardMaterial({ color: dropped ? 0x55504a : S.c, emissive: S.e, roughness: S.r, metalness: S.m, flatShading: true, transparent: true, opacity: dropped ? 0.6 : S.o });
+  const mat = new THREE.MeshPhysicalMaterial({ color: dropped ? 0x55504a : S.c, emissive: S.e, roughness: S.r, metalness: S.m, flatShading: true, transparent: true, opacity: dropped ? 0.55 : S.o,
+    clearcoat: S.m > 0.5 ? 0.3 : 1, clearcoatRoughness: 0.12, envMapIntensity: S.m > 0.5 ? 1.4 : 0.9 });
   const body = new THREE.Mesh(g, mat); body.castShadow = true;
   const die = new THREE.Group(); die.add(body);
   const size = K * (d === 4 ? 0.78 : d === 6 ? 1.05 : d === 20 ? 0.66 : d === 12 ? 0.82 : d === 10 ? 0.74 : 0.76);
-  faces.forEach((f, i) => {
+  const marks = faces.map((f, i) => {
     const m = new THREE.Mesh(new THREE.PlaneGeometry(size, size), new THREE.MeshBasicMaterial({ map: labelTex(labels[i], S.ink), transparent: true, depthWrite: false }));
     m.position.copy(f.c).add(f.n.clone().multiplyScalar(0.015)); m.lookAt(m.position.clone().add(f.n));
-    die.add(m);
+    die.add(m); return m;
   });
-  return { die, mats: [mat] };
+  return { die, mats: [mat], marks };
 }
 
 /* ---------- Azar con semilla (todos simulan lo mismo) ---------- */
@@ -98,8 +102,9 @@ function feltTex() {
   FELT = new THREE.CanvasTexture(c); FELT.colorSpace = THREE.SRGBColorSpace; FELT.wrapS = FELT.wrapT = THREE.RepeatWrapping; FELT.repeat.set(6, 2); return FELT;
 }
 // Bandeja alargada: los dados entran por la izquierda y la cruzan rodando (como una mesa de craps)
-export const TW = 24, TD = 7;
-const K = 1.22; // escala de los dados (más grandes = números legibles)
+export const TW = 17, TD = 7;
+const K = 1.0; // tamaño al rodar: pequeños para que tengan sitio de rebotar y girar
+const LS = 1.55; // al colocarse en fila crecen para leerse bien
 function tray() {
   const g = new THREE.Group();
   const felt = new THREE.Mesh(new THREE.BoxGeometry(TW, 0.2, TD), new THREE.MeshStandardMaterial({ map: feltTex(), roughness: 1, transparent: true }));
@@ -146,115 +151,141 @@ function bigText(text, color) {
 }
 
 /**
- * Lanza los dados de una tirada.
- * dice: [{d, v, drop}] · at: centro de la bandeja (Vector3) · opts: { seed, skin, aim: {x, z, power}, toward: Vector3 (cámara), total, drama, onEvent }
- * Devuelve tick(dt) → sigue vivo.
+ * Lanza los dados de una tirada y, al pararse, los coloca en fila mirando a la cámara para que se lean bien.
+ * dice: [{d, v, drop}] · at: centro de la bandeja · opts: { seed, skin, aim: {power}, camera, row: {x, y, z, w} (zona de la fila),
+ *   speed, onEvent(e) ("hit" | "settle" | "lined"), onLined(slots: [{pos: Vector3, die, x}]) }
+ * Devuelve { tick(dt) → sigue vivo, skip() (salta al final), dispose() }.
  */
 export function throwDice(scene, dice, at, opts = {}) {
   const R = rng(String(opts.seed || Math.random()));
   // Lista de dados físicos (el d100 son dos d10: decenas y unidades)
   const list = [];
-  dice.slice(0, 14).forEach(x => {
+  dice.slice(0, 12).forEach((x, src) => {
     if (x.d === 100) {
       const tens = Math.floor((x.v % 100) / 10), units = x.v % 10;
-      list.push({ d: 10, want: tens, labels: ["00", "10", "20", "30", "40", "50", "60", "70", "80", "90"], drop: x.drop });
-      list.push({ d: 10, want: units, labels: ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"], drop: x.drop });
+      list.push({ src, d: 10, want: tens, labels: ["00", "10", "20", "30", "40", "50", "60", "70", "80", "90"], drop: x.drop });
+      list.push({ src, d: 10, want: units, labels: ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"], drop: x.drop });
     } else {
       const d = [4, 6, 8, 10, 12, 20].includes(x.d) ? x.d : 20;
-      list.push({ d, want: x.v - 1, labels: Array.from({ length: d }, (_, i) => String(i + 1)), drop: x.drop, nat: d === 20 && !x.drop ? x.v : null });
+      list.push({ src, d, want: x.v - 1, labels: Array.from({ length: d }, (_, i) => String(i + 1)), drop: x.drop, nat: d === 20 && !x.drop ? x.v : null });
     }
   });
-  // Mundo físico: suelo de la bandeja y cuatro bandas
-  const world = new CANNON.World({ gravity: new CANNON.Vec3(0, -70, 0) });
+  // Mundo físico: tapete y cuatro bandas. Dados «pesados»: poco rebote y bastante roce
+  const world = new CANNON.World({ gravity: new CANNON.Vec3(0, -75, 0) });
   world.allowSleep = true;
   const dieMat = new CANNON.Material(), feltMat = new CANNON.Material(), railMat = new CANNON.Material();
-  world.addContactMaterial(new CANNON.ContactMaterial(dieMat, feltMat, { friction: 0.24, restitution: 0.3 }));
-  world.addContactMaterial(new CANNON.ContactMaterial(dieMat, railMat, { friction: 0.1, restitution: 0.6 }));
-  world.addContactMaterial(new CANNON.ContactMaterial(dieMat, dieMat, { friction: 0.2, restitution: 0.4 }));
+  world.addContactMaterial(new CANNON.ContactMaterial(dieMat, feltMat, { friction: 0.16, restitution: 0.5 }));
+  world.addContactMaterial(new CANNON.ContactMaterial(dieMat, railMat, { friction: 0.06, restitution: 0.78 }));
+  world.addContactMaterial(new CANNON.ContactMaterial(dieMat, dieMat, { friction: 0.12, restitution: 0.55 }));
   const ground = new CANNON.Body({ mass: 0, material: feltMat, shape: new CANNON.Plane() }); ground.quaternion.setFromEuler(-Math.PI / 2, 0, 0); ground.position.set(0, 0.22, 0); world.addBody(ground);
   for (const [x, z, w, d] of [[0, -TD / 2, TW, 0.4], [0, TD / 2, TW, 0.4], [-TW / 2, 0, 0.4, TD], [TW / 2, 0, 0.4, TD]]) {
     const b = new CANNON.Body({ mass: 0, material: railMat, shape: new CANNON.Box(new CANNON.Vec3(w / 2, 6, d / 2)) }); b.position.set(x, 6, z); world.addBody(b);
   }
-  // Se lanzan desde el borde izquierdo y cruzan la bandeja a lo largo (rebotan en la banda del fondo)
-  const power = opts.aim ? Math.max(0.6, Math.min(1.4, opts.aim.power || 1)) : 0.95 + R() * 0.25;
-  // En la mano: filas de hasta 3 a lo ancho, separadas para que no nazcan solapados
+  const power = opts.aim ? Math.max(0.85, Math.min(1.3, opts.aim.power || 1)) : 0.95 + R() * 0.25;
   const n = list.length, rows = Math.min(3, n);
   const bodies = list.map((x, i) => {
-    const b = new CANNON.Body({ mass: 1, material: dieMat, shape: geometry(x.d).shape, angularDamping: 0.16, linearDamping: 0.04, sleepSpeedLimit: 0.4, sleepTimeLimit: 0.25 });
+    const b = new CANNON.Body({ mass: 1, material: dieMat, shape: geometry(x.d).shape, angularDamping: 0.1, linearDamping: 0.03, sleepSpeedLimit: 0.35, sleepTimeLimit: 0.3 });
     const col = Math.floor(i / rows), row = i % rows, inRow = Math.min(rows, n - col * rows);
-    const z = inRow > 1 ? -1.9 + (3.8 * row) / (inRow - 1) : (R() - 0.5) * 2;
-    b.position.set(-TW / 2 + 1.6 + col * 2 + R() * 0.3, 1.9 + R() * 0.8, z + (R() - 0.5) * 0.3);
+    const z = inRow > 1 ? -1.8 + (3.6 * row) / (inRow - 1) : (R() - 0.5) * 1.6;
+    b.position.set(-TW / 2 + 1.4 + col * 1.6 + R() * 0.3, 3 + R() * 1.2, z * 0.8 + (R() - 0.5) * 0.3);
     b.quaternion.setFromEuler(R() * 6.28, R() * 6.28, R() * 6.28);
-    b.velocity.set((31 + R() * 8) * power, -1 - R() * 2, (R() - 0.5) * 7);
-    b.angularVelocity.set((R() - 0.5) * 24, (R() - 0.5) * 10, -12 - R() * 16);
+    b.velocity.set((52 + R() * 16) * power, -6 - R() * 8, (R() - 0.5) * 26);
+    b.angularVelocity.set((R() - 0.5) * 60, (R() - 0.5) * 40, -34 - R() * 30);
     world.addBody(b); return b;
   });
-  // Simulación completa por adelantado (grabamos el recorrido)
+  // Simulación completa por adelantado (todos ven el mismo recorrido)
   const frames = [], hits = [];
-  let lastVy = bodies.map(() => 0);
-  for (let s = 0; s < 300; s++) {
+  const lastVy = bodies.map(() => 0);
+  for (let s = 0; s < 360; s++) {
     world.step(1 / 60);
     frames.push(bodies.map(b => [b.position.x, b.position.y, b.position.z, b.quaternion.x, b.quaternion.y, b.quaternion.z, b.quaternion.w]));
     bodies.forEach((b, i) => { if (lastVy[i] < -4 && b.velocity.y > 0) hits.push(s); lastVy[i] = b.velocity.y; });
-    if (s > 40 && bodies.every(b => b.sleepState === CANNON.Body.SLEEPING)) break;
+    if (s > 60 && bodies.every(b => b.sleepState === CANNON.Body.SLEEPING)) break;
   }
-  if (opts.onSim) opts.onSim(frames);
-  // Rotular: la cara que ha quedado arriba muestra el resultado de la tirada
+  // Rotular: la cara que ha quedado arriba muestra el resultado ya decidido
   const last = frames[frames.length - 1];
   list.forEach((x, i) => {
     const q = new THREE.Quaternion(last[i][3], last[i][4], last[i][5], last[i][6]), faces = geometry(x.d).faces;
     let best = 0, by = -2; faces.forEach((f, k) => { const y = f.n.clone().applyQuaternion(q).y; if (y > by) { by = y; best = k; } });
-    const want = Math.max(0, Math.min(faces.length - 1, x.want)); x.text = x.labels[want];
+    const want = Math.max(0, Math.min(faces.length - 1, x.want)); x.text = x.labels[want]; x.face = best;
     if (best !== want) { const t = x.labels[best]; x.labels[best] = x.labels[want]; x.labels[want] = t; }
   });
-  // Escena: bandeja + dados
+  // Escena
   const group = new THREE.Group(); group.position.copy(at); scene.add(group);
   const tr = tray(); group.add(tr);
   const meshes = list.map(x => { const m = makeDie(x.d, opts.skin, x.labels, x.drop); group.add(m.die); return m; });
-  const fade = [...meshes.flatMap(m => m.mats), ...tr.children.map(c => c.material)];
-  fade.forEach(m => { m.userData.o = m.opacity; });
-  const nat = list.find(x => x.nat === 20) ? 20 : list.find(x => x.nat === 1) ? 1 : null;
-  const SLOW = opts.drama && list.some(x => x.d === 20) ? 0.45 : 1;
-  let t = 0, f = 0, done = false, extra = [], label = null, hitIdx = 0;
-  const STAY = opts.stay ?? 4.5, FADE = 0.8;
-  return dt => {
-    // Cámara lenta en el último tramo de un d20 importante
-    const nearEnd = f > frames.length - 50;
-    t += done ? dt : dt * (nearEnd ? SLOW : 1);
-    f = Math.min(frames.length - 1, Math.floor(t * 60));
-    frames[f].forEach((p, i) => { meshes[i].die.position.set(p[0], p[1], p[2]); meshes[i].die.quaternion.set(p[3], p[4], p[5], p[6]); });
-    while (hitIdx < hits.length && hits[hitIdx] <= f) { if (opts.onEvent) opts.onEvent("hit"); hitIdx++; }
-    if (!done && f >= frames.length - 1) {
-      done = true; t = frames.length / 60;
-      const hex = "#" + (SKINS[opts.skin] || SKINS.rubi).c.toString(16).padStart(6, "0");
-      list.forEach((x, i) => {
-        if (x.drop) return;
-        const p = meshes[i].die.position, die = meshes[i].die;
-        extra.push(haloFx(group, p, x.nat === 20 ? 0xffd86a : x.nat === 1 ? 0xff4a3a : 0xfff1d6));
-        // Pequeño "salto" del dado al revelar su cara
-        let k = 0; extra.push(dt2 => { k += dt2 / 0.35; die.scale.setScalar(1 + Math.sin(Math.min(1, k) * Math.PI) * 0.16); return k < 1; });
-        if (list.length > 1) {
-          const b = badge(x.text, x.nat === 20 ? "#ffd86a" : x.nat === 1 ? "#ff6a5a" : hex);
-          b.position.set(p.x, p.y + 1.7, p.z - 1.1); group.add(b); fade.push(b.material); b.material.userData.o = 1;
-          let u = 0; extra.push(dt2 => { u += dt2 / 0.25; b.material.opacity = Math.min(1, u); return u < 1; });
-        }
+
+  // Fila final: primero los dados que cuentan; los descartados (ventaja/desventaja) al final y más pequeños
+  const order = list.map((x, i) => i).sort((a, b) => (list[a].drop ? 1 : 0) - (list[b].drop ? 1 : 0));
+  const row = Object.assign({ x: 0, y: 2.6, z: 0.6, w: TW - 3 }, opts.row || {});
+  const big = LS * (n === 1 ? 1.65 : n === 2 ? 1.55 : n <= 4 ? 1.35 : n <= 6 ? 1.15 : 0.88);
+  const lines = n > 5 ? 2 : 1, perLine = Math.ceil(n / lines);
+  const gap = Math.min(row.w / Math.max(1, perLine), 1.9 * K * big);
+  const cam = opts.camera;
+  const slots = order.map((i, k) => {
+    const x = list[i], sc = big * (x.drop ? 0.7 : 1);
+    const li = Math.floor(k / perLine), kk = k % perLine, inLine = Math.min(perLine, n - li * perLine);
+    const pos = new THREE.Vector3(row.x + (kk - (inLine - 1) / 2) * gap, row.y + (x.drop ? -0.4 : 0) + (lines > 1 ? (li ? -1 : 1) * 0.9 * big : 0), row.z + (lines > 1 ? (li ? 1 : -1) * 0.9 * big : 0));
+    // Orientación: la cara del resultado mirando a la cámara y con el número derecho
+    const f = geometry(x.d).faces[x.face], dir = cam ? cam.position.clone().sub(pos.clone().add(at)).normalize() : new THREE.Vector3(0, 1, 0);
+    const q1 = new THREE.Quaternion().setFromUnitVectors(f.n, dir);
+    const upW = f.up.clone().applyQuaternion(q1), camUp = (cam ? new THREE.Vector3(0, 1, 0).applyQuaternion(cam.quaternion) : new THREE.Vector3(0, 0, -1));
+    const u = camUp.sub(dir.clone().multiplyScalar(camUp.dot(dir))).normalize();
+    const ang = Math.atan2(new THREE.Vector3().crossVectors(upW, u).dot(dir), upW.dot(u));
+    // Una pizca de inclinación para que se note el volumen (de frente del todo parece un cromo)
+    const right = new THREE.Vector3().crossVectors(u, dir).normalize();
+    const tilt = new THREE.Quaternion().setFromAxisAngle(right, -0.22).multiply(new THREE.Quaternion().setFromAxisAngle(u, (k % 2 ? 1 : -1) * 0.16));
+    const q = tilt.multiply(new THREE.Quaternion().setFromAxisAngle(dir, ang).multiply(q1));
+    return { i, pos, q, sc, x };
+  });
+
+  const SPEED = opts.speed || 1.25, LINE = 0.42;
+  let t = 0, f = 0, phase = "roll", lineT = 0, hitIdx = 0, extra = [];
+  const from = [];
+  const settle = () => {
+    phase = "line"; lineT = 0;
+    meshes.forEach((m, i) => from[i] = { p: m.die.position.clone(), q: m.die.quaternion.clone() });
+    if (opts.onEvent) opts.onEvent("settle");
+  };
+  const easeBack = k => { const c = 1.5; return 1 + (c + 1) * Math.pow(k - 1, 3) + c * Math.pow(k - 1, 2); };
+  const tick = dt => {
+    if (phase === "roll") {
+      t += dt * SPEED; f = Math.min(frames.length - 1, Math.floor(t * 60));
+      frames[f].forEach((p, i) => { meshes[i].die.position.set(p[0], p[1], p[2]); meshes[i].die.quaternion.set(p[3], p[4], p[5], p[6]); });
+      while (hitIdx < hits.length && hits[hitIdx] <= f) { if (opts.onEvent) opts.onEvent("hit"); hitIdx++; }
+      if (f >= frames.length - 1) settle();
+    } else if (phase === "line") {
+      lineT += dt / LINE; const k = Math.min(1, lineT);
+      slots.forEach((sl, idx) => {
+        const kk = Math.max(0, Math.min(1, (lineT - idx * 0.06) / (1 - Math.min(0.5, (slots.length - 1) * 0.06)))), e = easeBack(kk), m = meshes[sl.i].die;
+        m.position.lerpVectors(from[sl.i].p, sl.pos, Math.min(1, kk * 1.0)).setY(from[sl.i].p.y + (sl.pos.y - from[sl.i].p.y) * e + Math.sin(kk * Math.PI) * 1.2);
+        m.quaternion.slerpQuaternions(from[sl.i].q, sl.q, Math.min(1, e));
+        m.scale.setScalar(1 + (sl.sc - 1) * e);
       });
-      const top = at.clone().add(new THREE.Vector3(0, 5, 0));
-      if (opts.total != null && !opts.quiet) { label = bigText(String(opts.total), nat === 20 ? "#ffd86a" : nat === 1 ? "#ff6a5a" : "#fff"); label.position.copy(top); scene.add(label); }
-      if (nat === 20 && opts.quiet) extra.push(burstFx(scene, at.clone().setY(1.5), 0xffd86a, 140));
-      if (nat === 1 && opts.quiet) extra.push(burstFx(scene, at.clone().setY(1), 0xb33a2e, 60));
-      if (nat === 20 && !opts.quiet) { extra.push(burstFx(scene, at.clone().setY(1.5), 0xffd86a, 110)); const s = bigText("¡20 NATURAL!", "#ffd86a"); s.position.copy(top).add(new THREE.Vector3(0, 2.4, 0)); scene.add(s); extra.push(dt2 => { s.material.opacity -= dt2 / 3.5; if (s.material.opacity <= 0) { scene.remove(s); return false; } return true; }); }
-      if (nat === 1 && !opts.quiet) { extra.push(burstFx(scene, at.clone().setY(1), 0xb33a2e, 50)); const s = bigText("Pifia", "#ff6a5a"); s.position.copy(top).add(new THREE.Vector3(0, 2.4, 0)); scene.add(s); extra.push(dt2 => { s.material.opacity -= dt2 / 3; if (s.material.opacity <= 0) { scene.remove(s); return false; } return true; }); }
-      if (opts.onEvent) opts.onEvent(nat === 20 ? "nat20" : nat === 1 ? "nat1" : "rest");
+      if (k >= 1 && lineT > 1 + (slots.length - 1) * 0.06) {
+        phase = "show"; t = 0;
+        slots.forEach(sl => { const M = meshes[sl.i], m = M.die; m.position.copy(sl.pos); m.quaternion.copy(sl.q); m.scale.setScalar(sl.sc);
+          // La cara del resultado manda: las demás se atenúan
+          M.marks.forEach((mk, fi) => { if (fi === sl.x.face) mk.scale.setScalar(1.18); else mk.material.opacity = 0.28; });
+          if (sl.x.nat === 20 || sl.x.nat === 1) extra.push(haloFx(group, sl.pos.clone().setY(0.25), sl.x.nat === 20 ? 0xffd86a : 0xff4a3a)); });
+        const nat = list.find(x => x.nat === 20) ? 20 : list.find(x => x.nat === 1) ? 1 : null;
+        if (nat === 20) extra.push(burstFx(scene, at.clone().add(slots[0].pos), 0xffd86a, 140));
+        if (nat === 1) extra.push(burstFx(scene, at.clone().add(slots[0].pos), 0xb33a2e, 50));
+        if (opts.onLined) opts.onLined(slots.map(sl => ({ pos: sl.pos.clone().add(at), x: sl.x, sc: sl.sc })));
+        if (opts.onEvent) opts.onEvent(nat === 20 ? "nat20" : nat === 1 ? "nat1" : "lined");
+      }
+    } else {
+      // Reposo: un leve balanceo para que no parezca congelado
+      t += dt;
+      slots.forEach((sl, idx) => { const m = meshes[sl.i].die; m.position.y = sl.pos.y + Math.sin(t * 2.2 + idx) * 0.06; });
     }
     extra = extra.filter(fn => fn(dt));
-    const endT = frames.length / 60 + STAY;
-    if (t > endT) {
-      const o = Math.max(0, 1 - (t - endT) / FADE);
-      fade.forEach(m => { m.opacity = m.userData.o * o; });
-      if (label) label.material.opacity = o;
-    }
-    if (t > endT + FADE && !extra.length) { scene.remove(group); if (label) scene.remove(label); return false; }
     return true;
+  };
+  return {
+    tick,
+    skip() { if (phase === "roll") { f = frames.length - 1; frames[f].forEach((p, i) => { meshes[i].die.position.set(p[0], p[1], p[2]); meshes[i].die.quaternion.set(p[3], p[4], p[5], p[6]); }); settle(); } if (phase === "line") lineT = 99; },
+    dispose() { scene.remove(group); },
+    group
   };
 }

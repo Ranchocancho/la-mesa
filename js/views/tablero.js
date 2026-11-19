@@ -7,6 +7,7 @@ import { TERRAIN, TERRAIN_CATS, PROPS, PROP_CATS, isDoor, isWallT, propVisible }
 import { terrainURL } from "./texturas.js";
 import { generateDungeon } from "../core/generador.js";
 import { pathTo, moveHint } from "../core/movimiento.js";
+import { RES_TEXT, RES_COLOR } from "../core/golpes.js";
 export { TERRAIN, PROPS };
 
 const T = 44, S = T / 2; // lado de la casilla en el plano 2D
@@ -34,11 +35,13 @@ const TOOLS = [["move", "✋", "Mover y seleccionar"], ["paint", "🖌", "Pincel
  */
 export function createBoard(host, opts) {
   host.classList.add("board");
-  host.innerHTML = `<svg class="boardsvg" aria-label="Tablero"><defs></defs><g class="world"></g></svg>
+  host.innerHTML = `<svg class="boardsvg" aria-label="Tablero"><defs></defs><g class="world"></g><g class="ruler"></g><g class="fxl"></g></svg><div class="bvig" aria-hidden="true"></div>
     ${opts.edit ? `<div class="mapeditor" role="toolbar" aria-label="Editor de mapas"></div>` : ""}
-    <div class="boardzoom"><button data-z="1.25" aria-label="Acercar">+</button><button data-z="0.8" aria-label="Alejar">−</button><button data-z="fit" aria-label="Encajar">⤢</button></div>
+    <div class="boardzoom"><button data-z="1.25" aria-label="Acercar">+</button><button data-z="0.8" aria-label="Alejar">−</button><button data-z="fit" aria-label="Encajar">⤢</button>${opts.edit ? "" : `<button data-ruler aria-pressed="false" title="Medir distancias: arrastra de una casilla a otra" aria-label="Regla">📏</button>`}</div>
     <div class="dragtip" hidden></div>`;
   const svg = host.querySelector("svg"), world = svg.querySelector(".world"), defs = svg.querySelector("defs"), tip = host.querySelector(".dragtip");
+  const fxl = svg.querySelector(".fxl"), rulerG = svg.querySelector(".ruler");
+  let measuring = false; const lastHp = new Map(), shakeUntil = new Map(); let hpPrimed = false;
   let vb = null, drag = null, selected = opts.selected || null, selProp = null, hover = null;
   // Estado del editor (se recuerda mientras dura la sesión)
   const E = createBoard.E = createBoard.E || { tool: "move", brush: "piedra", wall: "muro", floor: "piedra", prop: "mesa", pcat: "mueble", tcat: "interior", size: 1 };
@@ -140,6 +143,12 @@ export function createBoard(host, opts) {
       const [x, y] = center(c, r);
       fogSvg += `<rect x="${x - S}" y="${y - S}" width="${T}" height="${T}" fill="${fog.exp.has(k) ? "rgba(5,7,12,.62)" : "#0c0a08"}"/>`;
     }
+    host.dataset.amb = grid.ambient || "interior";
+    // Daño y curación: el número sale flotando sobre la ficha (todos lo ven)
+    tokens.forEach(k => { const hp = opts.hpOf(k); if (!hp) return; const was = lastHp.get(k.id); lastHp.set(k.id, hp.cur);
+      if (hpPrimed && was != null && was !== hp.cur && (opts.dm || !k.hidden)) { const [x, y] = center(k.c, k.r), d = hp.cur - was; setTimeout(() => floatTxt(x + S * 0.55, y + 6, (d > 0 ? "+" : "−") + Math.abs(d), d > 0 ? "#7dff9a" : "#ff5a48", Math.abs(d) >= 15), 450);
+        if (d < 0) shakeUntil.set(k.id, Date.now() + 450); } });
+    hpPrimed = true;
     const toks = tokens.filter(k => (opts.dm || !k.hidden) && (!fog || k.kind === "pc" || fog.vis.has(key(k.c, k.r)))).map(k => {
       const dk = { name: k.name, color: k.color, ...(opts.decorate ? opts.decorate(k) : {}) };
       const [x, y] = center(k.c, k.r), rad = S * 0.8 * (k.size || 1), hp = opts.hpOf(k), down = hp && hp.cur <= 0;
@@ -148,7 +157,7 @@ export function createBoard(host, opts) {
       const ring = k.kind === "pc" ? "#d6aa4e" : k.kind === "npc" ? "#7d8fe0" : "#b33a2e";
       const raw = hp ? Math.max(0, Math.min(1, hp.cur / Math.max(1, hp.max))) : 1;
       const pct = opts.dm || k.kind === "pc" ? raw : raw > 0.75 ? 1 : raw > 0.5 ? 0.7 : raw > 0.25 ? 0.45 : raw > 0 ? 0.18 : 0; // a los enemigos se les ve "a ojo"
-      return `<g class="tok ${down ? "down" : ""} ${k.hidden ? "hid" : ""} ${selected === k.id ? "sel" : ""} ${opts.canMove(k) ? "mov" : ""}" data-tok="${k.id}" transform="translate(${x},${y})">
+      return `<g class="tok ${down ? "down" : ""} ${k.hidden ? "hid" : ""} ${selected === k.id ? "sel" : ""} ${opts.canMove(k) ? "mov" : ""} ${(shakeUntil.get(k.id) || 0) > Date.now() ? "shake" : ""}" data-tok="${k.id}" transform="translate(${x},${y})">
         <clipPath id="cp-${k.id}"><circle r="${rad - 2}"/></clipPath>
         <circle r="${rad + 3}" class="halo"/>
         ${(k.conds || []).map((cd, i) => { const e = estado(cd.id); return e ? `<circle r="${rad + 5 + i * 3.5}" fill="none" stroke="${e.c}" stroke-width="3"/>` : ""; }).join("")}
@@ -205,6 +214,51 @@ export function createBoard(host, opts) {
   let lastEv = null;
   const showTip = txt => { if (!lastEv) return; const r = host.getBoundingClientRect(); tip.hidden = false; tip.textContent = txt; tip.style.left = (lastEv.clientX - r.left + 14) + "px"; tip.style.top = (lastEv.clientY - r.top + 14) + "px"; };
 
+  /* ---------- Golpes: tajo, proyectil, chispas y texto flotante ---------- */
+  const NS = "http://www.w3.org/2000/svg";
+  function addFx(html, ms) { const g = document.createElementNS(NS, "g"); g.innerHTML = html; fxl.appendChild(g); setTimeout(() => g.remove(), ms); return g; }
+  function floatTxt(x, y, text, color, big) { addFx(`<text class="ftxt${big ? " big" : ""}" x="${x}" y="${y}" fill="${color}">${esc(text)}</text>`, big ? 2200 : 1800); }
+  function sparks2(x, y, color, n = 12) {
+    addFx(Array.from({ length: n }, (_, i) => { const a = i / n * Math.PI * 2 + Math.random() * 0.4, d = 16 + Math.random() * 18;
+      return `<circle class="fspark" cx="${x}" cy="${y}" r="${2 + Math.random() * 2}" fill="${color}" style="--dx:${(Math.cos(a) * d).toFixed(1)}px;--dy:${(Math.sin(a) * d).toFixed(1)}px"/>`; }).join("")
+      + `<circle class="fflash" cx="${x}" cy="${y}" r="${S * 0.9}" fill="${color}"/>`, 800);
+  }
+  function playEvents(evs) {
+    for (const e of evs) setTimeout(() => {
+      if (!host.isConnected) return;
+      const m = opts.model(), B = m.tokens.find(t => t.id === e.to); if (!B || (B.hidden && !opts.dm)) return;
+      const [x1, y1] = center(B.c, B.r), rb = S * 0.8 * (B.size || 1);
+      const say = () => floatTxt(x1, y1 - rb - 20, RES_TEXT[e.res], RES_COLOR[e.res], e.res === "crit");
+      const A = e.from && e.from !== e.to && m.tokens.find(t => t.id === e.from);
+      if (e.type !== "atk" || !A) return say();
+      const [x0, y0] = center(A.c, A.r), melee = dist(A, B) <= 1 + Math.max(A.size || 1, B.size || 1), miss = e.res === "miss";
+      const land = () => { if (miss) return say(); sparks2(x1, y1, e.res === "crit" ? "#ffd65a" : e.color === "#f4ecd8" ? "#ffb15a" : e.color, e.res === "crit" ? 20 : 12); shakeUntil.set(B.id, Date.now() + 450); const g = world.querySelector(`[data-tok="${B.id}"]`); if (g) { g.classList.remove("shake"); void g.getBBox(); g.classList.add("shake"); } setTimeout(say, 60); };
+      if (melee && !e.magic) {
+        const ang = Math.atan2(y1 - y0, x1 - x0), r = rb + 10, ux = Math.cos(ang), uy = Math.sin(ang), px = -uy, py = ux;
+        const sx = x1 + px * r - ux * 4, sy = y1 + py * r - uy * 4, ex = x1 - px * r - ux * 4, ey = y1 - py * r - uy * 4, qx = x1 - ux * r * 1.1, qy = y1 - uy * r * 1.1;
+        addFx(`<path class="fslash${miss ? " miss" : ""}" d="M${sx.toFixed(1)},${sy.toFixed(1)} Q${qx.toFixed(1)},${qy.toFixed(1)} ${ex.toFixed(1)},${ey.toFixed(1)}"/>`, 600);
+        setTimeout(land, 170);
+      } else {
+        let tx = x1, ty = y1; if (miss) { const nx = -(y1 - y0), ny = x1 - x0, l = Math.hypot(nx, ny) || 1; tx += nx / l * 22 + (x1 - x0) / l * 40; ty += ny / l * 22 + (y1 - y0) / l * 40; }
+        const g = addFx(`<line class="ftrail" x1="${x0}" y1="${y0}" x2="${x0}" y2="${y0}" stroke="${e.color}"/><circle class="fball${e.magic ? " magic" : ""}" cx="${x0}" cy="${y0}" r="${e.magic ? 7 : 4}" fill="${e.color}"/>`, 1200);
+        const ln = g.querySelector("line"), bl = g.querySelector("circle"), dur = Math.min(520, 160 + Math.hypot(tx - x0, ty - y0) * 0.9), t0 = performance.now();
+        const step = now => { const k = Math.min(1, (now - t0) / dur), x = x0 + (tx - x0) * k, y = y0 + (ty - y0) * k;
+          bl.setAttribute("cx", x); bl.setAttribute("cy", y); ln.setAttribute("x2", x); ln.setAttribute("y2", y); ln.setAttribute("x1", x0 + (tx - x0) * Math.max(0, k - 0.35)); ln.setAttribute("y1", y0 + (ty - y0) * Math.max(0, k - 0.35));
+          if (k < 1) requestAnimationFrame(step); else { bl.remove(); ln.style.opacity = 0; land(); } };
+        requestAnimationFrame(step);
+      }
+    }, e.delay || 0);
+  }
+
+  /* ---------- Regla: medir de una casilla a otra (cada diagonal cuenta 1,5 m) ---------- */
+  function drawRuler(a, b) {
+    if (!a) { rulerG.innerHTML = ""; return; }
+    const [x0, y0] = center(a.c, a.r), [x1, y1] = center(b.c, b.r), n = dist(a, b), m = (n * 1.5).toLocaleString("es-ES");
+    rulerG.innerHTML = `<line class="rl" x1="${x0}" y1="${y0}" x2="${x1}" y2="${y1}"/><circle class="rdot" cx="${x0}" cy="${y0}" r="5"/><circle class="rdot" cx="${x1}" cy="${y1}" r="5"/>
+      <g transform="translate(${(x0 + x1) / 2},${(y0 + y1) / 2 - 14})"><rect class="rbox" x="-42" y="-13" width="84" height="24" rx="12"/><text class="rtxt" y="4">${m} m · ${n}</text></g>`;
+  }
+  { const rb = host.querySelector("[data-ruler]"); if (rb) rb.onclick = () => { measuring = !measuring; rb.setAttribute("aria-pressed", measuring); host.classList.toggle("measuring", measuring); if (!measuring) drawRuler(null); }; }
+
   /* ---------- Interacción ---------- */
   const propAt = (h, m = opts.model()) => [...(m.grid.props || [])].reverse().find(p => p.c === h.c && p.r === h.r && propVisible(p, opts.dm));
   svg.addEventListener("pointerdown", e => {
@@ -225,6 +279,7 @@ export function createBoard(host, opts) {
         select(id); return;
       }
     }
+    if (measuring && !opts.edit && inside(h)) { drag = { ruler: h, cur: h }; drawRuler(h, h); return; }
     if (tok) { drag = { token: tok, from: { c: tok.c, r: tok.r }, sx: x, sy: y, moved: false, can: opts.canMove(tok) }; return; }
     const pr = inside(h) && propAt(h);
     if (pr && opts.edit) { drag = { prop: pr, sx: x, sy: y, moved: false }; return; }
@@ -241,6 +296,7 @@ export function createBoard(host, opts) {
       if (Math.hypot(dx, dy) > 3) drag.moved = true;
       vb = [drag.vb[0] - dx, drag.vb[1] - dy, vb[2], vb[3]]; setVB(); return;
     }
+    if (drag.ruler) { if (inside(h)) { drag.cur = h; drawRuler(drag.ruler, h); } return; }
     if (drag.erase) { if (inside(h)) eraseAt(h, null, drag.done); return; }
     if (drag.paint) { brushCells(h).forEach(b => inside(b) && drag.paint.set(key(b.c, b.r), E.brush)); paintPreview(); return; }
     if (drag.rect || drag.line) { if (inside(h) && (!drag.cur || drag.cur.c !== h.c || drag.cur.r !== h.r)) { drag.cur = h; ghost(); } return; }
@@ -249,7 +305,7 @@ export function createBoard(host, opts) {
       drag.moved = true; const g = world.querySelector(`[data-prop="${drag.prop.id}"]`); if (g) g.setAttribute("transform", `translate(${x},${y})`); return;
     }
     if (drag.token && drag.can) {
-      if (!drag.moved && Math.hypot(x - drag.sx, y - drag.sy) < 6) return;
+      if (!drag.moved && Math.hypot(x - drag.sx, y - drag.sy) < 12) return;
       drag.moved = true;
       const g = world.querySelector(`[data-tok="${drag.token.id}"]`); if (g) g.setAttribute("transform", `translate(${x},${y})`);
       const [cx, cy] = center(h.c, h.r), cost = moveCost(opts.model().grid, drag.from, h);
@@ -263,6 +319,7 @@ export function createBoard(host, opts) {
     if (!drag) return;
     const d = drag; drag = null; tip.hidden = true;
     const [x, y] = pt(e), h = pixelToHex(x, y);
+    if (d.ruler) return; // la medida se queda a la vista hasta la siguiente
     if (d.erase) { tools(); return; }
     if (d.paint) { const p = d.paint; edit(mm => { mm.grid.terrain = mm.grid.terrain || {}; p.forEach((v, k) => (mm.grid.terrain[k] = v)); }); return; }
     if (d.rect) { const a = d.rect, b = d.cur || a, room = E.tool === "room";
@@ -284,7 +341,7 @@ export function createBoard(host, opts) {
       return;
     }
     if (d.token) {
-      if (!d.moved) { select(d.token.id); return; }
+      if (!d.moved || (h.c === d.token.c && h.r === d.token.r)) { select(d.token.id); render(); return; }
       const g = opts.model().grid, t = (g.terrain || {})[key(h.c, h.r)], blockedProp = (g.props || []).some(p => p.c === h.c && p.r === h.r && ((PROPS[p.k] || {}).block || (isDoor(p) && !p.open && !opts.dm)));
       if (inside(h) && !isWallT(t) && !blockedProp) opts.mutate("token", mm => { const k = mm.tokens.find(z => z.id === d.token.id); if (k) { k.c = h.c; k.r = h.r; } }, d.token);
       select(d.token.id); render();
@@ -340,7 +397,7 @@ export function createBoard(host, opts) {
   addEventListener("keydown", onKey);
 
   tools(); render();
-  return { render, fit, select, get selected() { return selected; }, get selectedProp() { return selProp; }, selectProp, editProp: (id, fn) => edit(mm => { const p = (mm.grid.props || []).find(z => z.id === id); if (p) fn(p, mm); }), resize() { fit(); }, undo, redo };
+  return { render, fit, select, playEvents, get selected() { return selected; }, get selectedProp() { return selProp; }, selectProp, editProp: (id, fn) => edit(mm => { const p = (mm.grid.props || []).find(z => z.id === id); if (p) fn(p, mm); }), resize() { fit(); }, undo, redo };
 }
 
 /** Coste de moverse en línea recta, en casillas: el terreno difícil cuenta doble. */

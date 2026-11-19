@@ -25,7 +25,9 @@ export function nowState(s, me, dm) {
     return { head: "⚔️ ¡Combate! · Iniciativa", text, who: mine ? "Tú" : "Todos", mine, tone: "alert", acts };
   }
   // En combate: primero, lo que está a medias en este turno (por orden de urgencia)
-  const rolls = visibleRolls(s).filter(r => r.status !== "void").slice(-40);
+  // Solo cuenta lo de ESTE combate (lo de combates anteriores no puede bloquear nada)
+  const since = s.board.combatAt || 0;
+  const rolls = visibleRolls(s).filter(r => r.status !== "void" && (r.at || 0) >= since).slice(-40);
   const hasDmg = id => rolls.some(x => x.link === id);
   const after = (() => { const o = order(s).filter(t => !(hpOf(s, t) && hpOf(s, t).cur <= 0 && t.kind !== "pc")); const i = o.findIndex(t => t.id === (cur && cur.id)); return o.length > 1 && i >= 0 ? o[(i + 1) % o.length] : null; })();
   const base = { head: `Ronda ${s.board.round} · turno de ${cur ? N(cur) : "—"}`, next: after ? N(after) : null, nextMine: !!(after && after.owner === me) };

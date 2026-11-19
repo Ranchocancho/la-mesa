@@ -6,6 +6,8 @@ import { exampleMap } from "../data/worldmap.js";
 import { lastClosed, presentationFor } from "../core/sesiones.js";
 import { esc } from "../core/ui.js";
 import { bboxOf } from "../core/regiones.js";
+import { isDM } from "../core/session.js";
+import { timeline, tellTimeline } from "../core/lore.js";
 
 let token = 0;
 
@@ -25,6 +27,20 @@ export async function renderStage(el) {
     if (url && !sn.text && !sn.eyebrow) html = `<div class="pres" style="background:#0a0806">${tag}<div class="art"><img src="${url}" alt="${esc(sn.title)}"></div></div>`;
     else if (url) html = `<div class="pres lorepres">${tag}<div class="art"><img src="${url}" alt="${esc(sn.title)}"></div>${caption(sn.eyebrow || "", sn.title, sn.text)}</div>`;
     else html = `<div class="pres" style="background-image:url('${mapURL}')">${tag}<div class="shade"></div>${caption(sn.eyebrow || "", sn.title, sn.text)}</div>`;
+  } else if (p && p.type === "timeline") {
+    // La cronología contada en la mesa: el hito actual en grande y, debajo, la línea con los que ya se conocen
+    const dm = isDM(state), sn = p.snap || {}, cur = (state.lore || []).find(e => e.id === p.id) || {};
+    const list = timeline(state, dm), i = list.findIndex(e => e.id === p.id);
+    const img = cur.img || sn.img, url = img ? await getImage(img) : null;
+    const thumbs = await Promise.all(list.map(e => e.img ? getImage(e.img) : null));
+    const date = [cur.date ?? sn.date, cur.era ?? sn.era].filter(Boolean).join(" · ");
+    html = `<div class="pres tlstage"${url ? ` style="--tlbg:url('${url}')"` : ` style="--tlbg:url('${mapURL}')"`}><div class="tlblur"></div>
+      <div class="tlhero">${url ? `<div class="tlart"><img src="${url}" alt="${esc(cur.name || sn.title || "")}"></div>` : ""}
+        <div class="body"><div class="eyebrow">CRONOLOGÍA${date ? " · " + esc(date.toUpperCase()) : ""}</div><h2>${esc(cur.name || sn.title || "")}</h2>${(cur.summary ?? sn.text) ? `<p>${esc(cur.summary ?? sn.text)}</p>` : ""}</div></div>
+      <div class="tlstrip">${dm && i > 0 ? `<button class="tlstep" data-tlgo="${list[i - 1].id}" aria-label="Hito anterior">‹</button>` : ""}
+        <div class="tlrow">${list.map((e, k) => `<button class="tls${e.id === p.id ? " now" : ""}${!e.revealed ? " hid" : ""}" ${dm ? `data-tlgo="${e.id}"` : "tabindex=\"-1\""} title="${esc(e.name)}">
+          <span class="tlsimg"${thumbs[k] ? ` style="background-image:url('${thumbs[k]}')"` : ""}>${thumbs[k] ? "" : "⏳"}</span><small>${esc(e.date || "")}</small><b>${esc(e.name)}</b></button>`).join("")}</div>
+        ${dm && i >= 0 && i < list.length - 1 ? `<button class="tlstep gold" data-tlgo="${list[i + 1].id}" aria-label="Siguiente hito">›</button>` : ""}</div></div>`;
   } else if (!p && backURL) {
     html = `<div class="pres" style="background:#0a0806"><div class="art"><img src="${backURL}" alt="Escena"></div></div>`;
   } else if (!p) {
@@ -74,4 +90,7 @@ export async function renderStage(el) {
   }
   if (my !== token || !el.isConnected) return; // cambió mientras cargaban las imágenes
   el.innerHTML = html;
+  el.querySelectorAll("[data-tlgo]").forEach(b => b.onclick = () => tellTimeline(b.dataset.tlgo));
+  const now = el.querySelector(".tls.now"), row = el.querySelector(".tlrow");
+  if (now && row) row.scrollLeft = now.offsetLeft - row.clientWidth / 2 + now.offsetWidth / 2;
 }

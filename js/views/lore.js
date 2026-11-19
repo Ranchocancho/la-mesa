@@ -4,14 +4,15 @@
 import { store, uid } from "../core/store.js";
 import { isDM, currentUser } from "../core/session.js";
 import { LORE, EVENT_TYPES, EVENT_STATUS, PLACE_KINDS, loreOf, entry, placeOf, canSee, refName, related, placePath, childrenOf, descendants,
-  newEntry, setEntry, removeEntry, link, unlink, showEntry, setBackdrop, clockOf, clockText, advanceClock } from "../core/lore.js";
+  newEntry, setEntry, removeEntry, link, unlink, showEntry, setBackdrop, timeline, tellTimeline, clockOf, clockText, advanceClock } from "../core/lore.js";
 import { pastSessions, liveSession, sessionName, editSession, editXP, deleteSession } from "../core/sesiones.js";
 import { loadScene } from "../core/mesa.js";
 import { getImage, putImage, readImageFile } from "../core/images.js";
 import { $, $$, esc, toast, debounce, pickFile } from "../core/ui.js";
+import { VITAL, STANCE, fieldsOf, badges, markChange, changesOf, changeText } from "../core/contexto.js";
 
 let el = null, q = "";
-const SECTIONS = [["places", "📍", "Lugares"], ["npc"], ["faction"], ["god"], ["battle"], ["event"], ["image"], ["note", , , true], ["chapter", , , true], ["sessions", "📜", "Sesiones"]];
+const SECTIONS = [["places", "📍", "Lugares"], ["hist"], ["npc"], ["faction"], ["god"], ["battle"], ["event"], ["image"], ["note", , , true], ["chapter", , , true], ["sessions", "📜", "Sesiones"]];
 const sec = k => { const x = SECTIONS.find(s => s[0] === k); return x && LORE[k] ? [k, LORE[k].icon, LORE[k].pl, x[3]] : x; };
 
 export function mount(root) {
@@ -85,8 +86,8 @@ function page(s, t, dm) {
 const thumb = (key, cls = "") => key ? `<div class="lthumb ${cls}" data-img="${esc(key)}"></div>` : "";
 function card(s, e) {
   const pl = e.place ? placeOf(s, e.place) : null;
-  const sub = e.kind === "npc" || e.kind === "god" || e.kind === "battle" ? e.role || (pl ? pl.name : "") : e.kind === "event" ? `${EVENT_TYPES[e.etype] || ""} · ${EVENT_STATUS[e.status] || ""}` : pl ? pl.name : "";
-  return `<a class="lcard k-${e.kind}${e.kind === "event" ? " st-" + e.status : ""}" href="#lore/${e.id}">${thumb(e.img)}<span class="li">${LORE[e.kind].icon}</span><b>${esc(e.name)}</b>${sub ? `<small>${esc(sub)}</small>` : ""}${isDM(s) && !e.revealed && e.kind !== "note" && e.kind !== "chapter" ? `<i class="lock" title="Oculto a los jugadores">🔒</i>` : ""}</a>`;
+  const sub = e.kind === "npc" || e.kind === "god" || e.kind === "battle" ? e.role || (pl ? pl.name : "") : e.kind === "event" ? `${EVENT_TYPES[e.etype] || ""} · ${EVENT_STATUS[e.status] || ""}` : e.kind === "hist" ? e.date || "" : pl ? pl.name : "";
+  return `<a class="lcard k-${e.kind}${e.kind === "event" ? " st-" + e.status : ""}" href="#lore/${e.id}">${thumb(e.img)}<span class="li">${LORE[e.kind].icon}</span><b>${esc(e.name)}</b>${sub ? `<small>${esc(sub)}</small>` : ""}${isDM(s) ? badges(e) : ""}${isDM(s) && !e.revealed && e.kind !== "note" && e.kind !== "chapter" ? `<i class="lock" title="Oculto a los jugadores">🔒</i>` : ""}</a>`;
 }
 const placeCard = (s, p) => `<a class="lcard k-place" href="#lore/${p.id}"><span class="li">📍</span><b>${esc(p.name)}</b><small>${esc(p.kind || "")}${childrenOf(s, p.id).length ? ` · ${childrenOf(s, p.id).length} dentro` : ""}</small>${isDM(s) && !p.visible ? `<i class="lock">🔒</i>` : ""}</a>`;
 
@@ -101,10 +102,46 @@ function placesHome(s, dm) {
 
 function listPage(s, k, dm) {
   if (!LORE[k]) return "";
+  if (k === "hist") return timelinePage(s, dm);
   const list = loreOf(s).filter(e => e.kind === k && canSee(s, e));
   return `<div class="lpage"><header class="lhead"><div class="eyebrow">LORE</div><h1>${LORE[k].icon} ${LORE[k].pl}</h1><p class="lsub">${LORE[k].hint}</p></header>
     ${dm ? `<div class="row"><button class="btn gold small" data-new="${k}">+ ${LORE[k].n}</button></div>` : ""}
     <div class="lgrid">${list.map(e => card(s, e)).join("") || `<p class="empty">${dm ? "Todavía nada. Crea el primero." : "Aún no os han revelado nada."}</p>`}</div></div>`;
+}
+
+/* ---------- Cronología: la historia del mundo en una línea que se desliza ---------- */
+function timelinePage(s, dm) {
+  const list = timeline(s), live = s.presentation && s.presentation.type === "timeline" ? s.presentation.id : null;
+  let lastEra = null;
+  const items = list.map((e, i) => {
+    const era = e.era && e.era !== lastEra ? `<div class="tlera"><span>${esc(e.era)}</span></div>` : ""; lastEra = e.era || lastEra;
+    return `${era}<article class="tli${live === e.id ? " now" : ""}${!e.revealed ? " hid" : ""}" data-tl="${e.id}">
+      <div class="tldate">${esc(e.date || (e.year != null && e.year !== "" ? "Año " + e.year : ""))}</div><i class="tldot"></i>
+      <a class="tlcard" href="#lore/${e.id}" draggable="false">${e.img ? `<div class="lthumb tlimg" data-img="${esc(e.img)}"></div>` : `<div class="tlimg none">${LORE.hist.icon}</div>`}
+        <b>${esc(e.name)}</b>${e.summary ? `<p>${esc(e.summary)}</p>` : ""}${dm && !e.revealed ? `<i class="lock" title="Los jugadores aún no lo conocen">🔒</i>` : ""}</a>
+      ${dm ? `<button class="btn small tltell" data-tell="${e.id}" title="Contarlo en la mesa (lo revela)">${live === e.id ? "✓ En la mesa" : "▶ Contar"}</button>` : ""}</article>`;
+  }).join("");
+  return `<div class="lpage tlpage"><header class="lhead"><div class="eyebrow">LORE</div><h1>${LORE.hist.icon} Cronología</h1>
+      <p class="lsub">${dm ? "Cuenta la historia del mundo hito a hito. Lo que cuentes en la mesa queda revelado para los jugadores." : "La historia del mundo, hasta donde la conocéis. Desliza para recorrerla."}</p></header>
+    ${dm ? `<div class="row"><button class="btn gold small" data-new="hist">+ Hito</button>${list.length ? `<button class="btn small" data-tell="${list[0].id}">▶ Contar desde el principio</button>` : ""}${live ? `<button class="btn small" data-tellstop>Quitar de la mesa</button>` : ""}</div>` : ""}
+    ${list.length ? `<div class="tlwrap"><button class="tlnav l" data-tlscroll="-1" aria-label="Anterior">‹</button>
+      <div class="tl" tabindex="0" aria-label="Línea temporal">${items}</div>
+      <button class="tlnav r" data-tlscroll="1" aria-label="Siguiente">›</button></div>`
+      : `<p class="empty">${dm ? "Aún no hay hitos. Crea el primero: la fundación, una guerra antigua, la caída de un reino…" : "Aún no os han contado nada de la historia del mundo."}</p>`}</div>`;
+}
+/** Deslizar la línea: arrastrando con el ratón, con la rueda o con las flechas. */
+let drag = null, dragMoved = false, dragWired = false;
+function bindTimeline() {
+  const tl = $(".tl", el); if (!tl) return;
+  $$("[data-tlscroll]", el).forEach(b => b.onclick = () => tl.scrollBy({ left: +b.dataset.tlscroll * tl.clientWidth * 0.8, behavior: "smooth" }));
+  tl.addEventListener("wheel", ev => { if (Math.abs(ev.deltaY) > Math.abs(ev.deltaX)) { tl.scrollLeft += ev.deltaY; ev.preventDefault(); } }, { passive: false });
+  tl.addEventListener("pointerdown", ev => { if (ev.pointerType !== "mouse" || ev.target.closest("button")) return; drag = { tl, x0: ev.clientX, sl: tl.scrollLeft, moved: false }; tl.classList.add("drag"); });
+  tl.addEventListener("click", ev => { if (dragMoved) { ev.preventDefault(); ev.stopPropagation(); dragMoved = false; } }, true);
+  if (!dragWired) { dragWired = true;
+    window.addEventListener("pointermove", ev => { if (!drag) return; const d = ev.clientX - drag.x0; if (Math.abs(d) > 5) drag.moved = true; drag.tl.scrollLeft = drag.sl - d; });
+    window.addEventListener("pointerup", () => { if (!drag) return; dragMoved = drag.moved; drag.tl.classList.remove("drag"); drag = null; }); }
+  tl.onkeydown = ev => { if (ev.key === "ArrowRight" || ev.key === "ArrowLeft") tl.scrollBy({ left: (ev.key === "ArrowRight" ? 1 : -1) * 300, behavior: "smooth" }); };
+  const now = $(".tli.now", el); if (now) tl.scrollLeft = now.offsetLeft - tl.clientWidth / 2 + now.offsetWidth / 2;
 }
 
 /* ---------- Un lugar: sus capas de información ---------- */
@@ -149,9 +186,11 @@ function entryPage(s, e, dm) {
       ${players.length ? `<select data-showto><option value="">Solo a…</option>${players.map(u => `<option value="${u.id}">${esc(u.name)}</option>`).join("")}</select>` : ""}
       ${e.img ? `<button class="btn small" data-showimg>Mostrar solo la imagen</button><button class="btn small" data-bg>${s.backdrop === e.img ? "✓ Fondo de la escena" : "Usar de fondo"}</button>` : ""}
       ${shown || (s.backdrop && s.backdrop === e.img) ? `<button class="btn small" data-retire>Retirar de la mesa</button>` : ""}
+      ${e.kind === "hist" ? `<button class="btn small" data-tell="${e.id}">▶ Contar en la mesa</button><a class="btn small" href="#lore/s:hist">⏳ Ver en la cronología</a>` : ""}
       ${e.kind === "event" ? Object.entries(EVENT_STATUS).map(([k, n]) => `<button class="btn small st" data-status="${k}" aria-pressed="${e.status === k}">${n}</button>`).join("") : ""}</div>`;
   const roleIn = ph => dm ? `<input data-ef="role" value="${esc(e.role || "")}" placeholder="${ph}">` : e.role ? `<span>${esc(e.role)}</span>` : "";
   const kindMeta = { npc: roleIn("Quién es (oficio, cargo…)"), god: roleIn("Dominio y símbolo (p. ej. Luz y sol · un disco dorado)"), battle: roleIn("Cuándo y resultado (p. ej. Año 1120 · victoria de la Corona)"),
+    hist: dm ? `<input data-ef="date" value="${esc(e.date || "")}" placeholder="Fecha que se lee (p. ej. Año 312 de la Corona)" style="min-width:240px"><label>Orden <input type="number" data-ef="year" value="${esc(e.year ?? "")}" style="width:90px" title="Un número para colocarlo en la línea (año, siglo…)"></label><input data-ef="era" value="${esc(e.era || "")}" placeholder="Época (opcional)">` : `<span>${esc([e.date, e.era].filter(Boolean).join(" · "))}</span>`,
     event: dm ? `<select data-ef="etype">${Object.entries(EVENT_TYPES).map(([k, n]) => `<option value="${k}" ${e.etype === k ? "selected" : ""}>${n}</option>`).join("")}</select>` : "",
     chapter: dm ? `<select data-ef="session"><option value="">Próxima sesión</option>${[liveSession(s), ...pastSessions(s)].filter(Boolean).map(x => `<option value="${x.id}" ${e.session === x.id ? "selected" : ""}>${esc(sessionName(x))}${x.status === "open" ? " (en curso)" : ""}</option>`).join("")}</select>` : "" }[e.kind] || "";
   return `<div class="lpage"><nav class="crumbs"><a href="#lore">Lore</a> › <a href="#lore/s:${e.kind}">${LORE[e.kind].pl}</a>${pl ? ` · en <a href="#lore/${pl.id}">${esc(pl.name)}</a>` : ""}</nav>
@@ -159,6 +198,7 @@ function entryPage(s, e, dm) {
       <header class="lhead">${dm ? `<input class="h1" data-ef="name" value="${esc(e.name)}" aria-label="Nombre">` : `<div class="eyebrow">${esc(LORE[e.kind].n.toUpperCase())}</div><h1>${esc(e.name)}</h1>`}
         <div class="row lmeta">${kindMeta}
           ${dm ? `<label>Lugar <select data-ef="place"><option value="">—</option>${s.world.places.map(p => `<option value="${p.id}" ${p.id === e.place ? "selected" : ""}>${esc(placePath(s, p.id).map(x => x.name).join(" › "))}</option>`).join("")}</select></label>` : ""}
+          ${dm ? fieldsOf(e.kind).map(f => `<label>${f === "vital" ? "Estado" : "Actitud"} <select data-estate="${f}">${Object.entries(f === "vital" ? VITAL : STANCE).map(([k, [i, n]]) => `<option value="${k}" ${(e[f] || (f === "vital" ? "vivo" : "neutral")) === k ? "selected" : ""}>${i} ${n}</option>`).join("")}</select></label>`).join("") : ""}
           ${dm && e.kind !== "note" && e.kind !== "chapter" ? `<label class="switch"><input type="checkbox" data-rev ${e.revealed ? "checked" : ""}> Revelado a los jugadores</label>` : ""}</div>
       </header>
       ${tools}
@@ -199,12 +239,16 @@ function sessionPage(s, id, dm) {
     <h3 class="lsec">Experiencia repartida</h3>
     <div class="lxp">${(x.xp || []).map((l, i) => `<div class="xpgrid"><span>${esc(l.name || "")}</span><input type="number" min="0" data-xpa="${i}" value="${l.amount || 0}" aria-label="PX"><input data-xpr="${i}" value="${esc(l.reason || "")}" placeholder="Motivo"></div>`).join("") || `<p class="empty">No se repartieron PX.</p>`}</div>
     <p class="note">Si cambias los PX, la ficha del personaje se ajusta en la diferencia.</p>
+    ${changesOf(x).length ? `<h3 class="lsec">Cambios en el mundo</h3><ul class="lchg">${changesOf(x).map(c => `<li><a href="#lore/${c.id}">${esc(changeText(c))}</a></li>`).join("")}</ul>` : ""}
     <h3 class="lsec">Crónica de la sesión</h3><p class="empty">${notes.length} nota${notes.length === 1 ? "" : "s"} del grupo. <a href="#cronica">Ver la crónica</a></p>
     <div class="row ldanger"><label class="switch"><input type="checkbox" id="undoxp"> Restar también los PX que dio</label><button class="btn small danger" data-delses>Eliminar sesión</button></div></div>`;
 }
 
 /* ---------- Acciones ---------- */
 function bindPage(s, t, dm) {
+  bindTimeline();
+  $$("[data-tell]", el).forEach(b => b.onclick = ev => { ev.preventDefault(); tellTimeline(b.dataset.tell); toast("En la mesa: ábrela en la Partida para contarlo"); });
+  $$("[data-tellstop]", el).forEach(b => b.onclick = () => store.commit("present", st => { st.presentation = null; }));
   $$("[data-new]", el).forEach(b => b.onclick = () => {
     const extra = {}; if (b.dataset.at) extra.place = b.dataset.at; if (b.dataset.ses != null && b.dataset.new === "chapter") extra.session = b.dataset.ses || null;
     go(newEntry(b.dataset.new, extra));
@@ -259,6 +303,7 @@ function bindPage(s, t, dm) {
   const bg = $("[data-bg]", el); if (bg) bg.onclick = () => setBackdrop(s.backdrop === e.img ? null : e.img);
   const rt = $("[data-retire]", el); if (rt) rt.onclick = () => store.commit("present", st2 => { if (st2.presentation && st2.presentation.id === e.id) st2.presentation = null; if (st2.backdrop === e.img) st2.backdrop = null; });
   $$("[data-status]", el).forEach(b => b.onclick = () => setEntry(e.id, { status: b.dataset.status }));
+  $$("[data-estate]", el).forEach(b => b.onchange = () => markChange(e.id, b.dataset.estate, b.value));
   const up = $("[data-upimg]", el); if (up) up.onclick = async () => {
     const f = await pickFile(); if (!f) return;
     try { const r = await readImageFile(f, 1800), key = uid("img"); await putImage(key, r.dataURL); setEntry(e.id, x => ({ img: key, name: e.kind === "image" && /nueva$/.test(x.name) ? f.name.replace(/\.[^.]+$/, "") : x.name })); }

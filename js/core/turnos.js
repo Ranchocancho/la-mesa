@@ -20,9 +20,18 @@ const alive = (s, t) => { const h = hpOf(s, t); return t.kind === "pc" || !h || 
 export const pending = s => s.tokens.filter(t => !t.hidden && (t.init == null || t.init === "") && alive(s, t));
 
 /** 1. Iniciar combate: se borra la iniciativa y los enemigos tiran la suya (en secreto, la ve el máster). */
+/** ¿Puede actuar esta figura ahora? En combate, solo en su turno (fuera de él, solo reacciones). */
+export function canActNow(s, tokId, use = "act") {
+  if (phase(s) !== "live" || use === "react") return true;
+  return s.board.turn === tokId;
+}
+// Cierra lo que quedara a medias (ataques, daños, reacciones): un combate nuevo empieza siempre de cero
+function closePending(st) { (st.rolls || []).forEach(r => { if (r.status === "pending" && (r.kind === "attack" || r.kind === "damage" || r.kind === "oa" || r.saves)) { r.status = "void"; r.note = "Quedó sin resolver al terminar el combate"; } }); }
+
 export function beginCombat() {
   const s0 = store.get(), foes = s0.tokens.filter(t => t.kind !== "pc");
-  store.commit("board", s => { s.tokens.forEach(t => { t.init = null; t.eco = null; }); s.board.combat = "init"; s.board.turn = null; s.board.round = 0; s.board.seq = (s.board.seq || 0) + 1; });
+  store.commit("board", s => { s.tokens.forEach(t => { t.init = null; t.eco = null; t.conds = (t.conds || []).filter(c => !["esquivando", "destrabado"].includes(c.id)); }); s.board.combat = "init"; s.board.turn = null; s.board.round = 0; s.board.from = null; s.board.starts = {}; s.board.seq = (s.board.seq || 0) + 1; s.board.combatAt = Date.now(); });
+  store.commit("roll", closePending);
   if (!foes.length) return;
   // Todas las criaturas tiran a la vez: una sola tirada (secreta) con un d20 por criatura
   const res = foes.map(t => { const b = +t.initBonus || 0, r = roll(`1d20${b >= 0 ? "+" : ""}${b}`); return { id: t.id, name: t.name, total: r.total, dice: r.dice }; });
@@ -63,7 +72,8 @@ export function endTurn() {
 }
 export function stopCombat() {
   import("./experiencia.js").then(m => m.postCombatXP());
-  store.commit("board", s => { s.tokens.forEach(t => { t.init = null; t.eco = null; }); s.board.combat = null; s.board.turn = null; s.board.round = 0; s.board.from = null; });
+  store.commit("board", s => { s.tokens.forEach(t => { t.init = null; t.eco = null; t.conds = (t.conds || []).filter(c => !["esquivando", "destrabado"].includes(c.id)); }); s.board.combat = null; s.board.turn = null; s.board.round = 0; s.board.from = null; s.board.starts = {}; s.board.seq = (s.board.seq || 0) + 1; });
+  store.commit("roll", closePending);
 }
 
 /* ---------- Economía de acciones del turno ---------- */

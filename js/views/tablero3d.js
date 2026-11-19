@@ -16,6 +16,8 @@ import { estado, etiqueta } from "../data/estados.js";
 import { computeVision, explored } from "../core/vision.js";
 import { playEffect, EFECTOS } from "./efectos3d.js";
 import { sound, AMBIENTES } from "../core/sonido.js";
+import { floatText, strike, motes } from "./golpes3d.js";
+import { RES_TEXT, RES_COLOR, cells as cellDist } from "../core/golpes.js";
 
 const CELL = 4, BASE = "assets/kaykit/";
 const loader = new GLTFLoader();
@@ -187,6 +189,30 @@ function hpBarSprite(pct, txt, color) {
   const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, depthTest: false, transparent: true }));
   s.scale.set(2.9, 0.6, 1); s.renderOrder = 9; return s;
 }
+// Placa con el nombre y la vida: mismo tamaño en pantalla esté la cámara cerca o lejos, para que siempre se lea
+const PLATE_H = 0.043;
+const TITLES = /^(hermano|hermana|sir|lady|lord|maese|fray|sor|don|doña|capitán|capitana|madre|padre)$/i;
+/** Nombre corto para la placa: «Brena Martillo-Ceniza» → «Brena», «Hermano Osric» → «Osric». */
+const shortName = n => { const w = (n || "?").trim().split(/\s+/); return w.length > 1 && TITLES.test(w[0]) ? w[1] : w[0].length < 3 && w[1] ? w.slice(0, 2).join(" ") : w[0]; };
+function namePlate(name, pct, txt, color, hl) {
+  const c = document.createElement("canvas"); c.width = 640; c.height = 150; const g = c.getContext("2d");
+  g.font = "bold 58px Georgia"; let fs = 58; while (g.measureText(name).width > 560 && fs > 30) { fs -= 2; g.font = `bold ${fs}px Georgia`; }
+  const w = Math.min(632, Math.max(300, g.measureText(name).width + 70)), x0 = (640 - w) / 2;
+  g.shadowColor = hl ? color : "rgba(0,0,0,.6)"; g.shadowBlur = hl ? 18 : 8;
+  g.fillStyle = "rgba(14,10,8,.92)"; g.beginPath(); g.roundRect(x0, 6, w, 138, 26); g.fill(); g.shadowBlur = 0;
+  g.strokeStyle = color; g.lineWidth = hl ? 7 : 4; g.stroke();
+  g.fillStyle = hl ? "#ffe6a6" : "#f6ecd2"; g.textAlign = "center"; g.textBaseline = "middle"; g.fillText(name, 320, pct != null ? 54 : 75);
+  if (pct != null) {
+    const bx = x0 + 22, bw = w - 44;
+    g.fillStyle = "#3a1b16"; g.beginPath(); g.roundRect(bx, 92, bw, 34, 10); g.fill();
+    const fw = bw * Math.max(0, Math.min(1, pct));
+    if (fw > 0) { const gr = g.createLinearGradient(0, 92, 0, 126), base = pct > 0.5 ? ["#9bd06a", "#4f7d2a"] : pct > 0.25 ? ["#f0c85a", "#a37a1e"] : ["#ff7a62", "#a3291c"]; gr.addColorStop(0, base[0]); gr.addColorStop(1, base[1]); g.fillStyle = gr; g.beginPath(); g.roundRect(bx, 92, Math.max(12, fw), 34, 10); g.fill(); }
+    if (txt) { g.font = "bold 28px Georgia"; g.lineWidth = 6; g.strokeStyle = "rgba(0,0,0,.85)"; g.strokeText(txt, 320, 110); g.fillStyle = "#fff"; g.fillText(txt, 320, 110); }
+  }
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4;
+  const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, depthTest: false, transparent: true, sizeAttenuation: false }));
+  s.scale.set(PLATE_H * 640 / 150, PLATE_H, 1); s.center.set(0.5, 0); s.renderOrder = 9; return s;
+}
 function condTag(conds) {
   const list = conds.map(cd => ({ e: estado(cd.id || cd), lvl: cd.lvl })).filter(x => x.e);
   const c = document.createElement("canvas"), rowH = 50; c.width = 400; c.height = rowH * list.length + 10;
@@ -214,12 +240,13 @@ export function createBoard3D(host, opts) {
   // En la barra superior va la versión compacta: volumen vertical, ⌖ y ⬇ en cuadraditos, Órbita/Libre y Muros.
   // Niebla, música y luz (día/noche/interior) las decide el máster desde su pestaña.
   const camHTML = opts.controlsHost ? `<div class="cam3d compact" role="toolbar" aria-label="Cámara">
-      <span class="camsq"><button class="sq" data-cam="center" title="Centrar la cámara en la mesa" aria-label="Centrar">⌖</button><button class="sq" data-cam="top" title="Vista cenital (desde arriba)" aria-label="Cenital">⬇</button><button class="sq" data-cam="mute" title="Silenciar">${sound.muted ? "🔇" : "🔊"}</button></span>
+      <span class="camsq"><button class="sq" data-cam="center" title="Centrar la cámara en la mesa" aria-label="Centrar">⌖</button><button class="sq" data-cam="top" title="Vista cenital (desde arriba)" aria-label="Cenital">⬇</button><button class="sq" data-cam="ruler" aria-pressed="false" title="Regla: arrastra de una casilla a otra para medir" aria-label="Regla">📏</button><button class="sq" data-cam="mute" title="Silenciar">${sound.muted ? "🔇" : "🔊"}</button></span>
       <span class="volv" title="Volumen"><input type="range" min="0" max="1" step="0.05" value="${sound.volume}" data-vol aria-label="Volumen" orient="vertical"></span>
       <span class="camst"><button class="btn small" data-cam="mode" aria-pressed="false" title="Órbita alrededor del centro o cámara libre">Órbita</button><button class="btn small" data-cam="walls" aria-pressed="true" title="Muros bajos para ver mejor">Muros bajos</button></span>
     </div>` : `<div class="cam3d" role="toolbar" aria-label="Cámara">
       <button class="btn small" data-cam="center" title="Centrar la cámara en la mesa">⌖ Centrar</button>
       <button class="btn small" data-cam="top" title="Vista desde arriba">⬇ Cenital</button>
+      <button class="btn small" data-cam="ruler" aria-pressed="false" title="Regla: arrastra de una casilla a otra para medir">📏 Medir</button>
       <button class="btn small" data-cam="mode" aria-pressed="false" title="Órbita alrededor del centro o cámara libre">Órbita</button>
       <button class="btn small" data-cam="walls" aria-pressed="true" title="Muros bajos para ver mejor">Muros bajos</button>
       ${opts.dm && opts.setFog ? `<button class="btn small" data-cam="fog" title="Niebla de guerra para los jugadores">Niebla</button>` : ""}
@@ -279,6 +306,7 @@ export function createBoard3D(host, opts) {
     if (k === "top") frame("top");
     if (k === "mode") setFree(!free);
     if (k === "fog") { opts.setFog(!(G && G.fog)); return; }
+    if (k === "ruler") { measuring = !measuring; b.setAttribute("aria-pressed", measuring); renderer.domElement.style.cursor = measuring ? "crosshair" : ""; if (!measuring) drawRuler(null); return; }
     if (k === "mute") { sound.setMuted(!sound.muted); b.textContent = sound.muted ? "🔇" : "🔊"; return; }
     if (k === "walls") { lowWalls = !lowWalls; b.textContent = lowWalls ? "Muros bajos" : "Muros altos"; b.setAttribute("aria-pressed", lowWalls); lastSig = ""; sync(); }
   });
@@ -291,6 +319,15 @@ export function createBoard3D(host, opts) {
   const kd = e => { if (free && !/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)) keys.add(e.key.toLowerCase()); }, ku = e => keys.delete(e.key.toLowerCase());
   window.addEventListener("keydown", kd); window.addEventListener("keyup", ku);
 
+  // Motas de ambiente (polvo, luciérnagas, polen): se rehacen al cambiar la luz o el tamaño de la mesa
+  let moteFx = null, moteKey = "";
+  const calm = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  function setMotes() {
+    if (!G || calm) return;
+    const k = [ambient, G.cols, G.rows].join("|"); if (k === moteKey) return; moteKey = k;
+    if (moteFx) { ticks.delete(moteFx.step); moteFx.dispose(); }
+    moteFx = motes(scene, G.cols * CELL, G.rows * CELL, ambient); ticks.add(moteFx.step);
+  }
   function applyAmbient(k) {
     const a = AMBIENT[k] || AMBIENT.interior;
     if (ambient === k) return; ambient = k;
@@ -474,6 +511,7 @@ export function createBoard3D(host, opts) {
     mini.scale.multiplyScalar(size * (key === "peana" ? 1.22 : 1.35));
     mini.position.y = 0.28;
     mini.traverse(o => { if (o.isMesh) { o.castShadow = true; o.frustumCulled = false; } });
+    { const bb = new THREE.Box3().setFromObject(mini); rec.h = Math.max(2.5, bb.max.y - bb.min.y + 0.28); } // altura real de la figura (para la placa del nombre)
     rec.tilt = 0; rec.hitT = 0;
     if (t.hidden) mini.traverse(o => { if (o.isMesh) { const see = m => { const c = m.clone(); c.transparent = true; c.opacity = 0.4; return c; }; o.material = Array.isArray(o.material) ? o.material.map(see) : see(o.material); if (mini.userData.mats) mini.userData.mats = Array.isArray(o.material) ? [...new Set(o.material)] : mini.userData.mats; } });
     rec.root.add(mini); rec.mini = mini; rec.condKey = null;
@@ -506,7 +544,7 @@ export function createBoard3D(host, opts) {
     g.fillText(name, W / 2, H - 50);
     const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 4;
     const face = new THREE.MeshStandardMaterial({ map: tex, roughness: 0.75 }), side = new THREE.MeshStandardMaterial({ color: edge, roughness: 0.8 });
-    const CW = 2.3, CH = 3.05;
+    const CW = 3.0, CH = 4.0;
     const mesh = new THREE.Mesh(new THREE.BoxGeometry(CW, CH, 0.09), [side, side, side, side, face, face]);
     mesh.position.y = CH / 2; mesh.castShadow = true;
     const clip = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.28, 0.34), new THREE.MeshStandardMaterial({ color: 0x14110e, roughness: 0.5 }));
@@ -549,6 +587,10 @@ export function createBoard3D(host, opts) {
         rec.hitT = 1; if (fxReady) sound.play("hit");
         if (rec.mixer) { play(rec, "Hit_A", true); setTimeout(() => { if (!rec.down) play(rec, "Idle"); }, 700); }
       }
+      if (hp && rec.lastHp != null && hp.cur !== rec.lastHp && fxReady) {
+        const dHp = hp.cur - rec.lastHp, top = rec.root.position.clone(); top.y = 2.6 * (+t.size || 1); top.x += 1.1;
+        setTimeout(() => { if (!disposed) fxList.push(floatText(scene, top, (dHp > 0 ? "+" : "−") + Math.abs(dHp), dHp > 0 ? "#7dff9a" : "#ff5a48", Math.abs(dHp) >= 15, 1.35)); }, 450);
+      }
       if (hp && rec.lastHp != null && hp.cur !== rec.lastHp) {
         rec.fxT = 1; rec.fxHeal = hp.cur > rec.lastHp;
         rec.pulse.material.color.set(rec.fxHeal ? 0x5cff7a : 0xff3a2a); rec.beam.material.color.set(rec.fxHeal ? 0x6cff8a : 0xff4a2a);
@@ -580,30 +622,20 @@ export function createBoard3D(host, opts) {
           else o.material = o.userData.baseMat;
         } });
       }
-      if (rec.tag) rec.tag.position.y = (selected === t.id || (opts.decorate(t) || {}).isTurn ? 5.7 : 4.75) * (+t.size || 1) + 0.45;
       const d = opts.decorate(t) || {};
       rec.turn.visible = !!d.isTurn;
       rec.sel.visible = selected === t.id;
-      const showLabel = selected === t.id || d.isTurn;
-      const exact = opts.dm || t.kind === "pc";
-      const labelKey = showLabel ? JSON.stringify([d.name || t.name, hp && hp.cur, hp && hp.max, exact]) : "";
-      if (labelKey !== rec.labelKey) {
-        if (rec.label) { rec.root.remove(rec.label); rec.label = null; }
-        if (showLabel) {
-          const pct = hp ? hp.cur / Math.max(1, hp.max) : null;
-          rec.label = labelSprite(d.name || t.name || "", hp ? (exact ? `${hp.cur}/${hp.max} PG` : (pct > 0.75 ? "Ileso" : pct > 0.5 ? "Herido" : pct > 0.25 ? "Malherido" : pct > 0 ? "Al borde" : "Fuera de combate")) : "", exact ? pct : null, t.kind === "pc" ? "#d6aa4e" : t.kind === "npc" ? "#7d8fe0" : "#b33a2e");
-          rec.label.position.y = 4.2 * (+t.size || 1) + 0.6; rec.root.add(rec.label);
-        }
-        rec.labelKey = labelKey;
+      const hl = selected === t.id || !!d.isTurn, exact = opts.dm || t.kind === "pc", top = (rec.h || 4) + 0.35;
+      const pctQ = hp ? (exact ? hp.cur / Math.max(1, hp.max) : (r => r > 0.75 ? 1 : r > 0.5 ? 0.7 : r > 0.25 ? 0.45 : r > 0 ? 0.18 : 0)(hp.cur / Math.max(1, hp.max))) : null;
+      const word = hp && !exact ? (pctQ >= 1 ? "Ileso" : pctQ >= 0.7 ? "Herido" : pctQ >= 0.45 ? "Malherido" : pctQ > 0 ? "Al borde" : "Fuera de combate") : "";
+      const plateKey = JSON.stringify([d.name || t.name, pctQ, exact && hp && hp.cur, exact && hp && hp.max, hl, word]);
+      if (plateKey !== rec.barKey) {
+        if (rec.bar) { rec.root.remove(rec.bar); rec.bar.material.map.dispose(); rec.bar.material.dispose(); rec.bar = null; }
+        rec.bar = namePlate(t.kind === "pc" ? shortName(d.name || t.name) : (d.name || t.name || "?"), pctQ, hp ? (exact ? `${hp.cur} / ${hp.max} PG` : word) : "", t.kind === "pc" ? "#d6aa4e" : t.kind === "npc" ? "#7d8fe0" : "#b33a2e", hl);
+        rec.root.add(rec.bar); rec.barKey = plateKey;
       }
-      const vis = !!hp && !showLabel && !t.hidden;
-      const pctQ = hp ? (exact ? hp.cur / Math.max(1, hp.max) : (r => r > 0.75 ? 1 : r > 0.5 ? 0.7 : r > 0.25 ? 0.45 : r > 0 ? 0.18 : 0)(hp.cur / Math.max(1, hp.max))) : 0;
-      const barKey = vis ? JSON.stringify([pctQ, exact && hp.cur, exact && hp.max]) : "";
-      if (barKey !== rec.barKey) {
-        if (rec.bar) { rec.root.remove(rec.bar); rec.bar.material.map.dispose(); rec.bar = null; }
-        if (vis) { rec.bar = hpBarSprite(pctQ, exact ? `${hp.cur}/${hp.max}` : "", t.kind === "pc" ? "#d6aa4e" : t.kind === "npc" ? "#7d8fe0" : "#b33a2e"); rec.bar.position.y = 4.15 * (+t.size || 1) + 0.25; rec.root.add(rec.bar); }
-        rec.barKey = barKey;
-      }
+      rec.bar.position.y = top;
+      if (rec.tag) rec.tag.position.y = top + 1.9;
     }
   }
 
@@ -622,7 +654,7 @@ export function createBoard3D(host, opts) {
     const first = !G; G = m.grid;
     const sig = JSON.stringify([G.cols, G.rows, G.terrain, G.props, lowWalls]);
     if (sig !== lastSig) { lastSig = sig; queueBuild(G); if (first) frame("persp"); }
-    applyAmbient(G.ambient || "interior");
+    applyAmbient(G.ambient || "interior"); setMotes();
     sound.ambient(G.sound || "");
     if (snd) snd.value = G.sound || "";
     const fb = ctl.querySelector('[data-cam="fog"]'); if (fb) { fb.setAttribute("aria-pressed", !!G.fog); fb.textContent = G.fog ? "Niebla: sí" : "Niebla: no"; }
@@ -645,6 +677,26 @@ export function createBoard3D(host, opts) {
     // Los dados ya no ruedan sobre el tablero: salen en la cajetilla (dicecam.js)
     fxReady = true;
     refreshReach();
+  }
+
+  // ---------- Golpes: lo que pasa en cada ataque, visto por todos ----------
+  function playEvents(evs) {
+    for (const e of evs) setTimeout(() => {
+      if (disposed || !G) return;
+      const m = opts.model(), B = toks.get(e.to), tb = m.tokens.find(t => t.id === e.to);
+      if (!B || !B.root || !tb || (tb.hidden && !opts.dm)) return;
+      const top = B.root.position.clone(); top.y = (B.h || 4) + 1.6;
+      const say = () => fxList.push(floatText(scene, top, RES_TEXT[e.res], RES_COLOR[e.res], e.res === "crit"));
+      const A = e.from && toks.get(e.from), ta = e.from && m.tokens.find(t => t.id === e.from);
+      if (e.type === "atk" && A && A.root && ta && e.from !== e.to) {
+        const melee = cellDist(ta, tb) <= 1 + Math.max(+ta.size || 1, +tb.size || 1);
+        if (A.mixer) { play(A, e.magic ? "Spellcast_Shoot" : "1H_Melee_Attack_Chop", true); setTimeout(() => { if (!A.down) play(A, "Idle"); }, 800); } else A.hitT = Math.max(A.hitT || 0, 0.35);
+        sound.play(melee && !e.magic ? "whoosh" : e.magic ? "magic" : "twang");
+        fxList.push(strike(scene, A.root.position.clone(), B.root.position.clone(), { melee, magic: e.magic, color: e.color, res: e.res,
+          onHit: () => { B.hitT = Math.max(B.hitT || 0, e.res === "crit" ? 1 : 0.7); if (e.res === "crit") sound.play("crit"); } }));
+        setTimeout(() => { if (!disposed) say(); }, melee && !e.magic ? 180 : 420);
+      } else say();
+    }, e.delay || 0);
   }
 
   // ---------- Línea de puntería: distancia, alcance y cobertura hasta el objetivo ----------
@@ -732,6 +784,22 @@ export function createBoard3D(host, opts) {
     pathMesh.renderOrder = 3; reachGrp.add(pathMesh);
   }
 
+  // ---------- Regla: medir distancias (cada diagonal cuenta 1,5 m) ----------
+  let measuring = false, measure = null; const rulerG = new THREE.Group(); scene.add(rulerG);
+  const rulerMat = new THREE.MeshBasicMaterial({ color: 0xffe08a, transparent: true, opacity: 0.95, depthTest: false });
+  function drawRuler(a, b) {
+    rulerG.children.slice().forEach(o => { rulerG.remove(o); if (o.geometry) o.geometry.dispose(); if (o.material && o.material !== rulerMat) { if (o.material.map) o.material.map.dispose(); o.material.dispose(); } });
+    if (!a) return;
+    const A = new THREE.Vector3(cx(a.c), 0.45, cz(a.r)), B = new THREE.Vector3(cx(b.c), 0.45, cz(b.r)), len = A.distanceTo(B);
+    [A, B].forEach(p => { const d = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.55, 0.08, 24), rulerMat); d.position.copy(p); d.renderOrder = 12; rulerG.add(d); });
+    if (len > 0.01) { const l = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.13, len, 8), rulerMat); l.position.copy(A).lerp(B, 0.5); l.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), B.clone().sub(A).normalize()); l.renderOrder = 12; rulerG.add(l); }
+    const n = dist(a, b), c = document.createElement("canvas"), g = c.getContext("2d"); c.width = 256; c.height = 72;
+    g.fillStyle = "rgba(17,14,12,.92)"; g.strokeStyle = "#ffe08a"; g.lineWidth = 3; g.beginPath(); g.roundRect(4, 4, 248, 64, 32); g.fill(); g.stroke();
+    g.fillStyle = "#ffe08a"; g.font = "700 34px Georgia, serif"; g.textAlign = "center"; g.textBaseline = "middle"; g.fillText(`${(n * 1.5).toLocaleString("es-ES")} m · ${n}`, 128, 38);
+    const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace;
+    const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false, transparent: true })); sp.scale.set(7, 1.97, 1); sp.position.copy(A).lerp(B, 0.5); sp.position.y = 2.4; sp.renderOrder = 13; rulerG.add(sp);
+  }
+
   // ---------- Interacción: seleccionar y arrastrar miniaturas ----------
   const ray = new THREE.Raycaster(), ndc = new THREE.Vector2(), ground = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0), hit = new THREE.Vector3();
   let drag = null, down = null;
@@ -752,6 +820,7 @@ export function createBoard3D(host, opts) {
   renderer.domElement.addEventListener("pointerdown", e => {
     if (!G) return;
     if (pickMode) { setNdc(e); const h = cellAt(); const pm = pickMode; pickMode = null; pickRing.visible = hl.visible = false; renderer.domElement.style.cursor = ""; if (h && inside(h)) pm.cb(h); else pm.cb(null); e.stopPropagation(); return; }
+    if (measuring) { setNdc(e); const h = cellAt(); if (h && inside(h)) { measure = { a: h, b: h }; drawRuler(h, h); controls.enabled = false; renderer.domElement.setPointerCapture(e.pointerId); } return; }
     setNdc(e); down = { x: e.clientX, y: e.clientY };
     const id = tokenAt(), t = id && opts.model().tokens.find(k => k.id === id);
     if (!t && opts.dm) {
@@ -760,13 +829,15 @@ export function createBoard3D(host, opts) {
       const ph = opts.onProp && ray.intersectObjects(world.children, true).find(h => h.object.userData.prop);
       if (ph) { const pr = (G.props || []).find(x => x.id === ph.object.userData.prop); if (pr && (PROPS[pr.k] || {}).loot || pr && (PROPS[pr.k] || {}).trap || pr && pr.hidden || pr && pr.label) { opts.onProp(pr); return; } }
     }
-    if (t && opts.canMove(t)) { drag = { id, from: { c: t.c, r: t.r }, moved: false }; controls.enabled = false; renderer.domElement.setPointerCapture(e.pointerId); if (reachFor !== id) showReach(id); }
+    if (t && opts.canMove(t)) { drag = { id, from: { c: t.c, r: t.r }, moved: false, t0: performance.now() }; controls.enabled = false; renderer.domElement.setPointerCapture(e.pointerId); if (reachFor !== id) showReach(id); }
     else if (t) down.tok = id;
   });
   renderer.domElement.addEventListener("pointermove", e => {
+    if (measure) { setNdc(e); const h = cellAt(); if (h && inside(h) && (h.c !== measure.b.c || h.r !== measure.b.r)) { measure.b = h; drawRuler(measure.a, h); } return; }
     if (!drag) return;
     setNdc(e);
-    if (!drag.moved && Math.hypot(e.clientX - down.x, e.clientY - down.y) < 6) return;
+    // Un clic con algo de temblor no es un arrastre: hace falta desplazar el ratón de verdad
+    if (!drag.moved && Math.hypot(e.clientX - down.x, e.clientY - down.y) < 16) return;
     drag.moved = true;
     const h = cellAt(); if (!h) return;
     const rec = toks.get(drag.id);
@@ -780,10 +851,16 @@ export function createBoard3D(host, opts) {
   });
   const up = e => {
     controls.enabled = true; hl.visible = false; tip.hidden = true;
+    if (measure) { measure = null; return; } // la medida se queda a la vista hasta la siguiente
     if (drag) {
       const d = drag; drag = null;
-      if (!d.moved) { select(d.id); return; }
       setNdc(e); const h = cellAt(), rec = toks.get(d.id);
+      // Seleccionar no mueve: si apenas se arrastró, o se soltó en su casilla, la figura vuelve a su sitio
+      const quick = performance.now() - d.t0 < 250 && h && dist(d.from, h) <= 1;
+      if (!d.moved || quick || (h && h.c === d.from.c && h.r === d.from.r)) {
+        if (rec && rec.root) { rec.root.position.set(cx(d.from.c), 0, cz(d.from.r)); rec.target.copy(rec.root.position); }
+        showPath(null); select(d.id); return;
+      }
       const shut = (G.props || []).some(pr => isDoor(pr) && !pr.open && pr.c === h?.c && pr.r === h?.r);
       if (h && inside(h) && !isWall(h.c, h.r) && (!shut || opts.dm)) {
         if (rec && rec.root) { rec.root.position.set(cx(h.c), 0, cz(h.r)); rec.target.copy(rec.root.position); }
@@ -839,7 +916,7 @@ export function createBoard3D(host, opts) {
         rec.pulse.scale.setScalar(1 + k * 1.4); rec.pulse.material.opacity = rec.fxT * 0.95;
         rec.beam.material.opacity = Math.sin(Math.min(1, k * 1.4) * Math.PI) * (rec.fxHeal ? 0.32 : 0.22);
         rec.beam.scale.set(1 - k * 0.3, rec.fxHeal ? 0.6 + k * 0.7 : 1, 1 - k * 0.3); rec.beam.position.y = rec.fxHeal ? 1.8 + k * 2.5 : 3;
-        if (rec.bar) rec.bar.scale.set(2.9 * (1 + 0.25 * rec.fxT), 0.6 * (1 + 0.25 * rec.fxT), 1);
+        if (rec.bar) { const k = 1 + 0.18 * rec.fxT; rec.bar.scale.set(PLATE_H * 640 / 150 * k, PLATE_H * k, 1); }
       }
       if (rec.sel && rec.sel.visible) rec.sel.material.opacity = 0.55 + 0.3 * Math.sin(time * 4);
       if (rec.turn && rec.turn.visible) rec.turn.material.opacity = 0.09 + 0.06 * Math.sin(time * 3);
@@ -869,7 +946,7 @@ export function createBoard3D(host, opts) {
   const esc = e => { if (e.key === "Escape" && pickMode) { const pm = pickMode; pickMode = null; pickRing.visible = hl.visible = false; renderer.domElement.style.cursor = ""; pm.cb(null); } };
   window.addEventListener("keydown", esc);
   return {
-    render: sync, fit: () => frame("persp"), select, resize, dispose, get selected() { return selected; },
+    render: sync, fit: () => frame("persp"), select, resize, dispose, playEvents, get selected() { return selected; },
     /** Elegir casilla objetivo (con área opcional, en casillas). */
     pick(area, cb) { pickMode = { area, cb }; renderer.domElement.style.cursor = "crosshair"; },
     has3d: true

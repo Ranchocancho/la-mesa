@@ -6,7 +6,7 @@ import { charOf } from "./mesa.js";
 import { damage as hurt } from "./salud.js";
 import { findSpell } from "./srd.js";
 import { classInfo, prof } from "../data/dnd.js";
-import { rangeOf, inRange, cover, modifiers, spend, dist, hasCond } from "./turnos.js";
+import { rangeOf, inRange, cover, modifiers, spend, dist, hasCond, canActNow } from "./turnos.js";
 import { toast } from "./ui.js";
 
 const num = s => { const m = String(s || "").match(/[+-−]?\s*\d+/); return m ? +m[0].replace(/\s|−/g, s => s === "−" ? "-" : "") : 0; };
@@ -40,6 +40,7 @@ export function attacksOf(s, t) {
 export function attack(attackerId, targetId, weapon, force = null, use = "act", opt = {}) {
   const s = store.get(), a = s.tokens.find(t => t.id === attackerId), t = s.tokens.find(x => x.id === targetId);
   if (!a || !t) return null;
+  if (!canActNow(s, a.id, use)) { toast(`No es el turno de ${nameOf(s, a)}: fuera de su turno solo puede usar reacciones.`); return null; }
   { const me = currentUser(s); if (!isDM(s) && !(a.owner && me && a.owner === me.id)) { toast("Solo puedes atacar con tu propio personaje."); return null; } }
   const rng = weapon.rng || { n: 1.5, l: 1.5 }, reach = inRange(rng, a, t), cov = cover(s, a, t), mods = modifiers(s, a, t, rng);
   if (reach === "out") { toast(`${t.name || "El objetivo"} está a ${(dist(a, t) * 1.5).toLocaleString("es-ES")} m: fuera del alcance de ${weapon.name} (${rng.l} m)`); return null; }
@@ -93,7 +94,8 @@ export function decide(rollId, action) {
    Quien tiene la reacción responde con una tirada SUYA enlazada al aviso (atacar o dejar pasar):
    así no hace falta modificar el aviso (en Firestore solo el máster puede tocar tiradas ajenas). */
 export const oaOpen = (s, r) => r && r.kind === "oa" && r.status === "pending" && !(s.rolls || []).some(x => x.link === r.id && x.status !== "void")
-  && (r.seq == null || !s.board || r.seq === s.board.seq);
+  && r.seq != null && !!s.board && r.seq === s.board.seq // caduca al cambiar el turno (y los avisos antiguos, sin turno, ya no cuentan)
+  && Date.now() - (r.at || 0) < 30000; // y nunca bloquea: si en 30 s nadie decide, se entiende que lo deja pasar
 export function answerOA(oaId, go) {
   const s = store.get(), r = (s.rolls || []).find(x => x.id === oaId); if (!oaOpen(s, r)) return;
   const h = s.tokens.find(t => t.id === r.tok), t = s.tokens.find(x => x.id === r.target); if (!h) return;

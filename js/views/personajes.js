@@ -108,6 +108,7 @@ function drawSheet(state, c) {
       </div>
     </header>
     ${leveling ? levelPanel(c) : ""}
+    <div class="hzhost" data-hz="${c.id}"></div>
     <section class="combat">
       ${stat("CA", `<input type="number" data-n="ac" value="${c.ac}">`)}
       <div class="stat hpbox"><small>Puntos de golpe</small>
@@ -124,6 +125,7 @@ function drawSheet(state, c) {
     <section class="tabbody">${({ car: tabCar, com: tabCom, inv: c2 => tabInv(c2, ed, dm), con: tabCon, ras: tabRas, cua: c2 => `<h2 class="sec">📓 Cuaderno</h2><p class="note" style="margin:0 0 8px">Tus notas de la partida: nombres, pistas, promesas. Marca con ⭐ los descubrimientos y comparte con 📣 lo que quieras que quede en la crónica.</p>${journalHTML(c2, { edit: ed })}`, tras: tabTras })[tab](c)}</section>
   </div>`;
   bind(state, c, ed);
+  { const hz = $(".hzhost", el); if (hz) import("./subirnivel.js").then(m => { if (hz.isConnected) hz.innerHTML = m.horizonHTML(c, 3); }); }
   { const tb = $(".tabbody", el); if (tb) { bindTreasures(tb, c, draw); bindJournal(tb, c, draw); } const ta = $("#tesadd", el); if (ta) ta.onclick = () => giveTreasure([c.id], { kind: "recuerdo", name: "Objeto especial" }); }
   portraits();
 }
@@ -276,7 +278,7 @@ function bind(state, c, ed) {
   on("#dmg", () => { const d = delta(); if (!d) return; store.commit("char", s => { const h = C(s).hp, t = Math.min(h.temp || 0, d); h.temp = (h.temp || 0) - t; h.cur = Math.max(0, h.cur - (d - t)); }); });
   on("#heal", () => { const d = delta(); if (!d) return; store.commit("char", s => { const h = C(s).hp; h.cur = Math.min(h.max, h.cur + d); }); });
   on("#xpgo", () => { const v = +$("#xpadd", el).value || 0; if (!v) return; store.commit("char", s => { C(s).xp = Math.max(0, (C(s).xp || 0) + v); }); toast(`${v > 0 ? "+" : ""}${v} PX para ${c.name}`); });
-  on("#lvlup", () => { leveling = { roll: 0 }; draw(); });
+  on("#lvlup", () => import("./subirnivel.js").then(m => m.openLevelUp(c.id)));
   on("#lvavg", () => { leveling.roll = 0; draw(); });
   on("#lvroll", () => { leveling.roll = 1 + Math.floor(Math.random() * classInfo(c.cls).hd); draw(); });
   on("#lvno", () => { leveling = null; draw(); });

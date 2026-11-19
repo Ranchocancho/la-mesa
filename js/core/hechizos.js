@@ -9,7 +9,7 @@ import { classInfo, prof, mod } from "../data/dnd.js";
 import { AB_KEY, spellDC, spellMod, quickSave, heal, damage, dropConcentration, addCond } from "./salud.js";
 import { currentUser } from "./session.js";
 import { attack } from "./combate.js";
-import { rangeOf, inRange, cover, spend, dist } from "./turnos.js";
+import { rangeOf, inRange, cover, spend, dist, canActNow } from "./turnos.js";
 import { toast } from "./ui.js";
 
 const clean = t => String(t || "").replace(/\s*\d+\s+Documento de referencia del sistema 5\.2\.1\s*/g, " ").replace(/([a-záéíóúñ])-\s+([a-záéíóúñ])/gi, "$1$2").replace(/\s+/g, " ");
@@ -84,6 +84,7 @@ export function inArea(s, m, caster, center) {
 export function cast(casterId, spellName, slot, targetIds) {
   const s = store.get(), a = s.tokens.find(t => t.id === casterId), c = a && charOf(s, a), d = findSpell(spellName), m = spellMech(d);
   if (!a || !c || !m) return null;
+  if (!canActNow(s, a.id, m.time === "react" ? "react" : "act")) { toast(`No es el turno de ${c.name}: fuera de su turno solo reacciones.`); return null; }
   const targets = targetIds.map(id => s.tokens.find(t => t.id === id)).filter(Boolean);
   if (m.lvl > 0) {
     if (!slot || !freeSlots(c, m.lvl).includes(slot)) { toast(`No te quedan espacios de nivel ${slot || m.lvl} o superior.`); return null; }

@@ -8,6 +8,7 @@ export const LORE = {
   npc: { n: "Personaje", pl: "Personajes", icon: "👤", hint: "PNJ: quién es, qué quiere, qué sabe." },
   faction: { n: "Facción", pl: "Facciones", icon: "⚑", hint: "Gremios, órdenes, bandas, casas nobles…" },
   god: { n: "Dios", pl: "Dioses", icon: "☀", hint: "Deidades del mundo: dominio, símbolo, fieles y lo que piden." },
+  hist: { n: "Hito", pl: "Cronología", icon: "⏳", hint: "La historia del mundo, de la más antigua a hoy: fecha, lo que pasó y una ilustración." },
   battle: { n: "Batalla", pl: "Batallas", icon: "⚔", hint: "Batallas y guerras: cuándo, quién luchó, quién ganó y qué quedó." },
   event: { n: "Evento", pl: "Eventos", icon: "⚡", hint: "Situaciones preparadas que activas cuando quieras." },
   image: { n: "Imagen", pl: "Galería", icon: "🖼", hint: "Ilustraciones de lugares, personajes y escenas." },
@@ -59,6 +60,7 @@ export function newEntry(kind, extra = {}) {
       place: null, summary: "", secret: "", revealed: false, img: null, links: [], at: Date.now() };
     if (kind === "event") Object.assign(base, { etype: "preparado", status: "pendiente", actions: "" });
     if (kind === "npc" || kind === "god" || kind === "battle") Object.assign(base, { role: "" });
+    if (kind === "hist") { const t = loreOf(s).filter(e => e.kind === "hist"); Object.assign(base, { name: "Nuevo hito", date: "", era: t.length ? t[t.length - 1].era || "" : "", year: t.length ? Math.max(...t.map(e => +e.year || 0)) + 10 : 0 }); }
     if (kind === "chapter") Object.assign(base, { session: null, order: loreOf(s).filter(e => e.kind === "chapter").length });
     s.lore.push(Object.assign(base, extra));
   });
@@ -89,6 +91,19 @@ export function showEntry(id, { to = null, imageOnly = false } = {}) {
     s.presentation = { type: "lore", id, to, snap: { eyebrow: (imageOnly ? "" : LORE[e.kind].n.toUpperCase() + (pl ? " · " + pl.name.toUpperCase() : "")), title: e.name, text: imageOnly ? "" : e.summary || "", img: e.img || null, kind: e.kind } };
   });
 }
+/* ---------- Cronología ---------- */
+/** Hitos en orden (el «año» es solo para ordenar; lo que se lee es la fecha en texto). */
+export const timeline = (s, all = false) => loreOf(s).filter(e => e.kind === "hist" && (all || canSee(s, e)))
+  .sort((a, b) => (+a.year || 0) - (+b.year || 0) || (a.at || 0) - (b.at || 0));
+/** El máster cuenta la historia en la mesa, hito a hito: lo que cuenta queda revelado. id null = quitarla. */
+export function tellTimeline(id) {
+  store.commit("present", s => {
+    const e = entry(s, id); if (!e) return;
+    e.revealed = true;
+    s.presentation = { type: "timeline", id, snap: { title: e.name, date: e.date || "", era: e.era || "", text: e.summary || "", img: e.img || null } };
+  });
+}
+
 /** Imagen de fondo de la escena (queda detrás de lo que se muestre, hasta que la quites). */
 export const setBackdrop = key => store.commit("present", s => { s.backdrop = key || null; });
 

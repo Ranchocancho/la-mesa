@@ -84,6 +84,9 @@ const SFX = {
   fanfare() { [523, 659, 784, 1046, 1318].forEach((f, i) => setTimeout(() => { blip(f, 0.6, 0.1, "triangle"); blip(f * 2, 0.4, 0.03, "sine"); }, i * 90)); setTimeout(() => burst(6000, 2, 0.6, 0.06), 400); },
   fail() { [392, 330, 262, 196].forEach((f, i) => setTimeout(() => blip(f, 0.45, 0.1, "sawtooth", master, f * 0.95), i * 160)); },
   none() {},
+  whoosh() { burst(700, 1.2, 0.22, 0.22, "bandpass", master, 2600); },
+  twang() { blip(196, 0.22, 0.14, "triangle", master, 120); burst(3000, 2, 0.12, 0.12, "bandpass", master, 900); },
+  crit() { SFX.hit(); [659, 988].forEach((f, i) => setTimeout(() => blip(f, 0.35, 0.09, "triangle"), 60 + i * 80)); },
   sword() { [2300, 3700, 5200].forEach(f => blip(f, 0.4, 0.05, "square")); burst(5000, 2, 0.1, 0.15); }
 };
 const FX_SOUND = { bola: "fireball", proyectil: "magic", rayo: "thunder", escarcha: "magic", llama: "holy", curar: "heal", escudo: "magic", trueno: "thunder" };

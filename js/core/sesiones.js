@@ -28,6 +28,7 @@ export function presentationTitle(s, p) {
   if (p.type === "tactical") return "Escena táctica";
   if (p.type === "region") return ((s.world.regions || []).find(r => r.id === p.region) || {}).name || "Una región";
   if (p.type === "lore") return (p.snap && p.snap.title) || "";
+  if (p.type === "timeline") return "Cronología · " + ((p.snap && p.snap.title) || "");
   const place = s.world.places.find(x => x.id === p.place);
   if (!place) return "";
   if (p.type === "item") { const it = place.items.find(i => i.id === p.item); return it ? it.title : place.name; }
