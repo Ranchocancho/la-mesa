@@ -62,7 +62,7 @@ export function renderRolls(el, o) {
         ${dm ? `<button class="btn small" id="trsec" aria-pressed="${secret}" title="Solo la ves tú">Secreta</button>` : ""}
         <input id="trexpr" placeholder="2d6+3" aria-label="Expresión de dados"></div>
     </div>`}
-    ${o.log === false ? "" : `<div class="rolls">${list.filter(r => !(r.kind === "damage" && r.link && list.some(x => x.id === r.link))).map(r => rowHTML(s, r, dm, me, hasDamage, list.find(x => x.kind === "damage" && x.link === r.id))).join("") || `<p class="empty">Aún no se ha tirado nada. ¡Que rueden los dados!</p>`}</div>`}`;
+    ${o.log === false ? "" : `<div class="rolls">${list.filter(r => !(r.link && list.some(x => x.id === r.link && (r.kind === "damage" || x.kind === "req")))).map(r => rowHTML(s, r, dm, me, hasDamage, list.find(x => x.kind === "damage" && x.link === r.id))).join("") || `<p class="empty">Aún no se ha tirado nada. ¡Que rueden los dados!</p>`}</div>`}`;
 
   if (o.tray !== false) {
   const mod = () => +($("#trmod", el).value || 0);
@@ -86,6 +86,7 @@ export function renderRolls(el, o) {
   }
   $$("[data-dec]", el).forEach(b => b.onclick = () => { const [id, a] = b.dataset.dec.split("|"); decide(id, a); });
   $$("[data-dmg]", el).forEach(b => b.onclick = () => damageFor(b.dataset.dmg));
+  $$("[data-rqmiss]", el).forEach(b => b.onclick = () => import("./peticiones.js").then(m => { const r = (store.get().rolls || []).find(x => x.id === b.dataset.rqmiss); if (r) m.answerMissing(r); }));
   $$("[data-per]", el).forEach(x => x.onchange = () => { const [id, t] = x.dataset.per.split("|"); spellPer[id] = { ...(spellPer[id] || {}), [t]: x.value }; });
   $$("[data-apply]", el).forEach(b => b.onclick = () => {
     const id = b.dataset.apply, per = {};
@@ -168,7 +169,17 @@ function pill(r, dm, pend) {
   if (r.kind === "heal") return `<span class="pill heal">+${r.total}</span>`;
   return "";
 }
+function reqRow(s, r, dm) {
+  const q = r.req || {}, ans = (s.rolls || []).filter(x => x.link === r.id && x.status !== "void");
+  const name = id => { const c = s.characters.find(x => x.id === id); return c ? c.name.split(" ")[0] : "?"; };
+  const missing = (q.chars || []).filter(id => !ans.some(a => a.char === id));
+  return `<div class="roll k-req ok" data-row="${r.id}" style="--who:#9a7be0"><div class="r1"><i class="ki">📣</i><span class="rt"><b class="rwho">Máster</b> pide <b>${esc(r.label)}</b>${q.dc && (dm || !q.hideDC) ? ` <em>CD ${q.dc}${q.hideDC ? " (oculta)" : ""}</em>` : ""}${q.adv ? `<sup class="${q.adv > 0 ? "adv" : "dis"}">${q.adv > 0 ? "▲" : "▼"}</sup>` : ""}</span></div>
+    <div class="rqlist">${(q.chars || []).map(id => { const a = ans.find(x => x.char === id); if (!a) return `<span class="rqans wait">${esc(name(id))} …</span>`;
+      const ok = a.result ? a.result === "save" : null; return `<span class="rqans ${ok === null ? "" : ok ? "ok" : "ko"}">${esc(name(id))} <b>${a.total}</b>${ok === null ? "" : ok ? " ✓" : " ✗"}</span>`; }).join("")}
+      ${dm && missing.length ? `<button class="ib gold" data-rqmiss="${r.id}" title="Tira por quien falte">🎲 Tirar por ${missing.length === 1 ? esc(name(missing[0])) : "los que faltan"}</button>` : ""}</div></div>`;
+}
 function rowHTML(s, r, dm, me, hasDamage, dmgRow) {
+  if (r.kind === "req") return reqRow(s, r, dm);
   const pend = r.status === "pending", showRes = dm || !pend || r.kind !== "attack", open = openInfo.has(r.id);
   const d20 = (r.dice || []).find(x => x.d === 20 && !x.drop), nat = d20 && (d20.v === 20 || d20.v === 1) ? d20.v : 0;
   const A = actor(s, r), sys = r.kind === "loot" || r.kind === "xp";

@@ -1,6 +1,6 @@
 // La Partida: el escenario común y, para el máster, el panel con el que decide qué tenéis delante.
 import { store } from "../core/store.js";
-import { isDM } from "../core/session.js";
+import { isDM, currentUser } from "../core/session.js";
 import { liveSession, visibleLive, lastClosed, sessionName, startSession, closeSession, show, presentationFor, addEntry } from "../core/sesiones.js";
 import { loadScene, blankBoard, clearBoard, saveBoardAsScene, addPC, removePC } from "../core/mesa.js";
 import { presence } from "../core/presence.js";
@@ -9,6 +9,7 @@ import { renderStage } from "./presentacion.js";
 import { mountTactical } from "./mesa.js";
 import { renderRolls } from "./tiradas.js";
 import { renderSheet } from "./ficha.js";
+import { onAim } from "../core/apuntar.js";
 import { floorsHTML, bindFloors } from "./plantasui.js";
 import { AMBIENTES } from "../core/sonido.js";
 const LUCES = { dia: "☀️ Día", interior: "🕯 Interior", noche: "🌙 Noche" };
@@ -29,9 +30,10 @@ export function mount(root) {
         <section class="dm-ini" id="dm-ini"></section><section class="dm-dice" id="dm-dice" hidden></section><section class="dm-npc" id="dm-npc" hidden><div class="dm-npcact" id="dm-npcact"></div><div class="dm-npctray" id="dm-npctray"></div></section></div>
       <div class="dm-rol" id="dm-rol"></div></aside>
     <aside class="plpanel" id="plp" aria-label="Tu columna: personaje e iniciativa" hidden>
-      <div class="sidetabs pltabs" role="tablist"><button role="tab" data-ptab="pj">🧙 Personaje</button><button role="tab" data-ptab="ini">⚔️ Iniciativa</button></div>
-      <section class="pl-pj" id="pl-pj"><div class="pl-act" id="pl-act"></div><div class="pl-sheet" id="pl-sheet"></div><div class="pl-dice" id="pl-dice"></div></section>
-      <section class="pl-ini" id="pl-ini" hidden></section></aside>`;
+      <div class="sidetabs pltabs" role="tablist"><button role="tab" data-ptab="pj">🧙 Personaje</button><button role="tab" data-ptab="ini">⚔️ Iniciativa</button><button role="tab" data-ptab="tir">🎲 Tiradas</button></div>
+      <section class="pl-pj" id="pl-pj"><div class="pl-act" id="pl-act" hidden></div><div class="pl-sheet" id="pl-sheet"></div><div class="pl-dice" id="pl-dice"></div></section>
+      <section class="pl-ini" id="pl-ini" hidden></section><section class="pl-log" id="pl-log" hidden></section></aside>`;
+  onAim(() => { if (el && !isDM(store.get())) renderSheet($("#pl-sheet", el)); });
   $$("[data-mode]", el).forEach(b => b.onclick = () => { dmMode = b.dataset.mode; tabs(); });
   $$("[data-dtab]", el).forEach(b => b.onclick = () => { dmTab = b.dataset.dtab; tabs(); });
   $$("[data-ptab]", el).forEach(b => b.onclick = () => { plTab = b.dataset.ptab; tabs(); });
@@ -58,12 +60,13 @@ function tabs() {
   sel("[data-mode]", dmMode, "mode"); sel("[data-dtab]", dmTab, "dtab");
   $("#dm-tac", el).hidden = dmMode !== "tac"; $("#dm-rol", el).hidden = dmMode !== "rol";
   $("#dm-ini", el).hidden = dmTab !== "ini"; $("#dm-dice", el).hidden = dmTab !== "tir"; $("#dm-npc", el).hidden = dmTab !== "npc";
-  if (!tacOn) plTab = "pj";
+  if (!tacOn && plTab === "ini") plTab = "pj";
   sel("[data-ptab]", plTab, "ptab");
   $('[data-ptab="ini"]', el).hidden = !tacOn;
-  $("#pl-pj", el).hidden = plTab !== "pj"; $("#pl-ini", el).hidden = plTab !== "ini";
+  $("#pl-pj", el).hidden = plTab !== "pj"; $("#pl-ini", el).hidden = plTab !== "ini"; $("#pl-log", el).hidden = plTab !== "tir";
+  if (!dm && plTab === "tir") renderRolls($("#pl-log", el), { tray: false });
   const n = (s.rolls || []).length;
-  if (n > rollsSeen) { const b = dm ? (dmMode !== "tac" || dmTab !== "tir" ? $('[data-dtab="tir"]', el) : null) : (plTab !== "pj" ? $('[data-ptab="pj"]', el) : null); if (b) { b.classList.remove("ping"); void b.offsetWidth; b.classList.add("ping"); } }
+  if (n > rollsSeen) { const b = dm ? (dmMode !== "tac" || dmTab !== "tir" ? $('[data-dtab="tir"]', el) : null) : (plTab !== "tir" ? $('[data-ptab="tir"]', el) : null); if (b) { b.classList.remove("ping"); void b.offsetWidth; b.classList.add("ping"); } }
   rollsSeen = n;
   if (dm && dmMode === "tac" && dmTab === "tir") renderRolls($("#dm-dice", el), { tray: false });
   // Los dados del máster van en la pestaña PNJ: lo que tire sale a nombre de la criatura elegida
@@ -101,7 +104,7 @@ function draw() {
   el.classList.toggle("withpanel", (dm && !panelHidden) || !dm);
   // Jugadores: columna fija con su ficha y su tapete de dados (la iniciativa entra cuando hay mesa táctica)
   const plp = $("#plp", el); plp.hidden = dm;
-  if (!dm) { renderSheet($("#pl-sheet", el)); renderRolls($("#pl-dice", el)); }
+  if (!dm) { renderSheet($("#pl-sheet", el)); renderRolls($("#pl-dice", el), { log: false, by: () => { const st = store.get(), u = currentUser(st); const t = u && (st.tokens || []).find(x => x.kind === "pc" && x.owner === u.id); return t ? t.id : null; } }); }
   const typing = box => box && box.contains(document.activeElement) && /INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName);
   if (!typing($("#sbar", el))) $("#sbar", el).innerHTML = `${live ? `<b>${esc(sessionName(live))}</b> en curso${live.test ? ` · <span class="tag secret">SOLO MÁSTERES</span>` : ""}` : "No hay ninguna partida en curso"}
     ${live ? `<span class="quicknote"><input id="qnote" placeholder="📜 Anotar en la crónica…" aria-label="Nota para la crónica"><button class="btn small" id="qnotego">Anotar</button></span>` : ""}
@@ -132,7 +135,7 @@ function draw() {
 function toolsBlock(state) {
   const live = liveSession(state), b = state.board;
   return `<div class="dmquick"><span class="dmq-s">${live ? `<b>${esc(sessionName(live))}</b>` : "Sin sesión"}${b ? ` · ${esc(b.name)}` : ""}</span>
-    ${b ? `${tactical(state) ? "" : `<button class="btn small gold" data-show='{"type":"tactical"}'>Mostrar la mesa</button>`}<button class="btn small" id="qtedit" aria-pressed="${tacEdit}" title="Editar la mesa (los jugadores siguen viendo la mesa)">✏️ ${tacEdit ? "Terminar" : "Editar"}</button><button class="btn small" id="qtmon" title="Añadir criaturas a la mesa">👹 Criaturas</button><span class="dmq-amb"><select class="btn small" id="qtluz" title="Luz de la mesa" aria-label="Luz">${Object.entries(LUCES).map(([k, n]) => `<option value="${k}" ${(b.ambient || "interior") === k ? "selected" : ""}>${n}</option>`).join("")}</select><select class="btn small" id="qtsnd" title="Música y sonido ambiente" aria-label="Sonido ambiente">${Object.entries(AMBIENTES).map(([k, n]) => `<option value="${k}" ${(b.sound || "") === k ? "selected" : ""}>🎵 ${n}</option>`).join("")}</select><button class="btn small" id="qtfog" aria-pressed="${!!b.fog}" title="Niebla de guerra para los jugadores">🌫 Niebla${b.fog ? ": sí" : ""}</button></span><button class="btn small" id="qtfloor" aria-pressed="${floorsOpen}" title="Plantas del mapa: torres, sótanos…">🏰 ${esc(floorName(b))}${floorsOf(b).length > 1 ? ` <small>${floorsOf(b).length}</small>` : ""} ▾</button>` : ""}</div>
+    ${b ? `${tactical(state) ? "" : `<button class="btn small gold" data-show='{"type":"tactical"}'>Mostrar la mesa</button>`}<button class="btn small" id="qtedit" aria-pressed="${tacEdit}" title="Editar la mesa (los jugadores siguen viendo la mesa)">✏️ ${tacEdit ? "Terminar" : "Editar"}</button><button class="btn small" id="qtmon" title="Añadir criaturas a la mesa">👹 Criaturas</button><button class="btn small gold" data-askroll title="Pide a todos o a alguien una tirada de habilidad, característica o salvación">🎲 Pedir tirada</button><span class="dmq-amb"><select class="btn small" id="qtluz" title="Luz de la mesa" aria-label="Luz">${Object.entries(LUCES).map(([k, n]) => `<option value="${k}" ${(b.ambient || "interior") === k ? "selected" : ""}>${n}</option>`).join("")}</select><select class="btn small" id="qtsnd" title="Música y sonido ambiente" aria-label="Sonido ambiente">${Object.entries(AMBIENTES).map(([k, n]) => `<option value="${k}" ${(b.sound || "") === k ? "selected" : ""}>🎵 ${n}</option>`).join("")}</select><button class="btn small" id="qtfog" aria-pressed="${!!b.fog}" title="Niebla de guerra para los jugadores">🌫 Niebla${b.fog ? ": sí" : ""}</button></span><button class="btn small" id="qtfloor" aria-pressed="${floorsOpen}" title="Plantas del mapa: torres, sótanos…">🏰 ${esc(floorName(b))}${floorsOf(b).length > 1 ? ` <small>${floorsOf(b).length}</small>` : ""} ▾</button>` : ""}</div>
     ${b && floorsOpen ? `<div class="dmfloors">${floorsHTML(state, tac && tac.selected ? tac.selected() : null)}</div>` : ""}`;
 }
 
@@ -153,7 +156,7 @@ function sessionBlock(state) {
     <div class="row" style="margin-top:12px"><button class="btn gold" id="doclose">${live.test ? "Terminar la prueba" : "Guardar y cerrar"}</button><button class="btn" id="cancelclose">Seguir jugando</button></div></div>`;
   return `<div class="panel"><h2 class="sec">${esc(sessionName(live))} en curso</h2>
     ${live.test ? `<p class="note" style="margin:0 0 12px">Los jugadores no ven esta sesión ni lo que muestres en ella.</p>` : ""}
-    <div class="row"><button class="btn" id="close">Cerrar sesión</button></div></div>`;
+    <div class="row"><button class="btn gold" data-askroll title="Pide a todos o a alguien una tirada de habilidad, característica o salvación">🎲 Pedir tirada</button><button class="btn" data-give title="Sellos, regalos, reliquias…">🎁 Dar objeto</button><button class="btn" id="close">Cerrar sesión</button></div></div>`;
 }
 
 // Dirección: reloj de campaña y la carpeta de escenas preparadas para esta sesión, a un clic
@@ -200,6 +203,7 @@ function showBlock(state) {
       <button class="btn" data-show='{"type":"recap"}'${on("recap")} ${lastClosed(state) ? "" : "disabled"}>Anteriormente…</button>
       <button class="btn" data-show='{"type":"world"}'${on("world")}>Mapa del mundo</button>
     </div>
+    ${(state.world.regions || []).length ? `<h2 class="sec" style="margin-top:16px">Regiones</h2><div class="showlist">${state.world.regions.map(r => `<button class="btn small" data-showreg="${r.id}"${on("region", { region: r.id })}><i class="regdot" style="background:${esc(r.color)}"></i> ${esc(r.name)}${r.visible ? "" : " · oculta"}</button>`).join("")}</div>` : ""}
     <h2 class="sec" style="margin-top:16px">Lugares</h2>
     <div class="showplaces">${places.map(pl => `<details data-k="pl-${pl.id}"><summary><span>${esc(pl.name)}</span>${pl.visible ? "" : `<small>oculto</small>`}</summary>
         <div class="showlist">
@@ -234,6 +238,8 @@ function bind(state) {
   { const L = $("#qtluz", el); if (L) L.onchange = () => store.commit("board", st => { if (st.board) st.board.ambient = L.value; });
     const S2 = $("#qtsnd", el); if (S2) S2.onchange = () => store.commit("board", st => { if (st.board) st.board.sound = S2.value; }); }
   on("qtfog", () => store.commit("board", st => { if (st.board) st.board.fog = !st.board.fog; }));
+  $$("[data-give]", el).forEach(b => b.onclick = () => import("./tesorosui.js").then(m => m.openGiveDialog()));
+  $$("[data-askroll]", el).forEach(b => b.onclick = () => import("./peticiones.js").then(m => m.openAskDialog()));
   on("qtfloor", () => { floorsOpen = !floorsOpen; draw(); });
   { const fbox = $(".dmfloors", el); if (fbox) bindFloors(fbox, tac && tac.selected ? tac.selected() : null, () => { $("#dmtools", el).innerHTML = toolsBlock(store.get()); bind(store.get()); }); }
   on("qtmon", () => import("./reglas.js").then(m => m.openCreaturePicker({ title: "Añadir criaturas a la mesa", onAdd: (x, n) => m.addToBoard(x, n) })));
@@ -249,6 +255,7 @@ function bind(state) {
   });
   $$("[data-load]", el).forEach(b => b.onclick = () => { tacEdit = false; loadScene(b.dataset.load); });
   $$("[data-show]", el).forEach(b => b.onclick = () => show(JSON.parse(b.dataset.show)));
+  $$("[data-showreg]", el).forEach(b => b.onclick = () => store.commit("present", s => { const r = (s.world.regions || []).find(x => x.id === b.dataset.showreg); if (r) { r.visible = true; s.presentation = { type: "region", region: r.id }; } }));
 }
 
 const notesOf = (s, sid) => (s.chronicle || []).filter(e => e.session === sid).map(e => e.text).join("\n");

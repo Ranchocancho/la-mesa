@@ -20,6 +20,7 @@ import { attacksOf, attack, acOf, nameOf, damageFor } from "../core/combate.js";
 import { phase, current, pending, beginCombat, rollInit, startRounds, endTurn, stopCombat, eco, moveBudget, speedOf, spend, toggle, ACCIONES, rangeOf, inRange, cover, modifiers, dist, metres } from "../core/turnos.js";
 import { srd } from "../core/srd.js";
 import { nowState } from "./ahora.js";
+import { armedNow, arm, togglePick } from "../core/apuntar.js";
 import { floorIdx } from "../core/plantas.js";
 import { publish, mySkin, SKIN_HEX } from "../core/dados.js";
 
@@ -45,7 +46,18 @@ export function mountTactical(host, opts = {}) {
   let rollsSeen = (store.get().rolls || []).length;
   const actHost = opts.actHost || null; let actSig = "", npcId = null, npcPick = null;
   // Seleccionar una figura (desde la mesa, la iniciativa o la tira): se abre su consulta abajo
-  function selectTok(id) { if (board && board.select) board.select(id); if (sel !== id) { sel = id; } hudOpen = true; if (isDM(S()) && (S().tokens.find(t => t.id === id) || {}).kind !== "pc") npcId = id; drawHud(); if (opts.onSelect) opts.onSelect(id); }
+  // El jugador ha elegido arma o conjuro en su ficha: tocar una figura la usa como objetivo
+  function aimAt(id) {
+    const A = armedNow(), st = S(); if (!A || isDM(st)) return false;
+    if (A.kind === "atk") {
+      if (id === A.tok) return false;
+      const a = st.tokens.find(t => t.id === A.tok), w = a && attacksOf(st, a)[A.i]; if (!w) { arm(null); return false; }
+      sel = id; const r = attack(A.tok, id, w, null); if (r) arm(null); drawHud(); return true;
+    }
+    if (A.kind === "spell") { togglePick(id); sel = id; drawHud(); return true; }
+    return false;
+  }
+  function selectTok(id) { if (aimAt(id)) return; if (board && board.select) board.select(id); if (sel !== id) { sel = id; } hudOpen = true; if (isDM(S()) && (S().tokens.find(t => t.id === id) || {}).kind !== "pc") npcId = id; drawHud(); if (opts.onSelect) opts.onSelect(id); }
   let sel = null, selPropId = null, sceneId = store.get().board && (store.get().board.scene + "#" + floorIdx(store.get().board)), board = null;
   const S = () => store.get();
   const me = () => (currentUser(S()) || {}).id;
@@ -98,7 +110,7 @@ export function mountTactical(host, opts = {}) {
     onSelectProp: id => { selPropId = id; if (id) hudOpen = true; drawHud(); },
     decorate: t => { const c = charOf(S(), t); return { ...(c ? { name: c.name, color: c.color, portrait: c.portrait } : t.portrait ? { portrait: t.portrait } : {}), isTurn: S().board.turn === t.id }; },
     hpOf: t => hpOf(S(), t),
-    onSelect: id => { sel = id; if (id && isDM(S()) && (S().tokens.find(t => t.id === id) || {}).kind !== "pc") npcId = id; drawHud(); if (opts.onSelect) opts.onSelect(id); },
+    onSelect: id => { if (id && aimAt(id)) return; sel = id; if (id && isDM(S()) && (S().tokens.find(t => t.id === id) || {}).kind !== "pc") npcId = id; drawHud(); if (opts.onSelect) opts.onSelect(id); },
     charOf: t => charOf(S(), t),
     chars: () => S().characters,
     setFog: v => store.commit("board", st => { st.board.fog = v; }),
@@ -304,10 +316,7 @@ export function mountTactical(host, opts = {}) {
     if (actHost) {
       let html = "";
       if (!dm) {
-        const tg = target && mineT && target.id !== mineT.id ? target : null;
-        if (mineT && live && cur && cur.id === mineT.id) html = turnCard(s, mineT);
-        if (mineT && tg && phase(s)) html += `<div class="hudcard tcard myatk"><div class="tch"><b>🎯 Objetivo: ${esc(nameOf(s, tg))}</b><small>toca otra figura para cambiar</small></div>${atkBlock(s, mineT, true, tg.id)}</div>`;
-        else if (mineT && live && cur && cur.id === mineT.id) html += `<p class="note" style="margin:4px 0 0">🎯 Toca un enemigo en la mesa o en la iniciativa para elegir objetivo.</p>`;
+        html = ""; // el jugador lo tiene todo en su ficha (pestaña Personaje)
       } else {
         const npcs = s.tokens.filter(t => t.kind !== "pc");
         const pickId = npcId && s.tokens.some(t => t.id === npcId) ? npcId : cur && cur.kind !== "pc" ? cur.id : (target ? target.id : npcs[0] && npcs[0].id);
@@ -450,17 +459,23 @@ function condBlock(t, canEdit) {
 /* Tarjeta del turno: movimiento, acción, acción adicional, reacción y acciones del manual */
 /* Consulta (solo lectura): el estado actual de cualquier figura. Los jugadores ven a los enemigos «a ojo». */
 function infoCard(s, t, dm, meId) {
-  const h = hpOf(s, t), c = charOf(s, t), exact = dm || t.kind === "pc", mine = t.owner && t.owner === meId;
+  // Cada rol consulta lo suyo: el jugador ve a las criaturas (vida a ojo); el máster, a los personajes al completo
+  const h = hpOf(s, t), c = charOf(s, t), exact = dm || t.kind === "pc";
   const pct = h ? Math.max(0, Math.min(100, h.cur / Math.max(1, h.max) * 100)) : 0, shown = exact ? pct : pct > 75 ? 100 : pct > 50 ? 70 : pct > 25 ? 45 : pct > 0 ? 15 : 0;
-  const kind = t.kind === "pc" ? (c ? `${esc(c.cls)} ${c.level} · ${esc(c.species || "")}` : "Personaje") : t.kind === "npc" ? "PNJ" : "Enemigo";
-  const atks = attacksOf(s, t);
-  const e = phase(s) === "live" && s.board.turn === t.id ? eco(s, t) : null;
-  return `<div class="hudcard infocard ${t.kind}"><div class="tch"><b>${esc(nameOf(s, t))}</b><small>${kind}</small></div>
+  const kind = t.kind === "pc" ? (c ? `${esc(c.cls)} ${c.level}${c.species ? " · " + esc(c.species) : ""}` : "Personaje") : t.kind === "npc" ? "PNJ" : "Enemigo";
+  const atks = attacksOf(s, t), live = phase(s) === "live", e = live && s.board.turn === t.id ? eco(s, t) : null;
+  const sp = c && c.spells && Object.entries(c.spells.slots || {}).filter(([, v]) => v.max > 0);
+  const d = c && c.hp.cur === 0 ? (c.death || { s: 0, f: 0 }) : null;
+  const pas = c ? 10 + Math.floor(((+c.abilities.sab || 10) - 10) / 2) + ((c.skills || {}).percepcion ? 2 + Math.floor((Math.max(1, c.level) - 1) / 4) : 0) : null;
+  return `<div class="hudcard infocard ${t.kind}"><div class="tch"><b>${esc(nameOf(s, t))}</b><small>${kind}</small>${e ? `<span class="pill hit">actuando</span>` : ""}</div>
     ${h ? `<div class="hpbar ${shown <= 25 ? "low" : shown <= 50 ? "mid" : ""}"><i style="width:${shown}%"></i><em>${exact ? `${h.cur}/${h.max} PG${h.temp ? ` +${h.temp}` : ""}` : healthWord(h.cur, h.max)}</em></div>` : ""}
-    <div class="hudmeta">${exact ? `CA ${c ? c.ac : t.ac ?? "—"} · ` : ""}Vel. ${esc(String(c ? c.speed : t.speed || 9))} m${t.init != null && t.init !== "" ? ` · Inic. ${t.init}` : ""}${e ? ` · <b>actuando</b>` : ""}</div>
-    ${(t.conds || []).length ? `<div class="tconds">${t.conds.map(x => { const es = estado(x.id); return es ? `<span class="cchip" style="--c:${es.c}" title="${esc(es.t || "")}">${esc(etiqueta(x.id, x.lvl))}</span>` : ""; }).join("")}</div>` : `<small class="note" style="border:0;padding:0;margin:0">Sin estados.</small>`}
-    ${(dm || t.kind === "pc") && atks.length ? `<div class="infoatk">${atks.slice(0, 6).map(w => `<span>${esc(w.name)} <b>${w.atk >= 0 ? "+" : ""}${w.atk}</b> <small>${esc(w.expr || "")} ${esc(w.type || "")}</small></span>`).join("")}</div>` : ""}
-    ${mine && !dm ? `<small class="note" style="border:0;padding:0;margin:4px 0 0">Tus acciones están en la pestaña «Personaje».</small>` : ""}${dm && t.kind !== "pc" ? `<small class="note" style="border:0;padding:0;margin:4px 0 0">Para jugarlo: pestaña «PNJ».</small>` : ""}</div>`;
+    <div class="hudmeta">${exact ? `CA ${c ? c.ac : t.ac ?? "—"} · ` : ""}Vel. ${esc(String(c ? c.speed : t.speed || 9))} m${t.init != null && t.init !== "" ? ` · Inic. ${t.init}` : ""}${pas != null && dm ? ` · Percepción pasiva ${pas}` : ""}${t.size > 1 ? ` · tamaño ${t.size}×${t.size}` : ""}</div>
+    ${e ? `<div class="hudmeta">Turno: ${e.act ? "acción gastada" : "acción libre"} · ${e.bonus ? "adicional gastada" : "adicional libre"} · ${e.mov.toLocaleString("es-ES")} m movidos</div>` : ""}
+    ${d ? `<div class="hudmeta">💀 Contra muerte: ${d.s} éxitos · ${d.f} fallos${d.stable ? " · estable" : ""}</div>` : ""}
+    ${(t.conds || []).length ? `<div class="tconds">${t.conds.map(x => { const es = estado(x.id); return es ? `<span class="cchip" style="--c:${es.c}" title="${esc(es.t || "")}">${esc(etiqueta(x.id, x.lvl))}</span>` : ""; }).join("")}</div>` : `<small class="note" style="border:0;padding:0;margin:2px 0">Sin estados.</small>`}
+    ${atks.length ? `<div class="infoatk"><small>${t.kind === "pc" ? "Ataques" : "Ataques que se le conocen"}</small>${atks.slice(0, 6).map(w => `<span>${esc(w.name)}${exact ? ` <b>${w.atk >= 0 ? "+" : ""}${w.atk}</b>` : ""} <small>${esc(w.expr || "")} ${esc(w.type || "")} · ${w.rng.ranged ? `${w.rng.n}/${w.rng.l} m` : `${w.rng.l} m`}</small></span>`).join("")}</div>` : ""}
+    ${dm && sp && sp.length ? `<div class="hudmeta">Espacios: ${sp.map(([l, v]) => `nv${l} ${v.max - v.used}/${v.max}`).join(" · ")}</div>` : ""}
+    ${t.owner && t.owner === meId && !dm ? `<small class="note" style="border:0;padding:0;margin:4px 0 0">Tus acciones están en la pestaña «Personaje».</small>` : ""}${dm && t.kind !== "pc" ? `<small class="note" style="border:0;padding:0;margin:4px 0 0">Para jugarlo: pestaña «PNJ».</small>` : ""}</div>`;
 }
 function turnCard(s, t) {
   const e = eco(s, t), max = moveBudget(s, t), pct = Math.min(100, e.mov / Math.max(1, max) * 100);

@@ -122,6 +122,9 @@ store.subscribe(state => {
   if (!show.length) return;
   (diceCam || (diceCam = import("./views/dicecam.js"))).then(m => show.forEach(r => m.showRoll(r, store.get())));
 });
+// Tapete de las tiradas que pide el máster (en cualquier pantalla)
+import("./views/peticiones.js").then(m => m.watchRequests());
+import("./core/tesoros.js").then(m => m.watchGifts());
 window.addEventListener("hashchange", render);
 window.addEventListener("lamesa:login", () => { presence.beat(); current = null; render(); });
 

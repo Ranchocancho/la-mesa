@@ -337,3 +337,44 @@ Con ideas de referentes: registro de combate de una frase (Baldur's Gate), proba
   - **Iniciativa**.
   - **🎲 Tiradas**: el registro, con todo el control.
   - **👹 PNJ**: elige criatura (o se abre sola al tocar una), con su vida, estados, ataques, efectos y edición, y sus dados. Lo que tire sale a nombre de esa criatura.
+
+## Hito 19 · Pestaña Personaje clara y tiradas a petición del máster
+
+- **Jugador, tres pestañas**: 🧙 Personaje · ⚔️ Iniciativa · 🎲 Tiradas (el registro, ahora con sitio).
+- **Personaje en una sola columna**, sin cajas que se tapen:
+  - Arriba, la cabecera: vida, CA, velocidad, iniciativa y estados.
+  - Después, un bloque **«Tu turno»**: acción, adicional y reacción, el movimiento y Terminar turno.
+  - Para **atacar**, eliges el arma (botón grande con bonificador, daño y alcance) y **tocas al enemigo en la mesa o en la tira**. Los **conjuros** igual: abres el conjuro y tocas los objetivos (solo salen sus nombres, para quitarlos).
+  - En esta pestaña **nunca aparecen datos de los enemigos**.
+  - Luego vienen conjuros, salvaciones y pruebas. Los descansos solo aparecen fuera de la mesa táctica.
+  - **Los dados, fijos abajo del todo**.
+- **Consulta de abajo, según el rol**:
+  - El jugador ve a las criaturas: estados, heridas (a ojo), velocidad, iniciativa y los ataques que se les conocen.
+  - El máster ve a los personajes al completo: PG, CA, percepción pasiva, salvaciones contra muerte, espacios de conjuro, ataques y lo gastado en el turno.
+- **🎲 Pedir tirada** (máster; en Táctica, junto a Criaturas, y en Roleplay, junto a la sesión):
+  - Puede ser cualquiera de las 18 habilidades, una prueba de característica o una salvación, con CD visible u oculta y ventaja o desventaja.
+  - Se pide **a todos o a quien elijas**.
+  - Al jugador le sale un **tapete** en cualquier pantalla con su bonificador, ventaja o desventaja y **Tirar**.
+  - Las respuestas que llegan juntas **caen en la misma bandeja** con la lista de resultados (✓/✗ si hay CD).
+  - En el registro, la petición muestra quién ha tirado y quién falta. El máster tiene «Tirar por los que faltan», o «Tirar yo por ellos» al pedirla.
+
+## Hito 20 · Regiones en el mapa del mundo, objetos especiales y cuaderno
+
+- **Regiones**: el máster trocea el mapa grande como quiera.
+  - Arriba del mapa hay dos pestañas: **🌍 Mapa global** (todo, con los contornos suaves) y **🗺 Regiones** (el mapa coloreado por regiones; toca una para entrar).
+  - Dentro de una región se ve el mapa global **acercado y recortado** a su contorno, o **su propio mapa detallado** si el máster lo sube («Subir mapa de la región»; debe abarcar el recuadro del contorno).
+  - **✏️ Dibujar región**: clic para cada punto; se cierra tocando el primer punto, con «✓ Cerrar región» o Intro (Esc cancela, ↶ quita el último punto).
+  - Cada región tiene nombre, color, visibilidad, descripción, notas secretas y «Redibujar contorno».
+  - Los lugares que se añaden **dentro de una región** son de detalle: solo aparecen al entrar en ella.
+  - Se pueden **mostrar al grupo** desde la región o desde «Mostrar al grupo → Regiones» en la Partida.
+  - Vienen tres regiones de ejemplo en la demostración (una oculta).
+- **✨ Objetos especiales** (sellos, ofrendas, regalos, reliquias, cartas, llaves, objetos mágicos, recuerdos, trofeos):
+  - Son tarjetas con historia: quién lo dio, dónde, en qué sesión y qué se sabe.
+  - Pueden tener ilustración.
+  - El máster guarda **lo que aún no saben** y lo revela cuando quiere.
+  - El máster los da con **🎁 Dar objeto** (Roleplay, junto a «Pedir tirada»), a uno o a varios. Al jugador le llega un aviso.
+  - Están en Inventario (ficha completa) y en la pestaña Personaje fuera de la mesa táctica.
+- **📓 Cuaderno**: notas sueltas con la sesión en que se escribieron.
+  - Se pueden marcar como **⭐ descubrimiento** y filtrar.
+  - Con **📣** se comparten con el grupo en la crónica.
+  - Tiene pestaña propia en la ficha completa, y las últimas notas salen en la pestaña Personaje.

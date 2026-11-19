@@ -26,6 +26,7 @@ export function presentationTitle(s, p) {
   if (p.type === "recap") return "Anteriormente…";
   if (p.type === "world") return "Mapa del mundo";
   if (p.type === "tactical") return "Escena táctica";
+  if (p.type === "region") return ((s.world.regions || []).find(r => r.id === p.region) || {}).name || "Una región";
   if (p.type === "lore") return (p.snap && p.snap.title) || "";
   const place = s.world.places.find(x => x.id === p.place);
   if (!place) return "";

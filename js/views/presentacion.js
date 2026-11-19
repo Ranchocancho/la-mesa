@@ -5,6 +5,7 @@ import { getImage } from "../core/images.js";
 import { exampleMap } from "../data/worldmap.js";
 import { lastClosed, presentationFor } from "../core/sesiones.js";
 import { esc } from "../core/ui.js";
+import { bboxOf } from "../core/regiones.js";
 
 let token = 0;
 
@@ -36,6 +37,19 @@ export async function renderStage(el) {
   } else if (p.type === "world") {
     html = `<div class="pres mapstage"><div class="art"><img src="${mapURL}" alt="Mapa del mundo"></div>
       <div class="body slim"><div class="eyebrow">MAPA DEL MUNDO</div><h2>${esc(state.campaign.name)}</h2><p><a class="btn small" href="#mundo">Explorar el mapa y sus lugares</a></p></div></div>`;
+  } else if (p.type === "region") {
+    const r = (state.world.regions || []).find(x => x.id === p.region);
+    if (r) {
+      const own = r.map ? await getImage(r.map) : null;
+      let art;
+      if (own) art = `<div class="art"><img src="${own}" alt="Mapa de ${esc(r.name)}"></div>`;
+      else { // el mapa global, recortado a la región
+        const b = bboxOf(r), W = state.world.map ? state.world.mapW : exampleMap().w, H = state.world.map ? state.world.mapH : exampleMap().h;
+        const px = b.w >= 0.999 ? 0 : b.x0 / (1 - b.w) * 100, py = b.h >= 0.999 ? 0 : b.y0 / (1 - b.h) * 100;
+        art = `<div class="art"><div class="regcrop" role="img" aria-label="Mapa de ${esc(r.name)}" style="aspect-ratio:${(b.w * W).toFixed(0)}/${(b.h * H).toFixed(0)};width:min(100%, calc(72vh * ${(b.w * W / (b.h * H)).toFixed(3)}));background:url('${mapURL}') ${px.toFixed(2)}% ${py.toFixed(2)}% / ${(100 / b.w).toFixed(2)}% ${(100 / b.h).toFixed(2)}% no-repeat"></div></div>`;
+      }
+      html = `<div class="pres mapstage">${art}<div class="body slim"><div class="eyebrow">REGIÓN</div><h2>${esc(r.name)}</h2>${r.summary ? `<p>${esc(r.summary)}</p>` : ""}<p><a class="btn small" href="#mundo">Ver en el mapa</a></p></div></div>`;
+    }
   } else if (p.type === "tactical") {
     html = `<div class="pres empty-stage"><div class="body"><div class="eyebrow">ESCENA TÁCTICA</div><h2>Aún no hay ninguna escena en la mesa</h2>
       <p>Aquí se cargarán las escenas preparadas en cada lugar y las improvisadas: tablero, miniaturas, escenografía e iniciativa.</p></div></div>`;

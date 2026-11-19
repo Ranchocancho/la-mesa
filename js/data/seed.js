@@ -42,6 +42,15 @@ export function seed() {
     ],
     world: {
       map: null, // null = mapa de ejemplo generado; si no, clave de la imagen subida
+      // Regiones dibujadas sobre el mapa global (contornos en 0–1)
+      regions: [
+        { id: "reg-norte", name: "Marca de Hollín", color: "#6f9a3d", visible: true, summary: "Bosques viejos al norte del río; los elfos vigilan sus lindes.", secret: "Algo se mueve bajo las raíces del gran fresno.",
+          pts: [{ x: 0.12, y: 0.12 }, { x: 0.46, y: 0.1 }, { x: 0.5, y: 0.36 }, { x: 0.36, y: 0.46 }, { x: 0.14, y: 0.42 }] },
+        { id: "reg-valle", name: "Valle del Grisvela", color: "#d6aa4e", visible: true, summary: "Tierras de labor y caminos reales alrededor de Vel Arath.", secret: "",
+          pts: [{ x: 0.46, y: 0.1 }, { x: 0.8, y: 0.16 }, { x: 0.78, y: 0.54 }, { x: 0.52, y: 0.58 }, { x: 0.36, y: 0.46 }, { x: 0.5, y: 0.36 }] },
+        { id: "reg-sur", name: "Costa de Ceniza", color: "#b0563c", visible: false, summary: "Acantilados, sal y la vieja torre.", secret: "La torre fue un faro de los antiguos reyes.",
+          pts: [{ x: 0.14, y: 0.42 }, { x: 0.36, y: 0.46 }, { x: 0.52, y: 0.58 }, { x: 0.78, y: 0.54 }, { x: 0.82, y: 0.86 }, { x: 0.2, y: 0.86 }] }
+      ],
       places: [
         {
           id: "velarath", name: "Vel Arath", kind: "Ciudad", icon: "capital", size: "capital", tint: "humanos", x: 0.47, y: 0.42, visible: true,

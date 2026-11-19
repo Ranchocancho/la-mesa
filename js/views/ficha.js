@@ -9,16 +9,19 @@ import { ESTADOS } from "../data/estados.js";
 import { spellMech, freeSlots, useSlot, cast, inArea } from "../core/hechizos.js";
 import { savePlan, spellDC, deathSave, shortRest, longRest } from "../core/salud.js";
 import { attacksOf } from "../core/combate.js";
-import { inRange, dist, metres, phase } from "../core/turnos.js";
+import { inRange, dist, metres, phase, eco, moveBudget, toggle, spend, endTurn, rollInit, ACCIONES } from "../core/turnos.js";
+import { arm, armedNow, picked, togglePick, clearPicks } from "../core/apuntar.js";
+import { treasuresHTML, bindTreasures, journalHTML, bindJournal } from "./tesorosui.js";
 import { getImage } from "../core/images.js";
 import { $, $$, esc, toast } from "../core/ui.js";
 
-let condOpen = false, charSel = null, openSpell = null, picked = new Set(), slotPick = {}, restOpen = false, hdN = 1, testsOpen = false;
+let tesOpen = false, cuaOpen = false;
+let condOpen = false, charSel = null, openSpell = null, slotPick = {}, accOpen = false, restOpen = false, hdN = 1, testsOpen = false;
 
 const myChars = s => { const u = currentUser(s); return s.characters.filter(c => c.owner === (u && u.id)); };
 
 export function renderSheet(el) {
-  const a = document.activeElement; if (a && el.contains(a) && /INPUT|SELECT/.test(a.tagName)) return;
+  const a = document.activeElement; if (a && el.contains(a) && /INPUT|SELECT|TEXTAREA/.test(a.tagName)) return;
   const s = store.get(), list = myChars(s);
   if (!list.length) { el.innerHTML = `<p class="empty">No tienes personaje en este mundo. <a href="#personajes">Crea tu ficha</a>.</p>`; return; }
   const c = list.find(x => x.id === charSel) || list[0]; charSel = c.id;
@@ -42,16 +45,19 @@ export function renderSheet(el) {
     ${c.hp.cur === 0 ? `<div class="fdeath ${d.dead ? "dead" : d.stable ? "stable" : ""}"><b>${d.dead ? "Muerto" : d.stable ? "Estable a 0 PG" : "A 0 PG · inconsciente"}</b>
       ${d.dead ? "" : `<div class="dsv"><span>Éxitos ${pip(d.s, "ok")}</span><span>Fallos ${pip(d.f, "ko")}</span></div>${d.stable ? "" : `<button class="btn gold small" id="fdeath" ${live && !myTurn ? "disabled title='En tu turno'" : ""}>🎲 Salvación contra muerte</button>`}`}</div>` : ""}
 
+
+    ${tok && phase(s) ? turnBlock(s, c, tok) : `<section class="fsec2"><h4>⚔️ Ataques</h4>${attacksOf(s, tok || { kind: "pc", char: c.id }).map(w => `<div class="fatk"><b>${esc(w.name)}</b><span>${sign(w.atk)} · ${esc(w.expr)} ${esc(w.type || "")}</span><small>${w.rng.ranged ? `${w.rng.n}/${w.rng.l} m` : `${w.rng.l} m`}</small></div>`).join("") || `<p class="empty">Sin ataques.</p>`}</section>`}
+
+    ${ab ? spellsBlock(s, c, tok) : ""}
+
     <details class="fsec" data-k="sv" ${testsOpen ? "open" : ""}><summary>Salvaciones y pruebas</summary>
       <div class="fsaves">${ABILITIES.map(([k]) => `<button class="btn small" data-save="${k}">${AB_SHORT[k]} ${sign(saveBonus(c, k))}</button>`).join("")}</div>
       <div class="fskills">${SKILLS.map(([k, n, a]) => `<button class="fsk" data-skill="${k}|${a}|${esc(n)}"><span>${esc(n)}</span><b>${sign(skillBonus(c, k, a))}</b></button>`).join("")}</div>
     </details>
 
-    <section class="fsec2"><h4>⚔️ Ataques</h4>${attacksOf(s, tok || { kind: "pc", char: c.id }).map(w => `<div class="fatk"><b>${esc(w.name)}</b><span>${sign(w.atk)} · ${esc(w.expr)} ${esc(w.type || "")}</span><small>${w.rng.ranged ? `${w.rng.n}/${w.rng.l} m` : `${w.rng.l} m`}</small></div>`).join("") || `<p class="empty">Sin ataques.</p>`}
-      <p class="note">Para atacar: toca al objetivo en la mesa o en la iniciativa; las opciones salen arriba.</p></section>
 
-    ${ab ? spellsBlock(s, c, tok) : ""}
-
+    ${s.board && s.presentation && s.presentation.type === "tactical" ? "" : `<details class="fsec" data-k="tes" ${tesOpen ? "open" : ""}><summary>✨ Objetos especiales <small>${(c.treasures || []).length}</small></summary>${treasuresHTML(c, { compact: true })}</details>
+    <details class="fsec" data-k="cua" ${cuaOpen ? "open" : ""}><summary>📓 Cuaderno <small>${(c.journal || []).length}</small></summary>${journalHTML(c, { limit: 4 })}</details>`}
     ${s.board && s.presentation && s.presentation.type === "tactical" ? "" : `<details class="fsec" data-k="rest" ${restOpen ? "open" : ""}><summary>Descansos</summary>
       <div class="frest"><div><b>Descanso corto</b> <small>1 hora · gasta dados de golpe (d${classInfo(c.cls).hd} + CON)</small>
         <div class="row"><input type="number" id="hdn" min="1" max="${c.level - (c.hdUsed || 0)}" value="${Math.min(hdN, Math.max(1, c.level - (c.hdUsed || 0)))}" aria-label="Dados de golpe"><span class="note">de ${c.level - (c.hdUsed || 0)} que te quedan</span><button class="btn small" id="srest" ${live ? "disabled title='No en combate'" : ""}>Descansar</button></div></div>
@@ -59,6 +65,24 @@ export function renderSheet(el) {
     </details>`}`;
   bind(el, s, c, tok);
   const p = $(".fport", el); if (c.portrait) getImage(c.portrait).then(u => { if (u) { p.style.backgroundImage = `url('${u}')`; p.textContent = ""; } });
+}
+
+/* «Tu turno»: todo lo que puedes hacer, en un solo bloque. Primero eliges QUÉ (arma, acción…) y luego tocas A QUIÉN en la mesa. */
+function turnBlock(s, c, tok) {
+  const ph = phase(s), myTurn = ph === "live" && s.board.turn === tok.id, A = armedNow();
+  if (ph === "init") return `<section class="fturn"><div class="ftt"><b>⚔️ ¡Combate!</b></div>${tok.init == null || tok.init === "" ? `<button class="btn gold" id="finit">🎲 Tirar iniciativa</button>` : `<p class="note">Tu iniciativa: <b>${tok.init}</b>. Esperad a que el máster empiece la ronda.</p>`}</section>`;
+  const e = eco(s, tok), max = moveBudget(s, tok), pct = Math.min(100, e.mov / Math.max(1, max) * 100);
+  const chip = (k, n, on) => `<button class="eco ${on ? "used" : ""}" data-feco="${k}" title="${on ? "Gastada (pulsa para devolverla)" : "Disponible"}" ${myTurn || k === "react" ? "" : "disabled"}>${n}</button>`;
+  const atks = attacksOf(s, tok);
+  return `<section class="fturn ${myTurn ? "mine" : ""}">
+    <div class="ftt"><b>${myTurn ? "⚔️ Tu turno" : "⏳ Esperando tu turno"}</b>${myTurn ? `<button class="btn gold small" id="fend">Terminar turno ▶</button>` : ""}</div>
+    <div class="fecos">${chip("act", "⚡ Acción", e.act)}${chip("bonus", "✦ Adicional", e.bonus)}${chip("react", "↺ Reacción", !!e.react)}</div>
+    ${myTurn ? `<div class="movebar thin ${e.mov > max ? "over" : ""}"><i style="width:${pct}%"></i><em>🦶 ${e.mov.toLocaleString("es-ES")} / ${max.toLocaleString("es-ES")} m${e.dash ? " · corriendo" : ""} · arrastra tu figura</em></div>` : ""}
+    <div class="fdo"><small class="fstep">${myTurn ? "Atacar: elige el arma y toca al enemigo en la mesa" : "Tus ataques (en tu turno)"}</small>
+      <div class="fweap">${atks.map((w, i) => `<button class="fw ${A && A.kind === "atk" && A.i === i ? "armed" : ""}" data-arm="${i}" ${myTurn && !e.act ? "" : "disabled"}><b>${esc(w.name)}</b><span>${sign(w.atk)} · ${esc(w.expr)}</span><small>${w.rng.ranged ? `${w.rng.n}/${w.rng.l} m` : `${w.rng.l} m`}</small></button>`).join("") || `<p class="empty">Sin ataques.</p>`}</div>
+      ${A && A.kind === "atk" ? `<div class="farmed">🎯 Ahora toca al enemigo en la mesa <button class="btn small" data-disarm>Cancelar</button></div>` : ""}
+      ${myTurn ? `<details class="faccs" ${accOpen ? "open" : ""}><summary>Otras acciones</summary><div class="accs">${ACCIONES.filter(([n]) => n !== "Atacar" && n !== "Magia").map(([n, d]) => `<button class="btn small" data-facc="${esc(n)}" title="${esc(d)}" ${e.act ? "disabled" : ""}>${n}</button>`).join("")}</div></details>` : ""}
+    </div></section>`;
 }
 
 function spellsBlock(s, c, tok) {
@@ -82,12 +106,8 @@ function castBox(s, c, tok, d, m) {
   const nm = t => t.kind === "pc" ? (s.characters.find(x => x.id === t.char) || t).name : t.name;
   return `<div class="fcast"><p class="fdesc">${esc(d.t)} · ${esc(d.al)} · ${esc(d.du)}${m.save ? ` · salvación de ${({ fue: "Fuerza", des: "Destreza", con: "Constitución", int: "Inteligencia", sab: "Sabiduría", car: "Carisma" })[m.save]}${m.half ? " (mitad si la supera)" : ""}` : ""}</p>
     ${m.lvl ? (free.length ? `<label class="field">Espacio<select data-slotpick="${esc(d.n)}">${free.map(l => `<option value="${l}" ${slotPick[d.n] === l ? "selected" : ""}>Nivel ${l}${l > m.lvl && m.up ? ` (+${m.up} por nivel)` : ""}</option>`).join("")}</select></label>` : `<p class="note warn">No te quedan espacios de nivel ${m.lvl} o superior.</p>`) : ""}
-    ${onBoard && !m.self ? `<div class="ftargets"><small>Objetivos</small>${cands.filter(t => t.id !== tok.id || m.heal || m.buff).map(t => { const r = inRange(m.touch ? { n: 1.5, l: 1.5 } : m.rng, tok, t);
-      let odds = "";
-      if (m.save && t.id !== tok.id) { const pl = savePlan(s, t, m.save), q0 = Math.min(1, Math.max(0, (spellDC(c) - 1 - pl.bonus) / 20)), q = pl.autoFail ? 1 : pl.adv > 0 ? q0 * q0 : pl.adv < 0 ? 1 - (1 - q0) ** 2 : q0, pc = Math.round(q * 100);
-        odds = `<em class="odds" style="--hc:${pc >= 55 ? "#5bbf6a" : pc >= 35 ? "#d6aa4e" : "#d04a3a"}" title="Probabilidad de que falle la salvación">${isDM(s) ? pc + " %" : pc >= 75 ? "fallará casi seguro" : pc >= 55 ? "probable que falle" : pc >= 35 ? "incierto" : pc >= 15 ? "probable que salve" : "salvará casi seguro"}</em>`; }
-      return `<label class="ftg ${r === "out" ? "far" : ""}"><input type="checkbox" data-tg="${t.id}" ${picked.has(t.id) ? "checked" : ""}><span>${esc(nm(t))}${odds}</span><small>${metres(dist(tok, t))}${r === "out" ? " · fuera" : ""}</small></label>`; }).join("")}
-      ${m.area ? `<button class="btn small" id="farea" title="Marca a todas las criaturas dentro del área (centrada en el primer objetivo, o en ti si es un cono, línea o emanación)">◎ Marcar los del área</button>` : ""}</div>` : !onBoard ? `<p class="note">Fuera de la mesa táctica: se gasta el espacio y queda anotado.</p>` : ""}
+    ${onBoard && !m.self ? `<div class="ftargets"><small>Objetivos · tócalos en la mesa</small><div class="fpicks">${[...picked].map(id => { const t = s.tokens.find(x => x.id === id); return t ? `<button class="cchip" style="--c:#d6aa4e" data-unpick="${id}" title="Quitar">${esc(nm(t))} ✕</button>` : ""; }).join("") || `<em>Ninguno todavía</em>`}</div>
+      ${m.area ? `<button class="btn small" id="farea" title="Marca a todas las criaturas dentro del área (centrada en el primer objetivo, o en ti si es un cono, línea o emanación)">◎ Marcar los del área</button>` : ""}</div>` : !onBoard ? `<p class="note">Fuera de la mesa: se gasta el espacio y queda anotado.</p>` : ""}
     <button class="btn gold small" id="fcastgo" ${m.lvl && !free.length ? "disabled" : ""}>Lanzar ${esc(d.n)}</button></div>`;
 }
 
@@ -95,7 +115,8 @@ function bind(el, s, c, tok) {
   const on = (id, fn) => { const x = $("#" + id, el); if (x) x.onclick = fn; };
   const fs = $("#fsel", el); if (fs) fs.onchange = () => { charSel = fs.value; renderSheet(el); };
   on("fdeath", () => tok && deathSave(tok.id));
-  $$("details.fsec", el).forEach(dt => dt.ontoggle = () => { if (dt.dataset.k === "sv") testsOpen = dt.open; if (dt.dataset.k === "rest") restOpen = dt.open; });
+  $$("details.fsec", el).forEach(dt => dt.ontoggle = () => { if (dt.dataset.k === "sv") testsOpen = dt.open; if (dt.dataset.k === "rest") restOpen = dt.open; if (dt.dataset.k === "tes") tesOpen = dt.open; if (dt.dataset.k === "cua") cuaOpen = dt.open; });
+  bindTreasures(el, c, () => renderSheet(el)); bindJournal(el, c, () => renderSheet(el));
   $$("[data-save]", el).forEach(b => b.onclick = () => {
     const k = b.dataset.save, p = tok ? savePlan(s, tok, k) : { bonus: saveBonus(c, k), adv: 0, extra: "", why: [] };
     publish({ kind: "save", label: `Salvación de ${ABILITIES.find(a => a[0] === k)[1]} de ${c.name}`, expr: `1d20${p.bonus >= 0 ? "+" : ""}${p.bonus}${p.extra}`, adv: p.adv, by: tok ? tok.id : null, why: p.why.length ? p.why : null });
@@ -105,9 +126,22 @@ function bind(el, s, c, tok) {
     publish({ kind: "check", label: `${n} de ${c.name}`, expr: `1d20${bonus >= 0 ? "+" : ""}${bonus}`, by: tok ? tok.id : null });
   });
   $$("[data-slot]", el).forEach(b => b.onclick = () => { const [l, dlt] = b.dataset.slot.split("|"); useSlot(c.id, +l, +dlt); });
-  $$("[data-spell]", el).forEach(b => b.onclick = () => { openSpell = openSpell === b.dataset.spell ? null : b.dataset.spell; picked = new Set(); renderSheet(el); });
+  $$("[data-spell]", el).forEach(b => b.onclick = () => { openSpell = openSpell === b.dataset.spell ? null : b.dataset.spell; arm(openSpell ? { kind: "spell", name: openSpell } : null); renderSheet(el); });
+  $$("[data-unpick]", el).forEach(b => b.onclick = () => togglePick(b.dataset.unpick));
+  $$("[data-arm]", el).forEach(b => b.onclick = () => { const i = +b.dataset.arm, A = armedNow(); openSpell = null; arm(A && A.kind === "atk" && A.i === i ? null : { kind: "atk", tok: tok.id, i }); renderSheet(el); });
+  $$("[data-disarm]", el).forEach(b => b.onclick = () => { arm(null); renderSheet(el); });
+  on("finit", () => tok && rollInit(tok.id));
+  on("fend", () => { arm(null); endTurn(); });
+  $$("[data-feco]", el).forEach(b => b.onclick = () => tok && toggle(tok.id, b.dataset.feco));
+  $$(".faccs", el).forEach(d => d.ontoggle = () => { accOpen = d.open; });
+  $$("[data-facc]", el).forEach(b => b.onclick = () => {
+    const nm = b.dataset.facc, tid = tok.id;
+    if (nm === "Correr") spend(tid, "dash");
+    else if (nm === "Esquivar" || nm === "Destrabarse") { spend(tid, "act"); store.commit("token", st => { const t = st.tokens.find(x => x.id === tid); const id = nm === "Esquivar" ? "esquivando" : "destrabado"; t.conds = (t.conds || []).filter(x => x.id !== id); t.conds.push({ id, seq: st.board.seq }); }); }
+    else spend(tid, "act");
+    toast(`${nm}: ${(ACCIONES.find(x => x[0] === nm) || [, ""])[1]}`);
+  });
   $$("[data-slotpick]", el).forEach(x => x.onchange = () => { slotPick[x.dataset.slotpick] = +x.value; });
-  $$("[data-tg]", el).forEach(x => x.onchange = () => { x.checked ? picked.add(x.dataset.tg) : picked.delete(x.dataset.tg); });
   on("farea", () => {
     const d = findSpell(openSpell), m = spellMech(d), center = s.tokens.find(t => t.id === [...picked][0]);
     if (!center && !/cono|línea|emanación/.test(m.area.shape)) return toast("Marca primero la criatura del centro del área.");
@@ -118,12 +152,12 @@ function bind(el, s, c, tok) {
     if (!tok || !s.board) {           // fuera de la mesa: solo se gasta el espacio
       if (m.lvl) { const free = freeSlots(c, m.lvl); if (!free.length) return; useSlot(c.id, slotPick[d.n] || free[0]); }
       publish({ kind: "free", label: `${c.name} lanza ${d.n}`, expr: m.heal ? m.heal : "1d20", by: null });
-      openSpell = null; return;
+      openSpell = null; arm(null); return;
     }
     const targets = m.self ? [tok.id] : [...picked];
     if (!targets.length && (m.save || m.heal || m.atk || m.buff || m.dmg)) return toast("Elige al menos un objetivo.");
     const r = cast(tok.id, d.n, m.lvl ? slotPick[d.n] : 0, targets);
-    if (r !== null) { openSpell = null; picked = new Set(); }
+    if (r !== null) { openSpell = null; arm(null); }
   });
   on("faddcond", () => { condOpen = !condOpen; renderSheet(el); });
   $$("[data-addc]", el).forEach(b => b.onclick = () => { condOpen = false; store.commit("token", st => { const k = st.tokens.find(x => x.id === tok.id); k.conds = k.conds || []; if (!k.conds.some(c => c.id === b.dataset.addc)) k.conds.push({ id: b.dataset.addc }); }); });

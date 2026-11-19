@@ -9,9 +9,11 @@ import { darkvisionOf } from "../core/vision.js";
 import { publish } from "../core/dados.js";
 import { srdNow, findSpell } from "../core/srd.js";
 import { spellCard } from "./reglas.js";
+import { treasuresHTML, bindTreasures, journalHTML, bindJournal } from "./tesorosui.js";
+import { giveTreasure } from "../core/tesoros.js";
 
 let el = null, openId = null, tab = "car", leveling = null;
-const TABS = [["car", "Características"], ["com", "Combate"], ["inv", "Inventario"], ["con", "Conjuros"], ["ras", "Rasgos y notas"], ["tras", "Trasfondo"]];
+const TABS = [["car", "Características"], ["com", "Combate"], ["inv", "Inventario"], ["con", "Conjuros"], ["ras", "Rasgos y notas"], ["cua", "📓 Cuaderno"], ["tras", "Trasfondo"]];
 const uidl = p => p + "-" + Math.random().toString(36).slice(2, 8);
 
 export function mount(root) {
@@ -119,9 +121,10 @@ function drawSheet(state, c) {
       ${stat("Dados de golpe", `<b>${c.level - (c.hdUsed || 0)}</b><em>/ ${c.level}d${classInfo(c.cls).hd}</em>`)}
     </section>
     <nav class="tabs" role="tablist">${TABS.map(([k, t]) => `<button role="tab" class="tab" data-tab="${k}" aria-selected="${tab === k}">${t}</button>`).join("")}</nav>
-    <section class="tabbody">${({ car: tabCar, com: tabCom, inv: tabInv, con: tabCon, ras: tabRas, tras: tabTras })[tab](c)}</section>
+    <section class="tabbody">${({ car: tabCar, com: tabCom, inv: c2 => tabInv(c2, ed, dm), con: tabCon, ras: tabRas, cua: c2 => `<h2 class="sec">📓 Cuaderno</h2><p class="note" style="margin:0 0 8px">Tus notas de la partida: nombres, pistas, promesas. Marca con ⭐ los descubrimientos y comparte con 📣 lo que quieras que quede en la crónica.</p>${journalHTML(c2, { edit: ed })}`, tras: tabTras })[tab](c)}</section>
   </div>`;
   bind(state, c, ed);
+  { const tb = $(".tabbody", el); if (tb) { bindTreasures(tb, c, draw); bindJournal(tb, c, draw); } const ta = $("#tesadd", el); if (ta) ta.onclick = () => giveTreasure([c.id], { kind: "recuerdo", name: "Objeto especial" }); }
   portraits();
 }
 const stat = (label, inner) => `<div class="stat"><small>${label}</small><div class="statv">${inner}</div></div>`;
@@ -157,9 +160,13 @@ function tabCom(c) {
     ${rows(c.weapons, "weapons", [["name", "Arma", "", 3], ["atk", "Ataque", "", 1], ["dmg", "Daño", "", 2], ["notes", "Propiedades", "", 3]], "+ Arma o ataque")}`;
 }
 
-function tabInv(c) {
+function tabInv(c, ed, dm) {
   const w = carried(c), cap = capacity(c);
-  return `<h2 class="sec">Monedas</h2>
+  return `<h2 class="sec">✨ Objetos especiales <small>${(c.treasures || []).length}</small></h2>
+    <p class="note" style="margin:0 0 8px">Sellos, ofrendas, cartas, reliquias, regalos… Lo que cuenta una historia, no el equipo.</p>
+    ${treasuresHTML(c, { dm, edit: ed })}
+    ${ed ? `<div class="row" style="margin:8px 0 16px"><button class="btn small" id="tesadd">+ Objeto especial</button></div>` : ""}
+    <h2 class="sec">Monedas</h2>
     <div class="coins">${[["po", "Oro"], ["pp", "Plata"], ["pe", "Electro"], ["pc", "Cobre"]].map(([k, n]) => `<label class="field">${n}<input type="number" data-n="coins.${k}" value="${c.coins[k] || 0}"></label>`).join("")}</div>
     <h2 class="sec" style="margin-top:16px">Equipo <small class="weight ${w > cap ? "over" : ""}">${Math.round(w * 10) / 10} / ${cap} kg</small></h2>
     ${rows(c.inventory, "inventory", [["equipped", "Equipado", "check"], ["name", "Objeto", "", 3], ["qty", "Cant.", "num", .7], ["weight", "Peso (kg)", "num", .9], ["notes", "Notas", "", 3]], "+ Objeto")}`;

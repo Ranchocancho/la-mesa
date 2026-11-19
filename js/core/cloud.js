@@ -188,7 +188,8 @@ function refresh() {
     campaign: { name: c.name, rules: c.rules || "D&D 2024" },
     dms: c.dms || [], live: c.live || null,
     users, characters: [...cache.characters.entries()].map(([id, x]) => ({ id, ...x })).sort((a, b) => (a.order || 0) - (b.order || 0)).map(x => strip(x, "order")),
-    world: { map: c.map ? c.map.key : null, mapW: c.map ? c.map.w : null, mapH: c.map ? c.map.h : null, places },
+    world: { map: c.map ? c.map.key : null, mapW: c.map ? c.map.w : null, mapH: c.map ? c.map.h : null, places,
+      regions: (c.regions || []).map(r => ({ ...r, secret: (cache.secrets.get(r.id) || {}).secret || "" })) },
     sessions: c.sessions || [], presentation: c.presentation || null, clock: c.clock || null, backdrop: c.backdrop || null, bestiary: c.bestiary || {},
     lore: [...cache.lore.entries()].map(([id, x]) => ({ id, ...x, secret: (cache.secrets.get(id) || {}).secret || "" })).sort((a, b) => (a.order ?? 0) - (b.order ?? 0) || (a.at || 0) - (b.at || 0)),
     scenes: [...cache.scenes.entries()].map(([id, x]) => ({ id, ...x })).sort((a, b) => (a.order || 0) - (b.order || 0)).map(x => strip(x, "order")),
@@ -213,6 +214,7 @@ function docsOf(s, dm) {
     dms: s.dms || [], live: s.live || null,
     sessions: s.sessions, presentation: s.presentation || null, clock: s.clock || null, backdrop: s.backdrop || null, bestiary: s.bestiary || {},
     map: s.world.map ? { key: s.world.map, w: s.world.mapW, h: s.world.mapH } : null,
+    regions: (s.world.regions || []).map(({ secret, ...r }) => r),
     members
   });
   s.characters.forEach((ch, i) => { const { id, ...rest } = ch; out.set("characters/" + id, { ...rest, order: i }); });
@@ -221,6 +223,7 @@ function docsOf(s, dm) {
   (s.chronicle || []).forEach(e => { const { id, ...rest } = e; out.set("chronicle/" + id, rest); });
   (s.rolls || []).forEach(e => { const { id, ...rest } = e; out.set("rolls/" + id, rest); });
   (s.tokens || []).forEach(t => { const { id, ...rest } = t; out.set("tokens/" + id, rest); });
+  if (dm) (s.world.regions || []).forEach(r => out.set("secrets/" + r.id, { secret: r.secret || "" }));
   (s.lore || []).forEach(e => { const { id, secret, ...rest } = e; out.set("lore/" + id, rest); if (dm) out.set("secrets/" + id, { secret: secret || "" }); });
   s.world.places.forEach((p, i) => {
     const { items, secret, id, ...rest } = p;

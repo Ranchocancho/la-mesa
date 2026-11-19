@@ -63,10 +63,17 @@ function finish(now) {
 
 function next() {
   if (busy || !queue.length) return;
+  // Tiradas pedidas por el máster a varios: se esperan un momento y caen juntas en la misma bandeja
+  const head = queue[0];
+  if (head.r.link && head.r.char && !head.waited) { head.waited = true; setTimeout(next, 900); return; }
   busy = true;
-  const { r, s } = queue.shift();
+  const group = head.r.link && head.r.char ? queue.filter(x => x.r.link === head.r.link) : [head];
+  group.forEach(g => queue.splice(queue.indexOf(g), 1));
+  const s = head.s;
+  const r = group.length > 1 ? { ...head.r, id: group.map(g => g.r.id).join("+"), dice: group.flatMap(g => g.r.dice), total: null, group: group.map(g => g.r),
+    whoName: "Tirada de grupo", label: (head.r.label || "").replace(/ de [^·]+$/, "") } : head.r;
   if (!box) build();
-  const who = s.users.find(u => u.id === r.who);
+  const who = r.group ? null : s.users.find(u => u.id === r.who);
   const skin = skinFor(r);
   box.style.setProperty("--skin", "#" + SKINS[skin].c.toString(16).padStart(6, "0"));
   box.querySelector(".dc-who").innerHTML = `<i style="background:${esc((who && who.color) || "#d6aa4e")}"></i>${esc(r.whoName || (who && who.name) || "Alguien")}`;
@@ -103,7 +110,10 @@ function next() {
 function reveal(r) {
   const res = box.querySelector(".dc-res"), d20 = (r.dice || []).find(x => x.d === 20 && !x.drop);
   const nat = d20 && (d20.v === 20 || d20.v === 1) ? d20.v : null;
-  res.querySelector("b").textContent = r.total;
+  res.querySelector("b").textContent = r.group ? "" : r.total;
+  res.classList.toggle("multi", !!r.group);
+  if (r.group) { const nm = x => (x.label.match(/ de (.+)$/) || [, "?"])[1].split(" ")[0]; res.querySelector("small").innerHTML = r.group.map(x => `<span class="${x.result ? (x.result === "save" ? "ok" : "ko") : ""}">${esc(nm(x))} <b>${x.total}</b>${x.result ? (x.result === "save" ? " ✓" : " ✗") : ""}</span>`).join("");
+    box.classList.add("show"); clearTimeout(box._t); box._t = setTimeout(() => finish(false), 4200); return; }
   const bits = [];
   if (nat === 20) bits.push("¡20 natural!");
   if (nat === 1) bits.push("Pifia");
@@ -122,7 +132,7 @@ function reveal(r) {
 export function showRoll(r, s) {
   if (!r || !r.dice || !r.dice.length) return;
   queue.push({ r, s });
-  if (queue.length > 4) queue.splice(0, queue.length - 4); // si llegan muchas de golpe, solo las últimas
+  if (queue.length > 10) queue.splice(0, queue.length - 10); // si llegan muchas de golpe, solo las últimas
   next();
 }
 addEventListener("resize", () => { if (box && box.classList.contains("on")) size(); });
