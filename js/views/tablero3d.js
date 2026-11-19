@@ -7,6 +7,9 @@ import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { clone as skClone } from "three/addons/utils/SkeletonUtils.js";
 import { getImage } from "../core/images.js";
 import { TERRAIN, dist } from "./tablero.js";
+import { PROPS, isDoor, propVisible } from "../data/mapas.js";
+import { terrainCanvas } from "./texturas.js";
+import { PROC } from "./props3d.js";
 import { siluetaFor, siluetaURL } from "../data/siluetas.js";
 import { estado, etiqueta } from "../data/estados.js";
 import { computeVision, explored } from "../core/vision.js";
@@ -33,8 +36,33 @@ const PROP3D = {
   mesa: ["dungeon/table_medium", 1.2], mesalarga: ["dungeon/table_long_decorated_A", 1], silla: ["dungeon/chair", 1.2], barril: ["dungeon/barrel_large", 1],
   caja: ["dungeon/crates_stacked", 1], cofre: ["dungeon/chest", 1.1], columna: ["dungeon/pillar_decorated", 1], cama: ["dungeon/bed_decorated", 1],
   calavera: ["dungeon/rubble_large", 0.45], tonel: ["dungeon/keg", 1], baul: ["dungeon/trunk_large_A", 1.2], escaleras: ["dungeon/stairs", 0.8],
-  velas: ["dungeon/candle_triple", 1.6], antorcha: ["dungeon/torch_mounted", 1.6, "wall"], estandarte: ["dungeon/banner_red", 1, "wall"], puerta: ["dungeon/wall_doorway", 1, "door"]
+  velas: ["dungeon/candle_triple", 1.6], antorcha: ["dungeon/torch_mounted", 1.6, "wall"], estandarte: ["dungeon/banner_red", 1, "wall"], puerta: ["dungeon/wall_doorway", 1, "door"],
+  puertallave: ["dungeon/wall_doorway", 1, "door"], puertasecreta: ["dungeon/wall_doorway", 1, "door"], rastrillo: ["dungeon/wall_doorway", 1, "door"],
+  estanteria: ["dungeon/shelf_large", 1], cofre: ["dungeon/chest", 1.1]
 };
+// Texturas de terreno como materiales 3D (con relieve sacado de la propia imagen); una por tipo
+const TEXMAT = new Map();
+function terrainMat(k) {
+  if (TEXMAT.has(k)) return TEXMAT.get(k);
+  const ty = TERRAIN[k] || TERRAIN.piedra, map = new THREE.CanvasTexture(terrainCanvas(k));
+  map.wrapS = map.wrapT = THREE.RepeatWrapping; map.colorSpace = THREE.SRGBColorSpace; map.anisotropy = 8;
+  const bump = new THREE.CanvasTexture(terrainCanvas(k)); bump.wrapS = bump.wrapT = THREE.RepeatWrapping;
+  const m = new THREE.MeshStandardMaterial({ map, bumpMap: bump, bumpScale: ty.liquid ? 0.4 : 2.2, roughness: k === "hielo" || k === "marmol" ? 0.35 : ty.liquid ? 0.15 : 0.92, metalness: k === "hielo" ? 0.1 : 0,
+    ...(ty.liquid && k !== "lava" ? { transparent: true, opacity: 0.9 } : {}), ...(ty.glow ? { emissive: 0xff5a10, emissiveMap: map, emissiveIntensity: 1.1 } : {}) });
+  TEXMAT.set(k, m); return m;
+}
+/** Suelo continuo de un tipo de terreno: un cuadrado por casilla con coordenadas de textura del mundo (sin costuras). */
+function floorGeometry(list, cx, cz, y) {
+  const pos = [], uv = [], idx = [], h = CELL / 2;
+  list.forEach(([c, r], i) => {
+    const x = cx(c), z = cz(r);
+    [[-h, -h], [h, -h], [h, h], [-h, h]].forEach(([a, b]) => { pos.push(x + a, y, z + b); uv.push((x + a) / (CELL * 2), -(z + b) / (CELL * 2)); });
+    const o = i * 4; idx.push(o, o + 2, o + 1, o, o + 3, o + 2);
+  });
+  const g = new THREE.BufferGeometry();
+  g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute("uv", new THREE.Float32BufferAttribute(uv, 2)); g.setIndex(idx); g.computeVertexNormals();
+  return g;
+}
 const FLOOR = { piedra: "dungeon/floor_tile_large", madera: "dungeon/floor_wood_large", tierra: "dungeon/floor_dirt_large", barro: "dungeon/floor_dirt_large" };
 const FLOOR_TINT = { barro: 0x8a7458 };
 const AMBIENT = {
@@ -258,54 +286,48 @@ export function createBoard3D(host, opts) {
     table.position.y = -1.6; table.receiveShadow = true; grp.add(table);
     const frameM = new THREE.Mesh(new THREE.BoxGeometry(W + 1.6, 0.6, H + 1.6), new THREE.MeshStandardMaterial({ color: 0x2b1d12, roughness: 0.6 }));
     frameM.position.y = -0.35; frameM.receiveShadow = true; grp.add(frameM);
-    // Suelos: modelos de KayKit agrupados por tipo (una sola pieza por tipo, muchas copias)
+    // Suelos: un trozo continuo por tipo de terreno, con su textura y relieve
     const cells = {};
     for (let r = 0; r < g.rows; r++) for (let c = 0; c < g.cols; c++) {
       const t = (g.terrain || {})[c + "," + r] || "piedra";
       if (TERRAIN[t] && TERRAIN[t].wall) continue;
       (cells[t] = cells[t] || []).push([c, r]);
     }
-    const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), v = new THREE.Vector3(), one = new THREE.Vector3(1, 1, 1), col = new THREE.Color();
+    const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), v = new THREE.Vector3(), one = new THREE.Vector3(1, 1, 1);
     for (const [t, list] of Object.entries(cells)) {
-      let geo, material;
-      if (FLOOR[t]) {
-        const gl = await load(FLOOR[t]); if (my !== build) return;
-        let mesh = null; gl && gl.scene.traverse(o => { if (o.isMesh && !mesh) mesh = o; });
-        if (mesh) { geo = mesh.geometry; material = mesh.material; }
+      const ty = TERRAIN[t] || TERRAIN.piedra, y = t === "abismo" ? -1.6 : ty.liquid ? -0.18 : 0.01;
+      const mesh = new THREE.Mesh(floorGeometry(list, cx, cz, y), terrainMat(t)); mesh.receiveShadow = true; grp.add(mesh);
+      if (ty.liquid || t === "abismo") { // lecho y orillas debajo del agua, la lava o el abismo
+        const bed = new THREE.Mesh(floorGeometry(list, cx, cz, y - 0.5), new THREE.MeshStandardMaterial({ color: t === "lava" ? 0x1a0804 : 0x1a2a2a, roughness: 1 })); grp.add(bed);
       }
-      if (!geo) {
-        const ty = TERRAIN[t] || TERRAIN.piedra;
-        geo = new THREE.BoxGeometry(CELL, t === "agua" ? 0.1 : 0.2, CELL);
-        material = t === "agua" ? new THREE.MeshStandardMaterial({ color: 0x3a7a9a, roughness: 0.12, metalness: 0.1, transparent: true, opacity: 0.88, map: noiseTex("#4a8aa8", 0.25) })
-          : new THREE.MeshStandardMaterial({ map: noiseTex(ty.f, t === "hierba" ? 0.35 : 0.22), roughness: 0.95 });
-        if (t === "agua") { const tex = material.map; ticks.add(dt => { tex.offset.x += dt * 0.02; tex.offset.y += dt * 0.013; }); }
-      }
-      const im = new THREE.InstancedMesh(geo, material, list.length);
-      list.forEach(([c, r], i) => {
-        v.set(cx(c), t === "agua" ? -0.12 : FLOOR[t] ? 0 : -0.1, cz(r));
-        q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), (FLOOR[t] ? ((c * 7 + r * 13) % 4) : 0) * Math.PI / 2);
-        im.setMatrixAt(i, m4.compose(v, q, one));
-        const k = 0.9 + ((c * 31 + r * 17) % 10) / 60;
-        im.setColorAt(i, col.set(FLOOR_TINT[t] || 0xffffff).multiplyScalar(k));
-      });
-      im.receiveShadow = true; grp.add(im);
+      if (ty.liquid) { const tex = mesh.material.map; ticks.add(dt => { tex.offset.x += dt * (t === "lava" ? 0.006 : 0.018); tex.offset.y += dt * (t === "lava" ? 0.004 : 0.011); }); }
+      if (t === "lava") { const mm = mesh.material; let k = 0; ticks.add(dt => { k += dt; mm.emissiveIntensity = 0.95 + Math.sin(k * 1.7) * 0.25; }); }
     }
     // Muros: bloque de piedra y caras de muro de KayKit hacia las casillas transitables
     const wallGl = await load("dungeon/wall"); if (my !== build) return;
     let wallMesh = null; wallGl && wallGl.scene.traverse(o => { if (o.isMesh && !wallMesh) wallMesh = o; });
     const wh = lowWalls ? 0.32 : 1, faces = [], blocks = [];
+    const byType = {};
     for (let r = 0; r < g.rows; r++) for (let c = 0; c < g.cols; c++) {
       if (!isWallIn(g, c, r)) continue;
-      blocks.push([c, r]);
+      const wt = (g.terrain || {})[c + "," + r];
+      // El vacío no se dibuja salvo que toque suelo (entonces se ve como roca)
+      const touches = [[0, -1], [1, 0], [0, 1], [-1, 0]].some(([a, b]) => { const n = (g.terrain || {})[(c + a) + "," + (r + b)]; return c + a >= 0 && r + b >= 0 && c + a < g.cols && r + b < g.rows && !(TERRAIN[n] && TERRAIN[n].wall); });
+      if (TERRAIN[wt].void && !touches) continue;
+      const kind = TERRAIN[wt].void ? "muroroca" : wt;
+      (byType[kind] = byType[kind] || []).push([c, r]);
+      if (kind !== "muro") continue;
       [[0, -1, 0], [1, 0, -Math.PI / 2], [0, 1, Math.PI], [-1, 0, Math.PI / 2]].forEach(([dc, dr, rot]) => {
         const nc = c + dc, nr = r + dr;
         if (nc < 0 || nr < 0 || nc >= g.cols || nr >= g.rows || isWallIn(g, nc, nr)) return;
         faces.push([cx(c) + dc * (CELL / 2 - 0.5), cz(r) + dr * (CELL / 2 - 0.5), rot]);
       });
     }
-    if (blocks.length) {
-      const bm = new THREE.InstancedMesh(new THREE.BoxGeometry(CELL, 4 * wh, CELL), new THREE.MeshStandardMaterial({ map: noiseTex("#3b3631", 0.18), roughness: 0.95 }), blocks.length);
-      blocks.forEach(([c, r], i) => bm.setMatrixAt(i, m4.compose(v.set(cx(c), 2 * wh, cz(r)), q.identity(), one)));
+    for (const [kind, list] of Object.entries(byType)) {
+      const hgt = (kind === "seto" ? 2.6 : 4) * wh, mt = terrainMat(kind).clone(); mt.map = mt.map.clone(); mt.map.repeat.set(2, hgt / 2); mt.map.needsUpdate = true;
+      const top = new THREE.MeshStandardMaterial({ color: kind === "seto" ? 0x2e4a22 : 0x2a2622, roughness: 1 });
+      const bm = new THREE.InstancedMesh(new THREE.BoxGeometry(CELL, hgt, CELL), [mt, mt, top, top, mt, mt], list.length);
+      list.forEach(([c, r], i) => bm.setMatrixAt(i, m4.compose(v.set(cx(c), hgt / 2, cz(r)), q.identity(), one)));
       bm.castShadow = bm.receiveShadow = true; grp.add(bm);
     }
     if (faces.length && wallMesh) {
@@ -316,10 +338,12 @@ export function createBoard3D(host, opts) {
     }
     // Escenografía
     for (const p of g.props || []) {
+      if (!propVisible(p, opts.dm)) continue;
       const x = cx(p.c), z = cz(p.r);
       let obj = null;
       if (p.k === "arbol") obj = tree(); else if (p.k === "arbusto") obj = bush(); else if (p.k === "roca") obj = rock(); else if (p.k === "trampa") obj = trap();
       else if (p.k === "hoguera") obj = campfire();
+      else if (PROC[p.k]) { obj = PROC[p.k](fire); if (!["telarana"].includes(p.k)) obj.rotation.y = (p.rot || 0) * Math.PI / 2; }
       else if (PROP3D[p.k]) {
         const [path, scale, how] = PROP3D[p.k];
         const gl = await load(path); if (my !== build) return;
@@ -335,12 +359,14 @@ export function createBoard3D(host, opts) {
           obj.rotation.y = isWallIn(g, p.c - 1, p.r) || isWallIn(g, p.c + 1, p.r) ? 0 : Math.PI / 2;
           obj.scale.set(1, wh < 1 ? 0.6 : 1, 1);
           // Hoja de madera: cerrada tapa el hueco; abierta, girada contra el marco
-          const leaf = new THREE.Mesh(new THREE.BoxGeometry(2.2, wh < 1 ? 1.9 : 3.1, 0.22), new THREE.MeshStandardMaterial({ map: woodLeaf(), roughness: 0.8 }));
+          const lh = wh < 1 ? 1.9 : 3.1;
+          const leaf = p.k === "rastrillo" ? (() => { const bars = new THREE.Group(), iron = new THREE.MeshStandardMaterial({ color: 0x2e2c2a, metalness: 0.7, roughness: 0.45 }); for (let i = 0; i < 6; i++) { const b = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, lh, 6), iron); b.position.set(-0.95 + i * 0.38, 0, 0); bars.add(b); } [-0.3, 0.3].forEach(y => { const b = new THREE.Mesh(new THREE.BoxGeometry(2.1, 0.08, 0.08), iron); b.position.set(0, y * lh, 0); bars.add(b); }); return bars; })()
+            : new THREE.Mesh(new THREE.BoxGeometry(2.2, lh, 0.22), p.k === "puertasecreta" ? terrainMat("muro") : new THREE.MeshStandardMaterial({ map: woodLeaf(), roughness: 0.8, ...(p.k === "puertallave" ? { color: 0xc8b0a0 } : {}) }));
           const hinge = new THREE.Group(); hinge.position.set(-1.1, 0, 0); leaf.position.set(1.1, (wh < 1 ? 1.9 : 3.1) / 2, 0); hinge.add(leaf);
           hinge.rotation.y = p.open ? -Math.PI / 2 * 0.92 : 0;
           obj.add(hinge);
           obj.traverse(o => { o.userData.door = p.id; });
-        } else obj.rotation.y = ((p.c * 3 + p.r * 5) % 4) * Math.PI / 2;
+        } else obj.rotation.y = (p.rot != null ? p.rot : (p.c * 3 + p.r * 5) % 4) * Math.PI / 2;
         if (p.k === "antorcha" || p.k === "velas") {
           const f = fire(p.k === "velas" ? 0.35 : 0.55);
           const wrap = new THREE.Group(); wrap.add(obj);
@@ -353,7 +379,9 @@ export function createBoard3D(host, opts) {
       }
       if (!obj) continue;
       const w = new THREE.Group(); w.add(obj); w.position.set(x, 0, z);
-      w.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } if (o.isPoints) ticks.add(o.userData.tick); });
+      const ghostly = opts.dm && !propVisible(p, false); // oculto a los jugadores: el máster lo ve translúcido
+      w.traverse(o => { o.userData.prop = p.id; if (o.isMesh) { o.castShadow = !ghostly; o.receiveShadow = true; if (ghostly) { o.material = (Array.isArray(o.material) ? o.material : [o.material]).map(mm => { const c = mm.clone(); c.transparent = true; c.opacity = 0.42; return c; }); if (o.material.length === 1) o.material = o.material[0]; } if (o.userData.spin) ticks.add(dt => { o.rotation.y += dt * 1.2; }); } if (o.isPoints) ticks.add(o.userData.tick); });
+      if (obj.userData.glow) { const G0 = obj.userData.glow, pl = new THREE.PointLight(G0.color, 14 * G0.power, 9, 1.6); pl.position.set(x, G0.y, z); grp.add(pl); }
       const L = obj.userData.light;
       if (L) {
         const light = new THREE.PointLight(0xff9a4a, 30, 22, 1.6);
@@ -639,6 +667,8 @@ export function createBoard3D(host, opts) {
     if (!t && opts.dm) {
       const dh = ray.intersectObjects(world.children, true).find(h => h.object.userData.door);
       if (dh) { const did = dh.object.userData.door; opts.mutate("board", mm => { const pr = (mm.grid.props || []).find(x => x.id === did); if (pr) pr.open = !pr.open; }); sound.play("door"); return; }
+      const ph = opts.onProp && ray.intersectObjects(world.children, true).find(h => h.object.userData.prop);
+      if (ph) { const pr = (G.props || []).find(x => x.id === ph.object.userData.prop); if (pr && (PROPS[pr.k] || {}).loot || pr && (PROPS[pr.k] || {}).trap || pr && pr.hidden || pr && pr.label) { opts.onProp(pr); return; } }
     }
     if (t && opts.canMove(t)) { drag = { id, from: { c: t.c, r: t.r }, moved: false }; controls.enabled = false; renderer.domElement.setPointerCapture(e.pointerId); }
     else if (t) down.tok = id;
@@ -662,7 +692,7 @@ export function createBoard3D(host, opts) {
       const d = drag; drag = null;
       if (!d.moved) { select(d.id); return; }
       setNdc(e); const h = cellAt(), rec = toks.get(d.id);
-      const shut = (G.props || []).some(pr => pr.k === "puerta" && !pr.open && pr.c === h?.c && pr.r === h?.r);
+      const shut = (G.props || []).some(pr => isDoor(pr) && !pr.open && pr.c === h?.c && pr.r === h?.r);
       if (h && inside(h) && !isWall(h.c, h.r) && (!shut || opts.dm)) {
         if (rec && rec.root) { rec.root.position.set(cx(h.c), 0, cz(h.r)); rec.target.copy(rec.root.position); }
         opts.mutate("token", mm => { const k = mm.tokens.find(z => z.id === d.id); if (k) { k.c = h.c; k.r = h.r; } });

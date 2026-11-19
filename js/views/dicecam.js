@@ -72,6 +72,10 @@ function next() {
   const res = box.querySelector(".dc-res");
   res.querySelector("b").textContent = ""; res.querySelector("small").textContent = "";
   box.classList.remove("nat20", "nat1", "show");
+  // El desplegable sale centrado sobre el escenario (no encima de las columnas laterales)
+  const st = document.getElementById("stage"), rc = st && st.getBoundingClientRect();
+  box.style.left = rc && rc.width > 300 ? `${rc.left + rc.width / 2}px` : "50%";
+  box.style.width = rc && rc.width > 300 ? `min(780px, ${Math.round(rc.width - 24)}px)` : "";
   box.classList.add("on");
   requestAnimationFrame(() => {
     size();

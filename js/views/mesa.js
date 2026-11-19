@@ -1,12 +1,17 @@
 // La mesa táctica dentro de la Partida: tablero, columna de iniciativa y mini-ficha (HUD) plegable.
 import { store } from "../core/store.js";
 import { isDM, currentUser } from "../core/session.js";
-import { createBoard, healthWord } from "./tablero.js";
-import { hpOf, charOf, order, applyHP } from "../core/mesa.js";
+import { createBoard, healthWord, moveCost } from "./tablero.js";
+import { hpOf, charOf, order } from "../core/mesa.js";
+import { changeHP as applyHP, deathSave } from "../core/salud.js";
 import { $, $$, esc, pickFile, toast } from "../core/ui.js";
 import { putImage, readImageFile } from "../core/images.js";
 import { SILUETAS } from "../data/siluetas.js";
 import { ESTADOS, estado, etiqueta } from "../data/estados.js";
+import { floatAt } from "./flotantes.js";
+import { PROPS } from "../data/mapas.js";
+import { propEditorHTML, bindPropEditor } from "./propeditor.js";
+import { triggerTrap, announceLoot } from "../core/hechizos.js";
 import { EFECTOS } from "../data/efectos.js";
 import { computeVision, explored } from "../core/vision.js";
 import { renderRolls, visibleRolls } from "./tiradas.js";
@@ -26,11 +31,14 @@ let hudOpen = !(window.matchMedia && window.matchMedia("(max-width: 900px)").mat
 export function mountTactical(host, opts = {}) {
   host.innerHTML = `<div class="tactical"><div class="boardwrap"></div><aside class="sidecol"><div class="sidetabs" role="tablist"><button role="tab" data-side="ini">Iniciativa</button><button role="tab" data-side="tir">🎲 Tiradas</button></div><div class="initcol" aria-label="Iniciativa"></div><div class="rollcol" hidden></div></aside><div class="hud"></div>
     <button class="btn small viewtoggle" id="v3d" title="Cambiar entre la mesa en 3D y el plano en 2D"></button><div class="turnbar" hidden></div><div class="turnbanner" hidden></div><div class="dboxes l"></div><div class="dboxes r"></div></div>`;
-  const bw = $(".boardwrap", host), ini = $(".initcol", host), hud = $(".hud", host), rc = $(".rollcol", host), tb = $(".turnbar", host), banner = $(".turnbanner", host);
-  const sideShow = () => { $$("[data-side]", host).forEach(b => b.setAttribute("aria-selected", b.dataset.side === sideTab)); ini.hidden = sideTab !== "ini"; rc.hidden = sideTab !== "tir"; if (sideTab === "tir") renderRolls(rc); };
+  // Para los jugadores, la iniciativa va en su columna fija de la derecha (opts.sideHost) y el tablero ocupa todo el ancho
+  if (opts.sideHost) { $(".sidecol", host).remove(); $(".tactical", host).classList.add("noside"); opts.sideHost.innerHTML = `<div class="initcol" aria-label="Iniciativa"></div>`; }
+  const sideRoot = opts.sideHost || host;
+  const bw = $(".boardwrap", host), ini = $(".initcol", sideRoot), hud = $(".hud", host), rc = $(".rollcol", host), tb = $(".turnbar", host), banner = $(".turnbanner", host);
+  const sideShow = () => { if (!rc) return; $$("[data-side]", host).forEach(b => b.setAttribute("aria-selected", b.dataset.side === sideTab)); ini.hidden = sideTab !== "ini"; rc.hidden = sideTab !== "tir"; if (sideTab === "tir") renderRolls(rc); };
   $$("[data-side]", host).forEach(b => b.onclick = () => { sideTab = b.dataset.side; sideShow(); });
   let rollsSeen = (store.get().rolls || []).length;
-  let sel = null, sceneId = store.get().board && store.get().board.scene, board = null;
+  let sel = null, selPropId = null, sceneId = store.get().board && store.get().board.scene, board = null;
   const S = () => store.get();
   const me = () => (currentUser(S()) || {}).id;
   const bopts = {
@@ -39,19 +47,36 @@ export function mountTactical(host, opts = {}) {
     // En combate, cada uno mueve su figura solo en su turno; el máster, siempre
     canMove: t => isDM(S()) || (!!t.owner && t.owner === me() && (phase(S()) !== "live" || S().board.turn === t.id)),
     mutate: (label, fn) => {
-      let warn = null;
+      let warn = null; const oas = [], traps = [];
       store.commit(label === "token" ? "token" : "board", s => {
         const before = new Map(s.tokens.map(t => [t.id, { c: t.c, r: t.r }]));
         fn({ grid: s.board, tokens: s.tokens });
+        // Ataques de oportunidad: salir del alcance de un enemigo que aún tiene su reacción (y no te has destrabado)
+        if (phase(s) === "live") for (const t of s.tokens) {
+          const o = before.get(t.id); if (!o || (o.c === t.c && o.r === t.r) || (t.conds || []).some(c => c.id === "destrabado")) continue;
+          for (const h of s.tokens) {
+            if (h.id === t.id || h.hidden || (h.kind === "pc") === (t.kind === "pc")) continue;
+            const hp = hpOf(s, h); if (hp && hp.cur <= 0) continue;
+            if ((h.conds || []).some(c => ["incapacitado", "inconsciente", "aturdido", "paralizado", "petrificado", "muerto"].includes(c.id)) || eco(s, h).react) continue;
+            if (dist(o, h) <= 1 && dist(t, h) > 1 && attacksOf(s, h).some(w => !w.rng.ranged || w.rng.melee)) oas.push({ by: h.id, target: t.id });
+          }
+        }
+        // Trampas: quien pisa una trampa armada la dispara (se revela y se tiran las salvaciones)
+        for (const t of s.tokens) { const o = before.get(t.id); if (!o || (o.c === t.c && o.r === t.r)) continue;
+          const p = (s.board.props || []).find(x => x.c === t.c && x.r === t.r && (PROPS[x.k] || {}).trap && !x.sprung && !x.disarmed); if (p) traps.push({ p: p.id, t: t.id }); }
         // Movimiento en combate: se descuenta de la velocidad de quien tiene el turno
         if (phase(s) === "live") for (const t of s.tokens) {
           const o = before.get(t.id); if (!o || (o.c === t.c && o.r === t.r) || s.board.turn !== t.id) continue;
-          const e = eco(s, t); e.mov = Math.round((e.mov + dist(o, t) * 1.5) * 10) / 10; t.eco = e;
+          const e = eco(s, t); e.mov = Math.round((e.mov + moveCost(s.board, o, t) * 1.5) * 10) / 10; t.eco = e;
           if (e.mov > moveBudget(s, t) + 0.01) warn = `${nameOf(s, t)} se ha movido ${metres(e.mov / 1.5)} de ${metres(moveBudget(s, t) / 1.5)}: supera su velocidad`;
         }
       });
       if (warn) toast(warn);
+      oas.forEach(o => offerOA(o.by, o.target));
+      traps.forEach(tr => triggerTrap(tr.p, [tr.t]));
     },
+    onProp: p => { selPropId = p.id; hudOpen = true; drawHud(); },
+    onSelectProp: id => { selPropId = id; if (id) hudOpen = true; drawHud(); },
     decorate: t => { const c = charOf(S(), t); return { ...(c ? { name: c.name, color: c.color, portrait: c.portrait } : {}), isTurn: S().board.turn === t.id }; },
     hpOf: t => hpOf(S(), t),
     onSelect: id => { sel = id; drawHud(); },
@@ -157,8 +182,14 @@ export function mountTactical(host, opts = {}) {
     }
   }
 
+  function propCard(s) {
+    if (!selPropId || !isDM(s)) return "";
+    const p = (s.board.props || []).find(y => y.id === selPropId); if (!p) { selPropId = null; return ""; }
+    return `<div class="hudcard hudprop"><button class="x" aria-label="Cerrar">✕</button>${propEditorHTML(p, { live: !opts.edit })}</div>`;
+  }
   function drawHud() {
     const s = S(), dm = isDM(s);
+    const ae = document.activeElement; if (ae && hud.contains(ae) && ae.closest(".hudprop") && /INPUT|TEXTAREA/.test(ae.tagName)) return;
     const mineT = s.tokens.find(t => t.kind === "pc" && t.owner && t.owner === me());
     const target = s.tokens.find(t => t.id === sel && (dm || !t.hidden));
     const card = (t, title) => {
@@ -177,8 +208,16 @@ export function mountTactical(host, opts = {}) {
     hud.classList.toggle("open", hudOpen);
     const act = actorTok(), cur = current(s), myTurn = phase(s) === "live" && cur && (cur.owner === me() || (dm && cur.kind !== "pc"));
     hud.innerHTML = `<button class="hudtoggle" id="hudt" aria-expanded="${hudOpen}">${hudOpen ? "▾ Ocultar" : "▸ Ficha y objetivo"}</button>
-      ${hudOpen ? `<div class="hudbody">${myTurn ? turnCard(s, cur) : ""}${areaBlock(s)}${mineT ? card(mineT, "Tu personaje") : ""}${target && target !== mineT ? card(target, "Objetivo") : ""}${!mineT && !target ? `<p class="empty">Toca una ficha para ver sus datos.</p>` : ""}</div>` : ""}`;
+      ${hudOpen ? `<div class="hudbody">${propCard(s)}${myTurn ? turnCard(s, cur) : ""}${areaBlock(s)}${mineT ? card(mineT, "Tu personaje") : ""}${target && target !== mineT ? card(target, "Objetivo") : ""}${!mineT && !target ? `<p class="empty">Toca una ficha para ver sus datos.</p>` : ""}</div>` : ""}`;
     $("#hudt", hud).onclick = () => { hudOpen = !hudOpen; drawHud(); };
+    const pc = $(".hudprop", hud);
+    if (pc) {
+      const id = selPropId, setP = fn => store.commit("board", st => { const x = (st.board.props || []).find(y => y.id === id); if (x) fn(x); });
+      $(".hudprop .x", hud).onclick = () => { selPropId = null; drawHud(); };
+      bindPropEditor(pc, setP, { reveal: () => setP(p => { p.hidden = false; }), loot: () => announceLoot(id),
+        trap: () => { const st = S(), p = st.board.props.find(y => y.id === id), on = st.tokens.filter(t => p && t.c === p.c && t.r === p.r).map(t => t.id); if (!on.length) return toast("No hay nadie en esa casilla."); triggerTrap(id, on); },
+        rot: () => setP(p => { p.rot = ((p.rot || 0) + 1) % 4; }), del: () => { store.commit("board", st => { st.board.props = st.board.props.filter(y => y.id !== id); }); selPropId = null; drawHud(); } });
+    }
     $$(".tkdetails", hud).forEach(d => d.ontoggle = () => { editOpen = d.open; });
     const amt = id => Math.max(0, +($(`[data-amt="${id}"]`, hud) || {}).value || 0);
     $$("[data-hurt]", hud).forEach(b => b.onclick = () => { const a = amt(b.dataset.hurt); if (a) applyHP(b.dataset.hurt, -a); });
@@ -248,8 +287,38 @@ export function mountTactical(host, opts = {}) {
     const half = Math.ceil(html.length / 2), sig = html.join("");
     if (sig === boxSig) return; boxSig = sig;
     $(".dboxes.l", host).innerHTML = html.slice(0, half).join(""); $(".dboxes.r", host).innerHTML = html.slice(half).join("");
-    $$("[data-dbox]", host).forEach(b => b.onclick = () => { if (b.dataset.dbox === me()) { sideTab = "tir"; sideShow(); const p = $("#trpad", host); if (p) p.scrollIntoView({ block: "nearest" }); } });
+    $$("[data-dbox]", host).forEach(b => b.onclick = () => { if (b.dataset.dbox === me()) { sideTab = "tir"; sideShow(); const p = document.getElementById("trpad"); if (p) p.scrollIntoView({ block: "nearest" }); } });
   }
+  host.addEventListener("click", e => { const b = e.target.closest("[data-death]"); if (b) deathSave(b.dataset.death); });
+  // Texto flotante sobre las figuras: daño, curación, estados, fallos, críticos y salvaciones
+  const screenOf = id => { if (bw.__screenOf) return bw.__screenOf(id); const g = bw.querySelector(`[data-tok="${id}"]`); if (!g) return null; const r = g.getBoundingClientRect(); return [r.left + r.width / 2, r.top]; };
+  const snapOf = s => new Map(s.tokens.map(t => { const h = hpOf(s, t); return [t.id, { hp: h ? h.cur : null, conds: (t.conds || []).map(c => c.id), pc: t.kind === "pc" }]; }));
+  let snap = snapOf(S()); const fbSeen = new Set(visibleRolls(S()).map(r => r.id + ":" + (r.status !== "pending")));
+  function feedback() {
+    const s = S(), now = snapOf(s);
+    for (const [id, v] of now) {
+      const o = snap.get(id), p = o && screenOf(id); if (!p) continue;
+      if (o.hp != null && v.hp != null && v.hp !== o.hp) {
+        const d = v.hp - o.hp; floatAt(p[0], p[1], d < 0 ? `−${-d}` : `+${d}`, d < 0 ? "dmg" : "heal", { big: Math.abs(d) >= 15 });
+        if (v.hp === 0 && o.hp > 0) floatAt(p[0], p[1], v.pc ? "Inconsciente" : "¡Cae!", "down", { delay: 450 });
+      }
+      v.conds.filter(c => !o.conds.includes(c)).forEach((c, i) => { const e = estado(c); if (e) floatAt(p[0], p[1] - 26, "+ " + e.n, "cond", { color: e.c, delay: 300 + i * 250 }); });
+      o.conds.filter(c => !v.conds.includes(c)).forEach((c, i) => { const e = estado(c); if (e) floatAt(p[0], p[1] - 26, "− " + e.n, "cond", { color: e.c, delay: 300 + i * 250 }); });
+    }
+    snap = now;
+    for (const r of visibleRolls(s)) {
+      const key = r.id + ":" + (r.status !== "pending"); if (fbSeen.has(key)) continue; fbSeen.add(key);
+      const wait = r.dice && r.dice.length && r.status === "pending" ? 2600 : r.dice && r.dice.length && !fbSeen.has(r.id + ":false") ? 2600 : 0;
+      if (r.kind === "attack" && r.target && r.result && (r.status !== "pending" || isDM(s))) {
+        const p = screenOf(r.target); if (p) floatAt(p[0], p[1], r.result === "crit" ? "¡Crítico!" : r.result === "miss" ? "Fallo" : "Impacto", r.result === "crit" ? "crit" : r.result === "miss" ? "miss" : "hit", { delay: wait });
+      }
+      if (r.kind === "save" && r.tok && r.result) { const p = screenOf(r.tok); if (p) floatAt(p[0], p[1], r.result === "save" ? "✓ Salva" : "✗ Falla", r.result === "save" ? "save" : "fail", { delay: wait }); }
+      if (r.saves && r.status === "pending") r.saves.forEach(sv => { if (sv.auto) return; const p = screenOf(sv.t); if (p) floatAt(p[0], p[1], sv.ok ? "✓ Salva" : "✗ Falla", sv.ok ? "save" : "fail", { delay: wait }); });
+      if (r.kind === "oa" && r.status === "pending") { const p = screenOf(r.tok); if (p) floatAt(p[0], p[1], "¡Oportunidad!", "crit"); }
+      if (r.kind === "death" && r.result) { const p = screenOf(r.tok); if (p) floatAt(p[0], p[1], r.result === "save" ? "✓ Resiste" : "✗ Se apaga", r.result === "save" ? "save" : "fail", { delay: wait }); }
+    }
+  }
+  if (opts.sideHost) opts.sideHost.addEventListener("click", e => { const b = e.target.closest("[data-death]"); if (b) deathSave(b.dataset.death); });
   drawInit(); drawHud(); sideShow(); drawBoxes();
   return {
     update() {
@@ -258,11 +327,12 @@ export function mountTactical(host, opts = {}) {
       if (board && s.board.scene !== sceneId) { sceneId = s.board.scene; board.fit(); }
       if (board) board.render();
       drawInit();
-      if (sideTab === "tir") renderRolls(rc);
+      if (rc && sideTab === "tir") renderRolls(rc);
       if (s.board.seq !== lastTurnSeen) { sel = sel; drawHud(); }
-      const n = (s.rolls || []).length; if (n > rollsSeen && sideTab !== "tir") { const b = $('[data-side="tir"]', host); if (b) b.classList.add("ping"); } rollsSeen = n;
+      const n = (s.rolls || []).length; if (rc && n > rollsSeen && sideTab !== "tir") { const b = $('[data-side="tir"]', host); if (b) b.classList.add("ping"); } rollsSeen = n;
       if (!host.querySelector(".hud input:focus")) drawHud();
       drawBoxes();
+      feedback();
     }
   };
 }
@@ -281,6 +351,14 @@ function turnCard(s, t) {
   const e = eco(s, t), max = moveBudget(s, t), pct = Math.min(100, e.mov / Math.max(1, max) * 100);
   const chip = (k, n, on) => `<button class="eco ${on ? "used" : ""}" data-eco="${t.id}|${k}" title="${on ? "Gastada (pulsa para devolverla)" : "Disponible (pulsa para marcarla)"}">${n}</button>`;
   const rule = ruleOpen && GLOS && GLOS[ruleOpen];
+  const ch = charOf(s, t);
+  if (ch && ch.hp.cur === 0 && !(ch.death && (ch.death.dead || ch.death.stable))) {
+    const d = ch.death || { s: 0, f: 0 }, pip = (n, on, cls) => Array.from({ length: 3 }, (_, i) => `<i class="pip ${cls} ${i < on ? "on" : ""}"></i>`).join("");
+    return `<div class="hudcard turncard dying"><small>Turno de ${esc(ch.name)} · ronda ${s.board.round}</small>
+      <b>A 0 PG: salvación contra muerte</b><div class="dsv"><span>Éxitos ${pip(3, d.s, "ok")}</span><span>Fallos ${pip(3, d.f, "ko")}</span></div>
+      <p class="note">d20: 10 o más es un éxito; un 1 son dos fallos; un 20 te levanta con 1 PG. Tres éxitos te estabilizan; tres fallos…</p>
+      <button class="btn gold" data-death="${t.id}">🎲 Tirar salvación contra muerte</button> <button class="btn" id="endturn">Terminar turno ▶</button></div>`;
+  }
   return `<div class="hudcard turncard"><small>Turno de ${esc(nameOf(s, t))} · ronda ${s.board.round}</small>
     <div class="movebar ${e.mov > max ? "over" : ""}"><i style="width:${pct}%"></i><em>🦶 Movimiento ${e.mov.toLocaleString("es-ES")} / ${max.toLocaleString("es-ES")} m${e.dash ? " (corriendo)" : ""}</em></div>
     <div class="ecos">${chip("act", "⚡ Acción", e.act)}${chip("bonus", "✦ Acción adicional", e.bonus)}${chip("react", "↺ Reacción", !!e.react)}</div>
@@ -299,7 +377,11 @@ function atkBlock(s, t, canAct, sel) {
     ${dm && t.kind !== "pc" ? `<label class="field">Objetivo<select id="dmtarget"><option value="">Elige…</option>${targets.map(x => `<option value="${x.id}" ${dmTarget === x.id ? "selected" : ""}>${esc(nameOf(s, x))}</option>`).join("")}</select></label>` : ""}
     ${(() => { const tg = s.tokens.find(x => x.id === (dm && t.kind !== "pc" ? dmTarget || sel : sel)); if (!tg || tg.id === t.id) return `<p class="note" style="margin:0 0 4px">Toca un objetivo en la mesa para ver alcance, cobertura y modificadores.</p>`;
       const m = modifiers(s, t, tg, (list[atkIdx] || list[0]).rng), cv = cover(s, t, tg);
-      return `<div class="aimbox">🎯 <b>${esc(nameOf(s, tg))}</b> a ${metres(dist(t, tg))}${cv.txt ? ` · ${esc(cv.txt)}` : ""}${m.adv.length ? `<div class="adv">▲ Ventaja: ${esc(m.adv.join(", "))}</div>` : ""}${m.dis.length ? `<div class="dis">▼ Desventaja: ${esc(m.dis.join(", "))}</div>` : ""}${m.autoCrit ? `<div class="adv">Si impacta, es crítico</div>` : ""}</div>`; })()}
+      const w = list[atkIdx] || list[0], netAdv = atkAdv != null ? atkAdv : m.net, ac = acOf(s, tg) + (cv.bonus || 0);
+      const p1 = Math.min(.95, Math.max(.05, (21 - (ac - w.atk)) / 20)), pc = netAdv > 0 ? 1 - (1 - p1) ** 2 : netAdv < 0 ? p1 * p1 : p1, pct = Math.round(pc * 100);
+      const band = pct >= 75 ? "Muy probable" : pct >= 55 ? "Probable" : pct >= 35 ? "Incierto" : pct >= 15 ? "Difícil" : "Casi imposible";
+      const chance = `<div class="hitch" style="--p:${pct}%;--hc:${pct >= 55 ? "#5bbf6a" : pct >= 35 ? "#d6aa4e" : "#d04a3a"}"><i></i><span>${dm ? `${pct} % de impactar` : band}${netAdv ? (netAdv > 0 ? " · ventaja" : " · desventaja") : ""}</span></div>`;
+      return chance + `<div class="aimbox">🎯 <b>${esc(nameOf(s, tg))}</b> a ${metres(dist(t, tg))}${cv.txt ? ` · ${esc(cv.txt)}` : ""}${m.adv.length ? `<div class="adv">▲ Ventaja: ${esc(m.adv.join(", "))}</div>` : ""}${m.dis.length ? `<div class="dis">▼ Desventaja: ${esc(m.dis.join(", "))}</div>` : ""}${m.autoCrit ? `<div class="adv">Si impacta, es crítico</div>` : ""}</div>`; })()}
     <div class="castlist">${list.map((w, i) => { const tg = s.tokens.find(x => x.id === (dm && t.kind !== "pc" ? dmTarget || sel : sel)); const st = tg && tg.id !== t.id ? inRange(w.rng, t, tg) : null;
       return `<button class="btn small rng-${st || "na"}" data-atk="${t.id}|${i}" data-atkpick="${i}" title="${esc(w.expr + " " + w.type)} · alcance ${w.rng.n === w.rng.l ? w.rng.n + " m" : w.rng.n + "/" + w.rng.l + " m"}">${esc(w.name)} <b>${w.atk >= 0 ? "+" : ""}${w.atk}</b>${st === "out" ? " ✗" : st === "long" ? " ⚠" : st === "ok" ? " ✓" : ""}</button>`; }).join("")}</div>
     <div class="row" style="margin-top:4px"><small class="note" style="margin:0;border:0;padding:0">Forzar:</small><button class="btn small" data-atkadv="1" aria-pressed="${atkAdv === 1}">Ventaja</button><button class="btn small" data-atkadv="-1" aria-pressed="${atkAdv === -1}">Desventaja</button><button class="btn small" data-atkadv="0" aria-pressed="${atkAdv === 0}">Normal</button></div>
@@ -348,4 +430,12 @@ export function bindTokenEditor(root, mutate) {
       if (k === "maxhp" && (t.hp == null || t.hp > t.maxhp)) t.hp = t.maxhp;
     }));
   });
+}
+
+/** Avisa en la mesa de un ataque de oportunidad posible: lo decide quien controla al atacante (o el máster). */
+function offerOA(byId, targetId) {
+  const s = store.get(), h = s.tokens.find(t => t.id === byId), t = s.tokens.find(x => x.id === targetId), u = currentUser(s) || {};
+  if (!h || !t) return;
+  store.commit("roll", st => { st.rolls = st.rolls || []; st.rolls.push({ id: "oa" + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), at: Date.now(), who: u.id || null, whoName: u.name || "", kind: "oa",
+    label: `${nameOf(s, t)} sale del alcance de ${nameOf(s, h)}: ataque de oportunidad`, expr: "", dice: [], total: null, nat: null, tok: h.id, target: t.id, status: "pending", secret: false }); });
 }

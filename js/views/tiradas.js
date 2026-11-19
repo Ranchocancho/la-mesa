@@ -2,7 +2,9 @@
 import { store } from "../core/store.js";
 import { isDM, currentUser } from "../core/session.js";
 import { publish, RESULT, mySkin, setMySkin } from "../core/dados.js";
-import { decide, damageFor, nameOf } from "../core/combate.js";
+import { decide, damageFor, nameOf, attack, attacksOf } from "../core/combate.js";
+import { applySpell } from "../core/hechizos.js";
+import { spend } from "../core/turnos.js";
 import { $, $$, esc } from "../core/ui.js";
 import { srd, srdNow, findMonster } from "../core/srd.js";
 import { estado, etiqueta } from "../data/estados.js";
@@ -36,7 +38,9 @@ function rollInfo(s, r) {
 let adv = 0, secret = false, editing = null, pool = {};
 const SKIN_NAMES = { rubi: "Rubí", zafiro: "Zafiro", esmeralda: "Esmeralda", amatista: "Amatista", obsidiana: "Obsidiana", oro: "Oro", hueso: "Hueso", madera: "Madera" };
 const poolExpr = mod => { const p = Object.entries(pool).filter(([, n]) => n).map(([d, n]) => `${n}d${d}`).join("+"); return (p || "") + (mod ? (mod > 0 ? "+" : "") + mod : ""); };
-const KIND = { attack: "Ataque", damage: "Daño", check: "Prueba", save: "Salvación", init: "Iniciativa", free: "Tirada" };
+const KIND = { attack: "Ataque", damage: "Daño", check: "Prueba", save: "Salvación", init: "Iniciativa", free: "Tirada", spell: "Conjuro", cast: "Conjuro", heal: "Curación", death: "Contra muerte", oa: "Reacción", loot: "Tesoro" };
+const HOW = { full: "Completo", half: "Mitad", none: "Nada", double: "Doble" };
+let spellPer = {};
 
 /** Lista de tiradas visibles para este usuario (las secretas, solo el máster y quien tira). */
 export const visibleRolls = s => (s.rolls || []).filter(r => !r.secret || isDM(s) || r.who === (currentUser(s) || {}).id);
@@ -49,34 +53,14 @@ export function renderRolls(el) {
   const pe = poolExpr(0);
   el.innerHTML = `<div class="tray">
       <div class="trayd">${[4, 6, 8, 10, 12, 20, 100].map(d => `<button class="die d${d} ${pool[d] ? "inpool" : ""}" data-d="${d}" title="Añadir un d${d} a la mano">d${d}${pool[d] ? `<i>${pool[d]}</i>` : ""}</button>`).join("")}</div>
-      <div class="pad" id="trpad" title="Arrastra y suelta para lanzar">${pe ? `<b>${pe}</b><span>Arrastra aquí para lanzar · o pulsa Tirar</span>` : `<span>Elige dados arriba (o tira 1d20) y <b>arrastra aquí para lanzarlos</b></span>`}</div>
+      <div class="pad" id="trpad" title="Arrastra y suelta para lanzar">${pe ? `<b>${pe}</b><span>Arrastra para lanzar</span>` : `<span><b>Arrastra aquí para lanzar</b> · 1d20 o los dados que elijas</span>`}</div>
       <div class="trayo"><select id="trskin" aria-label="Tus dados">${Object.entries(SKIN_NAMES).map(([k, n]) => `<option value="${k}" ${mySkin() === k ? "selected" : ""}>🎲 ${n}</option>`).join("")}</select>${pe ? `<button class="btn small" id="trclear">Vaciar</button>` : ""}
         <input type="number" id="trmod" placeholder="+0" aria-label="Modificador">
         <button class="btn small" id="tradv" aria-pressed="${adv === 1}" title="Ventaja (d20)">Ventaja</button><button class="btn small" id="trdis" aria-pressed="${adv === -1}" title="Desventaja (d20)">Desv.</button>
         ${dm ? `<button class="btn small" id="trsec" aria-pressed="${secret}" title="Solo la ves tú">Secreta</button>` : ""}
         <input id="trexpr" placeholder="2d6+3" aria-label="Expresión de dados"><button class="btn small gold" id="trgo">Tirar</button></div>
     </div>
-    <div class="rolls">${list.map(r => {
-      const pend = r.status === "pending", showRes = dm || !pend || r.kind !== "attack";
-      const dice = r.dice.map(x => `<span class="dv d${x.d} ${x.drop ? "drop" : ""} ${x.d === 20 && x.v === 20 && !x.drop ? "nat20" : ""} ${x.d === 20 && x.v === 1 && !x.drop ? "nat1" : ""}">${x.v}</span>`).join("");
-      const res = r.kind === "attack" && r.result ? `<span class="res ${r.result}">${RESULT[r.result]}${dm && r.target ? ` <small>vs CA ${r.ac ?? "?"}</small>` : ""}</span>` : "";
-      const st = r.status === "void" ? `<span class="st void">Anulada</span>` : pend && (r.kind === "attack" || r.kind === "damage") ? `<span class="st pend">Pendiente del máster</span>` : r.status === "mod" ? `<span class="st mod">Modificada</span>` : "";
-      const canDmg = r.kind === "attack" && r.status !== "pending" && r.status !== "void" && r.result !== "miss" && r.dmg && !hasDamage(r.id) && (dm || r.who === me.id);
-      return `<div class="roll ${r.status} k-${r.kind}">
-        <div class="rh"><b>${esc(r.whoName || "")}</b> <small>${KIND[r.kind] || ""}${r.adv ? (r.adv > 0 ? " · ventaja" : " · desventaja") : ""}${r.crit ? " · crítico" : ""}${r.secret ? " · secreta" : ""}</small></div>
-        <div class="rl">${esc(r.label)}${r.why ? `<br><small class="${r.adv > 0 ? "adv" : r.adv < 0 ? "dis" : ""}">${esc(r.why.join(" · "))}</small>` : ""}</div>
-        <div class="rb"><span class="dice">${dice}${r.dice.length && r.expr.match(/[+-]\d+$/) ? `<span class="dmod">${r.expr.match(/[+-]\d+$/)[0]}</span>` : ""}</span>
-          ${editing === r.id ? `<input type="number" id="rtot" value="${r.total}" aria-label="Nuevo total"><button class="btn small gold" id="rtotok">OK</button>` : `<span class="tot">${showRes ? r.total : "?"}</span>`}${showRes ? res : ""}</div>
-        ${r.note ? `<div class="rn">${esc(r.note)}</div>` : ""}
-        ${r.applied != null ? `<div class="rn">−${r.applied} PG a ${esc(nameOf(s, s.tokens.find(t => t.id === r.target)) || "")}</div>` : ""}
-        ${openInfo.has(r.id) ? `<div class="rinfo">${rollInfo(s, r)}</div>` : ""}
-        <div class="ra">${st}<button class="btn small" data-info="${r.id}" title="Reglas que se aplican">📖</button>
-          ${dm && pend && r.kind === "attack" ? `<button class="btn small gold" data-dec="${r.id}|ok">✓ Confirmar</button><button class="btn small" data-dec="${r.id}|flip">⇄ ${r.result === "miss" ? "Impacta" : "Falla"}</button>` : ""}
-          ${dm && pend && r.kind === "damage" ? (() => { const tr = damageTraits(s.tokens.find(x => x.id === r.target), r.dtype); return `<button class="btn small gold" data-dec="${r.id}|${tr && tr.k === "resiste" ? "half" : tr && tr.k === "vulnerable" ? "double" : "ok"}">✓ Aplicar${tr ? (tr.k === "resiste" ? " (mitad, resiste)" : tr.k === "vulnerable" ? " (doble, vulnerable)" : "") : ""}</button><button class="btn small" data-dec="${r.id}|half">½ Mitad</button><button class="btn small" data-dec="${r.id}|double">×2</button>${tr && tr.k === "inmune" ? `<span class="st void">Inmune</span>` : ""}`; })() : ""}
-          ${dm && r.status !== "void" && !r.applied ? `<button class="btn small" data-edit="${r.id}" title="Cambiar el total">✎</button><button class="btn small danger" data-dec="${r.id}|void" title="Anular">✕</button>` : ""}
-          ${canDmg ? `<button class="btn small danger" data-dmg="${r.id}">🎲 Tirar daño${r.result === "crit" ? " (crítico)" : ""}</button>` : ""}
-        </div></div>`;
-    }).join("") || `<p class="empty">Aún no se ha tirado nada. ¡Que rueden los dados!</p>`}</div>`;
+    <div class="rolls">${list.filter(r => !(r.kind === "damage" && r.link && list.some(x => x.id === r.link))).map(r => rowHTML(s, r, dm, me, hasDamage, list.find(x => x.kind === "damage" && x.link === r.id))).join("") || `<p class="empty">Aún no se ha tirado nada. ¡Que rueden los dados!</p>`}</div>`;
 
   const mod = () => +($("#trmod", el).value || 0);
   $$("[data-d]", el).forEach(b => {
@@ -108,7 +92,86 @@ export function renderRolls(el) {
   const sc = $("#trsec", el); if (sc) sc.onclick = () => { secret = !secret; renderRolls(el); };
   $$("[data-dec]", el).forEach(b => b.onclick = () => { const [id, a] = b.dataset.dec.split("|"); decide(id, a); });
   $$("[data-dmg]", el).forEach(b => b.onclick = () => damageFor(b.dataset.dmg));
-  $$("[data-info]", el).forEach(b => b.onclick = () => { const id = b.dataset.info; openInfo.has(id) ? openInfo.delete(id) : openInfo.add(id); renderRolls(el); });
+  $$("[data-per]", el).forEach(x => x.onchange = () => { const [id, t] = x.dataset.per.split("|"); spellPer[id] = { ...(spellPer[id] || {}), [t]: x.value }; });
+  $$("[data-apply]", el).forEach(b => b.onclick = () => {
+    const id = b.dataset.apply, per = {};
+    $$(`[data-per^="${id}|"]`, el).forEach(x => { per[x.dataset.per.split("|")[1]] = x.value; });
+    applySpell(id, per); delete spellPer[id];
+  });
+  $$("[data-oa]", el).forEach(b => b.onclick = () => {
+    const st = store.get(), r = st.rolls.find(x => x.id === b.dataset.oa), h = st.tokens.find(t => t.id === r.tok);
+    const w = attacksOf(st, h).find(x => !x.rng.ranged || x.rng.melee);
+    store.commit("roll", z => { const x = z.rolls.find(y => y.id === r.id); if (x) x.status = "ok"; });
+    if (w) attack(h.id, r.target, w, null, "react");
+  });
+  $$("[data-oano]", el).forEach(b => b.onclick = () => store.commit("roll", z => { const x = z.rolls.find(y => y.id === b.dataset.oano); if (x) { x.status = "ok"; x.note = "Lo deja pasar"; } }));
+  $$("[data-row]", el).forEach(b => b.querySelector(".r1").onclick = e => { if (e.target.closest("button,input,select")) return; const id = b.dataset.row; openInfo.has(id) ? openInfo.delete(id) : openInfo.add(id); renderRolls(el); });
   $$("[data-edit]", el).forEach(b => b.onclick = () => { editing = b.dataset.edit; renderRolls(el); const i = $("#rtot", el); if (i) i.focus(); });
   const ok = $("#rtotok", el); if (ok) ok.onclick = () => { const v = +$("#rtot", el).value, id = editing; editing = null; decide(id, { total: v }); };
+}
+
+/** Conjuro con salvación: una línea por objetivo (salvación, ✓/✗ y cuánto daño le toca); el máster lo aplica. */
+function spellTable(s, r, dm) {
+  const pend = r.status === "pending" && r.applied == null;
+  return `<div class="spt">${r.saves.map(sv => {
+    const t = s.tokens.find(x => x.id === sv.t), tr = r.dtype && t ? damageTraits(t, r.dtype) : null;
+    const def = (spellPer[r.id] || {})[sv.t] || (sv.auto ? "full" : sv.ok ? (r.half ? "half" : "none") : "full");
+    const sugg = tr && tr.k === "resiste" ? "half" : tr && tr.k === "vulnerable" ? "double" : tr && tr.k === "inmune" ? "none" : null;
+    const done = (r.plan || []).find(p => p.t === sv.t);
+    return `<div class="spl ${sv.auto ? "" : sv.ok ? "ok" : "ko"}"><b>${esc(sv.name)}</b>
+      ${sv.auto ? `<small>sin salvación</small>` : `<span class="svd" title="d20: ${sv.d20}${sv.other != null ? " (y " + sv.other + ")" : ""}${(sv.why || []).length ? " · " + esc(sv.why.join(" · ")) : ""}">${sv.total}</span><span>${sv.ok ? "✓" : "✗"}</span>`}
+      ${done ? `<em>${done.amt ? "−" + done.amt + " PG" : "sin daño"}${done.fail && r.conds && r.conds.length ? " · " + r.conds.join(", ") : ""}</em>`
+        : dm && pend ? `<select data-per="${r.id}|${sv.t}" aria-label="Daño a ${esc(sv.name)}">${Object.entries(HOW).map(([k, n]) => `<option value="${k}" ${(sugg && !(spellPer[r.id] || {})[sv.t] ? sugg : def) === k ? "selected" : ""}>${n}${r.total != null ? ` (${k === "full" ? r.total : k === "half" ? Math.floor(r.total / 2) : k === "double" ? r.total * 2 : 0})` : ""}</option>`).join("")}</select>${tr ? `<small class="trait">${esc(tr.k)}</small>` : ""}` : ""}</div>`;
+  }).join("")}
+  ${r.conds && r.conds.length && !r.applied ? `<small class="note">Quien falle: ${esc(r.conds.join(", "))}.</small>` : ""}
+  ${dm && pend ? `<button class="btn small gold" data-apply="${r.id}">✓ Aplicar a todos</button>` : !r.applied && pend ? `<small class="st pend">Pendiente del máster</small>` : ""}</div>`;
+}
+
+/* ---------- Una línea por acción (estilo registro de combate): quién → a quién · qué · resultado ---------- */
+const ICON = { loot: "💰", attack: "⚔", damage: "🩸", save: "🛡", check: "🎯", init: "⏱", spell: "✨", cast: "✨", heal: "✚", death: "💀", oa: "⚠", free: "🎲" };
+const first = n => String(n || "").split(" ")[0];
+function who(s, id) { const t = s.tokens.find(x => x.id === id); return t ? first(nameOf(s, t)) : ""; }
+function title(s, r) {
+  const a = who(s, r.tok), t = who(s, r.target), what = (r.label.split(" · ")[1] || "").trim();
+  if (r.kind === "attack") return `<b>${esc(a)}</b> → ${esc(t)}${what ? ` <em>${esc(what)}</em>` : ""}`;
+  if (r.kind === "damage") return `<b>Daño</b> → ${esc(t)}${r.dtype ? ` <em>${esc(r.dtype)}</em>` : ""}`;
+  if (r.kind === "spell" || r.kind === "cast") { const m = r.label.match(/lanza (.+?)(?: \(nivel (\d)\))?(?: ·|$)/); return `<b>${esc(a || first(r.whoName))}</b> <em>${esc(m ? m[1] : r.label)}${m && m[2] ? ` · nv ${m[2]}` : ""}</em>`; }
+  if (r.kind === "heal") return `<b>${esc(a || first(r.whoName))}</b>${t && t !== a ? ` → ${esc(t)}` : ""} <em>${esc((r.label.match(/lanza (.+?) sobre/) || [, "curación"])[1])}</em>`;
+  if (r.kind === "loot") return `<b>${esc(r.label)}</b>`;
+  if (r.kind === "oa") return `<b>${esc(a)}</b> puede atacar a ${esc(t)} <em>oportunidad</em>`;
+  if (r.kind === "death") return `<b>${esc(a)}</b> <em>contra muerte</em>`;
+  return esc(r.label.replace(/ de ([A-ZÁÉÍÓÚ][\wáéíóúñ]+)( [A-ZÁÉÍÓÚ][\wáéíóúñ-]+)*/, (m0, n) => " · " + n));
+}
+function pill(r, dm, pend) {
+  if (r.kind === "attack" && r.result && (dm || !pend)) return `<span class="pill ${r.result}">${RESULT[r.result]}</span>`;
+  if ((r.kind === "save" || r.kind === "death") && r.result) return `<span class="pill ${r.result === "save" ? "hit" : "miss"}">${r.result === "save" ? "✓" : "✗"}${r.dc ? ` CD ${r.dc}` : ""}</span>`;
+  if (r.kind === "heal") return `<span class="pill heal">+${r.total}</span>`;
+  return "";
+}
+function rowHTML(s, r, dm, me, hasDamage, dmgRow) {
+  const pend = r.status === "pending", showRes = dm || !pend || r.kind !== "attack", open = openInfo.has(r.id);
+  const d20 = (r.dice || []).find(x => x.d === 20 && !x.drop), nat = d20 && (d20.v === 20 || d20.v === 1) ? d20.v : 0;
+  const val = r.total == null || r.kind === "heal" ? "" : `<span class="rv ${nat === 20 ? "n20" : nat === 1 ? "n1" : ""}">${showRes ? r.total : "?"}</span>`;
+  const canDmg = r.kind === "attack" && !pend && r.status !== "void" && r.result !== "miss" && r.dmg && !hasDamage(r.id) && (dm || r.who === me.id);
+  const dmgLine = dmgRow ? `<div class="r2 ${dmgRow.status}">🩸 <b>${dmgRow.applied != null ? "−" + dmgRow.applied : dmgRow.total}</b> ${esc(dmgRow.dtype || "")}${dmgRow.crit ? " · crítico" : ""}${dmgRow.note ? ` <small>${esc(dmgRow.note)}</small>` : ""}${dmgRow.status === "pending" && !dm ? ` <small class="wait">· el máster lo confirma</small>` : ""}
+      ${dm && dmgRow.status === "pending" ? (() => { const tr = damageTraits(s.tokens.find(x => x.id === dmgRow.target), dmgRow.dtype); return `<span class="ra2"><button class="ib gold" data-dec="${dmgRow.id}|${tr && tr.k === "resiste" ? "half" : tr && tr.k === "vulnerable" ? "double" : "ok"}" title="Aplicar${tr ? " (" + tr.k + ")" : ""}">✓${tr ? " " + (tr.k === "resiste" ? "½" : tr.k === "vulnerable" ? "×2" : "0") : ""}</button><button class="ib" data-dec="${dmgRow.id}|half" title="Mitad">½</button><button class="ib" data-edit="${dmgRow.id}" title="Cambiar">✎</button><button class="ib danger" data-dec="${dmgRow.id}|void" title="Anular">✕</button></span>`; })() : ""}</div>` : "";
+  const acts = [
+    dm && pend && r.kind === "attack" ? `<button class="ib gold" data-dec="${r.id}|ok" title="Confirmar">✓</button><button class="ib" data-dec="${r.id}|flip" title="${r.result === "miss" ? "Que impacte" : "Que falle"}">⇄</button>` : "",
+    dm && pend && r.kind === "damage" ? `<button class="ib gold" data-dec="${r.id}|ok" title="Aplicar">✓</button><button class="ib" data-dec="${r.id}|half" title="Mitad">½</button>` : "",
+    canDmg ? `<button class="ib red" data-dmg="${r.id}" title="Tirar daño">🩸 Daño${r.result === "crit" ? " ×2" : ""}</button>` : "",
+    !dm && pend && (r.kind === "attack" || r.kind === "damage") ? `<small class="wait">el máster lo confirma</small>` : ""
+  ].join("");
+  return `<div class="roll ${r.status} k-${r.kind} ${open ? "open" : ""}" data-row="${r.id}">
+    <div class="r1"><i class="ki" title="${KIND[r.kind] || ""}">${ICON[r.kind] || "🎲"}</i><span class="rt">${title(s, r)}${r.adv ? `<sup class="${r.adv > 0 ? "adv" : "dis"}" title="${r.adv > 0 ? "Ventaja" : "Desventaja"}">${r.adv > 0 ? "▲" : "▼"}</sup>` : ""}${r.secret ? `<sup title="Secreta">🔒</sup>` : ""}</span>
+      ${editing === r.id ? `<input type="number" id="rtot" value="${r.total}" aria-label="Nuevo total"><button class="ib gold" id="rtotok">OK</button>` : val}${pill(r, dm, pend)}${r.status === "void" ? `<span class="pill void">Anulada</span>` : r.status === "mod" ? `<span class="pill mod" title="${esc(r.note || "")}">✎</span>` : ""}${acts ? `<span class="ra2">${acts}</span>` : ""}</div>
+    ${dmgLine}
+    ${r.applied != null && r.kind === "damage" ? `<div class="r2">−${r.applied} PG a ${esc(who(s, r.target))}</div>` : ""}
+    ${r.kind === "death" && r.note ? `<div class="r2">${esc(r.note)}</div>` : ""}
+    ${r.saves ? spellTable(s, r, dm) : ""}
+    ${r.kind === "oa" && r.status === "pending" && (dm || ((s.tokens.find(t => t.id === r.tok) || {}).owner === me.id)) ? `<div class="r2"><button class="ib gold" data-oa="${r.id}">⚔ Atacar</button><button class="ib" data-oano="${r.id}">Dejar pasar</button></div>` : ""}
+    ${open ? `<div class="rdet"><div class="dice">${(r.dice || []).map(x => `<span class="dv d${x.d} ${x.drop ? "drop" : ""} ${x.d === 20 && x.v === 20 && !x.drop ? "nat20" : ""} ${x.d === 20 && x.v === 1 && !x.drop ? "nat1" : ""}">${x.v}</span>`).join("")}${r.expr && r.expr.match(/[+-]\d+$/) ? `<span class="dmod">${r.expr.match(/[+-]\d+$/)[0]}</span>` : ""}<small>${esc(r.whoName || "")} · ${esc(r.expr || "")}${r.kind === "attack" && dm && r.ac != null ? ` · CA ${r.ac}` : ""}</small></div>
+      <div class="rl">${esc(r.label)}</div>${r.why ? `<small class="${r.adv > 0 ? "adv" : r.adv < 0 ? "dis" : ""}">${esc(r.why.join(" · "))}</small>` : ""}${r.note && r.kind !== "death" ? `<small>${esc(r.note)}</small>` : ""}
+      <div class="rinfo">${rollInfo(s, r)}</div>
+      ${dm && r.status !== "void" && !r.applied && r.total != null ? `<div class="r2"><button class="ib" data-edit="${r.id}">✎ Cambiar total</button><button class="ib danger" data-dec="${r.id}|void">✕ Anular</button></div>` : ""}</div>` : ""}
+  </div>`;
 }

@@ -8,6 +8,7 @@ import { loreOf, entry, related, refName, showEntry, clockOf, clockText, advance
 import { renderStage } from "./presentacion.js";
 import { mountTactical } from "./mesa.js";
 import { renderRolls } from "./tiradas.js";
+import { renderSheet } from "./ficha.js";
 import { $, $$, esc, toast } from "../core/ui.js";
 
 let rollsOpen = false, el, closing = false, tac = null, tacEdit = false, panelHidden = false, lastKey = null;
@@ -15,7 +16,8 @@ let rollsOpen = false, el, closing = false, tac = null, tacEdit = false, panelHi
 export function mount(root) {
   el = document.createElement("div");
   el.className = "partida";
-  el.innerHTML = `<section class="stagebox"><div id="stage" class="stage-area"></div><div class="stagebar" id="sbar"></div></section><aside class="dmpanel" id="dmp" aria-label="Panel del máster"></aside>`;
+  el.innerHTML = `<section class="stagebox"><div id="stage" class="stage-area"></div><div class="stagebar" id="sbar"></div></section><aside class="dmpanel" id="dmp" aria-label="Panel del máster"></aside>
+    <aside class="plpanel" id="plp" aria-label="Tu columna: iniciativa, ficha y dados" hidden><section class="pl-ini" id="pl-ini" hidden></section><section class="pl-sheet" id="pl-sheet"></section><section class="pl-dice" id="pl-dice"></section></aside>`;
   root.appendChild(el);
   closing = false; tac = null; lastKey = null;
   draw();
@@ -33,11 +35,14 @@ function drawStage(force) {
   if (tactical(s)) {
     st.classList.add("tac");
     const k = "tac" + tacEdit + isDM(s);
-    if (!tac || lastKey !== k) { lastKey = k; tac = mountTactical(st, { edit: tacEdit }); }
+    const side = isDM(s) ? null : $("#pl-ini", el);
+    if (side) side.hidden = false;
+    if (!tac || lastKey !== k) { lastKey = k; tac = mountTactical(st, { edit: tacEdit, sideHost: side }); }
     else tac.update();
     return;
   }
   tac = null; st.classList.remove("tac");
+  const pi = $("#pl-ini", el); if (pi) { pi.hidden = true; pi.innerHTML = ""; }
   let dr = $(".rolldrawer", el.querySelector(".stagebox"));
   if (rollsOpen) { if (!dr) { dr = document.createElement("div"); dr.className = "rolldrawer"; el.querySelector(".stagebox").style.position = "relative"; el.querySelector(".stagebox").appendChild(dr); } renderRolls(dr); }
   else if (dr) dr.remove();
@@ -51,11 +56,14 @@ function draw() {
   const state = store.get();
   const dm = isDM(state);
   const live = visibleLive(state);
-  el.classList.toggle("withpanel", dm && !panelHidden);
+  el.classList.toggle("withpanel", (dm && !panelHidden) || !dm);
+  // Jugadores: columna fija con su ficha y su tapete de dados (la iniciativa entra cuando hay mesa táctica)
+  const plp = $("#plp", el); plp.hidden = dm;
+  if (!dm) { renderSheet($("#pl-sheet", el)); renderRolls($("#pl-dice", el)); }
   const typing = box => box && box.contains(document.activeElement) && /INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName);
   if (!typing($("#sbar", el))) $("#sbar", el).innerHTML = `${live ? `<b>${esc(sessionName(live))}</b> en curso${live.test ? ` · <span class="tag secret">SOLO MÁSTERES</span>` : ""}` : "No hay ninguna partida en curso"}
     ${live ? `<span class="quicknote"><input id="qnote" placeholder="📜 Anotar en la crónica…" aria-label="Nota para la crónica"><button class="btn small" id="qnotego">Anotar</button></span>` : ""}
-    <span class="grow"></span>${tactical(state) ? "" : `<button class="btn small" id="rollsbtn" aria-pressed="${rollsOpen}">🎲 Tiradas</button>`}${dm ? `<button class="btn small" id="togglepanel">${panelHidden ? "Mostrar panel" : "Ocultar panel"}</button>` : ""}<a class="btn small" href="#mundo">Mapa del mundo</a>`;
+    <span class="grow"></span>${tactical(state) || !dm ? "" : `<button class="btn small" id="rollsbtn" aria-pressed="${rollsOpen}">🎲 Tiradas</button>`}${dm ? `<button class="btn small" id="togglepanel">${panelHidden ? "Mostrar panel" : "Ocultar panel"}</button>` : ""}<a class="btn small" href="#mundo">Mapa del mundo</a>`;
   const qn = $("#qnote", el), qg = $("#qnotego", el);
   if (qg) { const go = () => { if (qn.value.trim()) { addEntry(live.id, qn.value); qn.value = ""; toast("Anotado en la crónica"); } }; qg.onclick = go; qn.onkeydown = e => { if (e.key === "Enter") go(); }; }
   const rb = $("#rollsbtn", el); if (rb) rb.onclick = () => { rollsOpen = !rollsOpen; draw(); };

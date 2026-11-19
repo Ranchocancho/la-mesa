@@ -18,3 +18,4 @@ Autores: Lorc, Delapouite, Carl Olsen, Caro Asercion, Cathelineau, DarkZaitzev y
 
 ## Código
 - three.js r160 (`vendor/three`) · MIT · https://github.com/mrdoob/three.js
+- cannon-es (`vendor/cannon`) · MIT · https://github.com/pmndrs/cannon-es — física de los dados

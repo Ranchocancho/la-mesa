@@ -5,11 +5,13 @@ import { isDM } from "../core/session.js";
 import { blankScene } from "../data/escenas.js";
 import { loadScene } from "../core/mesa.js";
 import { createBoard, TERRAIN } from "./tablero.js";
+import { propEditorHTML, bindPropEditor } from "./propeditor.js";
+import { generateDungeon } from "../core/generador.js";
 import { tokenEditor, bindTokenEditor } from "./mesa.js";
 import { $, $$, esc, toast } from "../core/ui.js";
 import { srdNow, monsterToken, findMonster } from "../core/srd.js";
 
-let el = null, openId = null, board = null, sel = null, placing = false, preview3d = false;
+let el = null, openId = null, board = null, sel = null, selProp = null, placing = false, preview3d = false;
 
 export function mount(root) {
   el = document.createElement("div");
@@ -38,7 +40,7 @@ function draw() {
         <h2 class="sec" style="margin:0">Nueva escena</h2>
         <label class="field">Nombre<input id="nsname" required placeholder="Asalto al almacén"></label>
         <label class="field">Lugar<select id="nsplace"><option value="">Biblioteca (sin lugar)</option>${s.world.places.map(p => `<option value="${p.id}">${esc(p.name)}</option>`).join("")}</select></label>
-        <label class="field">Suelo inicial<select id="nsfill">${Object.entries(TERRAIN).filter(([, v]) => !v.wall).map(([k, v]) => `<option value="${k}">${v.n}</option>`).join("")}</select></label>
+        <label class="field">Suelo inicial<select id="nsfill"><option value="gen:dungeon">🎲 Mazmorra generada</option><option value="gen:cave">🕳 Cueva generada</option><option value="vacio">Vacío (para dibujar salas)</option>${Object.entries(TERRAIN).filter(([, v]) => !v.wall).map(([k, v]) => `<option value="${k}">${v.n}</option>`).join("")}</select></label>
         <button class="btn gold small">Crear</button>
       </form>
     </aside>
@@ -49,7 +51,9 @@ function draw() {
   $$("[data-open]", el).forEach(b => b.onclick = () => { openId = b.dataset.open; sel = null; placing = false; board = null; draw(); });
   $("#newsc", el).onsubmit = e => {
     e.preventDefault();
-    const sc = blankScene($("#nsname", el).value.trim() || "Nueva escena", $("#nsplace", el).value || null, 16, 11, $("#nsfill", el).value);
+    const fill = $("#nsfill", el).value, gen = fill.startsWith("gen:");
+    const sc = blankScene($("#nsname", el).value.trim() || "Nueva escena", $("#nsplace", el).value || null, gen ? 26 : 16, gen ? 18 : 11, gen ? "vacio" : fill);
+    if (gen) { const d = generateDungeon(sc.cols, sc.rows, { cave: fill === "gen:cave" }); sc.terrain = d.terrain; sc.props = d.props; sc.start = d.start; sc.ambient = "interior"; }
     store.commit("board", st => st.scenes.push(sc));
     openId = sc.id; board = null; draw();
   };
@@ -71,7 +75,9 @@ function draw() {
       dm: true, edit: true, canMove: () => true,
       mutate: (label, fn) => store.commit("board", st => { const x = st.scenes.find(y => y.id === openId); fn({ grid: x, tokens: x.tokens }); }),
       hpOf: t => t.maxhp ? { cur: t.hp, max: t.maxhp } : null,
-      onSelect: id => { sel = id; side(); },
+      onSelect: id => { sel = id; if (id) selProp = null; side(); },
+      onSelectProp: id => { selProp = id; if (id) sel = null; side(); },
+      onStart: st => store.commit("board", z => { z.scenes.find(y => y.id === openId).start = st; }),
       onCell: h => { if (placing) { placing = false; store.commit("board", st => { st.scenes.find(y => y.id === openId).start = h; }); } },
       marker: () => scene() && scene().start
     });
@@ -82,7 +88,8 @@ function draw() {
 function side() {
   const box = $(".scenes-props", el), sc = scene();
   if (!box || !sc) return;
-  const s = store.get(), t = sc.tokens.find(x => x.id === sel);
+  const s = store.get(), t = sc.tokens.find(x => x.id === sel), pr = selProp && (sc.props || []).find(x => x.id === selProp);
+  const ae = document.activeElement; if (ae && box.contains(ae) && ae.closest(".propedit") && /INPUT|TEXTAREA/.test(ae.tagName)) return;
   box.innerHTML = `<div class="panel">
       <label class="field">Nombre<input id="scname" value="${esc(sc.name)}"></label>
       <label class="field" style="margin-top:8px">Lugar<select id="scplace"><option value="">Biblioteca (sin lugar)</option>${s.world.places.map(p => `<option value="${p.id}" ${sc.place === p.id ? "selected" : ""}>${esc(p.name)}</option>`).join("")}</select></label>
@@ -95,7 +102,9 @@ function side() {
       <div class="row"><input id="monq" list="monlist" placeholder="Bandido, Esqueleto, Lobo…" style="flex:1;min-width:0"><input type="number" id="monn" value="1" min="1" max="12" style="width:52px" aria-label="Cuántos"><button class="btn small gold" id="monadd">Añadir</button></div>
       <datalist id="monlist">${(srdNow.monstruos || []).map(m => `<option value="${esc(m.n)}">VD ${m.vd}</option>`).join("")}</datalist>
       <p class="note" style="margin:6px 0 0">Aparecen junto al punto de inicio del grupo, con sus PG, CA y ataques del manual.</p></div>
-    <div class="panel" style="margin-top:12px">${t ? `<h2 class="sec">Ficha seleccionada</h2>${tokenEditor(t)}` : `<p class="empty">Usa «👹 Enemigo» para colocar enemigos y tócalos para editarlos. Con «✋ Mover» los recolocas.</p>`}</div>`;
+    ${pr ? `<div class="panel" style="margin-top:12px">${propEditorHTML(pr)}</div>` : ""}
+    <div class="panel" style="margin-top:12px">${t ? `<h2 class="sec">Ficha seleccionada</h2>${tokenEditor(t)}` : `<p class="empty">Usa «👹 Enemigo» para colocar enemigos y tócalos para editarlos. Con «✋ Mover» los recolocas o seleccionas objetos.</p>`}</div>`;
+  if (pr && board && board.editProp) bindPropEditor(box, fn => board.editProp(pr.id, fn), { rot: () => board.editProp(pr.id, p => { p.rot = ((p.rot || 0) + 1) % 4; }), del: () => { const id = pr.id; board.selectProp(null); store.commit("board", st => { const x = st.scenes.find(y => y.id === openId); x.props = (x.props || []).filter(z => z.id !== id); }); } });
   const M = fn => store.commit("board", st => fn(st.scenes.find(y => y.id === openId)));
   $("#scname", box).onchange = e => M(x => { x.name = e.target.value; });
   $("#scplace", box).onchange = e => M(x => { x.place = e.target.value || null; });

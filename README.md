@@ -119,3 +119,126 @@ js/views/             una vista por sección (acceso.js: entrar y elegir campañ
 - **Desde la ficha:** pulsar en una característica, salvación o habilidad tira el dado. Los conjuros se eligen del compendio (📖 para leerlos). Iniciativa con 🎲 en la columna de iniciativa.
 
 Los datos de `js/data/srd/` se generan con `tools/srd_pages.py` y `tools/srd_parse.py` a partir del PDF oficial del SRD 5.2.1 en español.
+
+## Hito 8 · El combate según el manual
+
+- **Orden del combate (reglas 2024):** el máster pulsa **⚔️ Iniciar combate** → los enemigos tiran su iniciativa en secreto y a cada jugador le aparece «🎲 Tirar iniciativa» sobre la mesa → **▶ Empezar ronda 1** → turnos en orden de iniciativa (las criaturas caídas se saltan) → **Terminar turno** (lo pulsa quien tiene el turno o el máster) → nueva ronda al dar la vuelta.
+- **Cola de turnos** sobre la mesa con la ronda y quién va ahora, y aviso grande «¡Es tu turno!» con sonido.
+- **Tarjeta del turno:** 🦶 movimiento gastado/velocidad en metros (se descuenta al arrastrar la figura; «Correr» lo duplica), ⚡ acción, ✦ acción adicional, ↺ reacción (se recupera al empezar tu turno) y las acciones del manual (Atacar, Magia, Correr, Destrabarse, Esquivar, Ayudar, Esconderse, Buscar, Estudiar, Influir, Preparar una acción, Utilizar), cada una con su regla del glosario. Fuera de su turno, un jugador no puede mover su figura.
+- **Puntería:** línea desde quien actúa hasta el objetivo con la **distancia en metros**, si está **al alcance**, a **alcance largo** o **fuera de alcance**, y la **cobertura** (media +2, tres cuartos +5, total). Cada arma o conjuro muestra ✓ ⚠ ✗ según el alcance.
+- **Ventaja y desventaja automáticas** con su motivo (objetivo aturdido, derribado, cegado, invisible, esquivando; atacante envenenado, derribado…; alcance largo; disparar con un enemigo al lado). Se puede forzar a mano. Crítico automático contra paralizados o inconscientes a 1,5 m.
+- **El libro abierto para el máster:** cada tirada tiene 📖 con los motivos, la cobertura, los estados del objetivo explicados, sus **resistencias, inmunidades o vulnerabilidades** al tipo de daño (con el botón de aplicar mitad o doble ya sugerido) y las entradas del glosario oficial (Ataque con arma, Crítico, Cobertura, Resistencia…).
+- Glosario del SRD (157 entradas) en `js/data/srd/glosario.json` (`tools/srd_glosario.py`). Los monstruos traen el alcance de sus ataques y su velocidad.
+
+## Hito 9 · Dados con física, jugadores en la mesa y reglas con aspecto de libro
+
+- **Dados con física real** (cannon-es): se lanzan arrastrando sobre el tapete verde del panel de Tiradas (la fuerza y la dirección del gesto cuentan). Ruedan, rebotan y suenan en una bandeja de fieltro con bordes de madera que aparece cerca de ti en el tablero 3D. Todos ven exactamente la misma tirada: la simulación usa la misma semilla en cada pantalla.
+- **Bolsa de dados**: un clic en un dado lo añade y un clic derecho lo quita. Puedes tirar varios a la vez (p. ej. 1d20 + 2d6).
+- **Juegos de dados**: rubí, zafiro, esmeralda, amatista, obsidiana, oro, hueso y madera. Cada jugador elige el suyo.
+- **Efectos de crítico**: un 20 natural trae destello dorado y fanfarria; un 1 natural, «Pifia» en rojo. Los últimos instantes de la tirada van a cámara lenta.
+- **Jugadores en la mesa**: al cargar una escena solo bajan los personajes de quien está conectado. En «Escena táctica» el máster marca o desmarca personajes para meterlos en la situación o sacarlos de ella.
+- **Reglas maquetadas**: el libro se lee como una página de pergamino.
+  - Títulos y términos con etiqueta ([acción], [estado]…), tablas, viñetas y negritas de entrada.
+  - Las tiradas (2d6) y las CD van resaltadas.
+  - Los conjuros llevan ficha propia, y los monstruos un bloque de estadísticas al estilo del manual.
+
+## Hito 10 · Cajetillas de dados y Lore
+
+- **Cajetillas de dados**: cada uno tiene la suya a un lado del tablero (con el color del jugador y su juego de dados).
+  - Al tirar, su tapa se abre y sube desde abajo un desplegable con una cámara fija sobre la bandeja.
+  - Todos ven rodar los mismos dados, en cualquier sección de la app, y el resultado en grande.
+  - Un 20 natural sale en dorado y con destello; un 1, en rojo y con sacudida.
+- **Lore**, el libro de campaña:
+  - **Lugares por niveles** (región › ciudad › distrito › localización). Una ciudad creada en el mapa aparece sola en el Lore, y desde ahí se le añade todo lo de dentro.
+  - **Página de cada lugar**: descripción para los jugadores, secretos del máster, lugares de dentro, personajes, facciones, eventos, galería, notas y las escenas tácticas 3D que se pueden cargar.
+  - **Personajes, facciones, eventos, imágenes y notas** con parte pública y parte secreta, imagen y relaciones entre ellos.
+  - **Eventos** preparados, espontáneos o ambientales, con sus acciones posibles. Su estado puede ser pendiente, en juego, resuelto o guardado para después.
+  - **Mostrar**: a todos, solo a un jugador, solo la imagen o como fondo de la escena, y retirarlo cuando quieras. Al mostrarlo a todos queda revelado en el Lore de los jugadores.
+  - **Preparar sesión**: una carpeta de escenas ordenable, con todo lo enlazado a un clic. En la Partida, el panel «Dirección» las tiene a mano.
+  - **Reloj de campaña**: día y hora, visible para todos y que el máster adelanta.
+  - **Sesiones jugadas**: se corrigen el título, la fecha, el resumen y los PX (la ficha se ajusta en la diferencia), y se pueden eliminar.
+- Firestore guarda el Lore en la colección `lore`; los secretos van en `secrets`. Hay que publicar las reglas nuevas.
+
+## Hito 11 · Reglas de la partida y columna del jugador
+
+- **Columna fija del jugador**, a la derecha y del mismo ancho que el panel del máster. El tablero, o lo que muestre el máster, ocupa el resto. Tiene tres partes:
+  - **Iniciativa**, cuando hay mesa táctica.
+  - **Ficha de bolsillo**: PG, CA, velocidad, estados, salvaciones y pruebas con un clic, ataques, conjuros y descansos.
+  - **Tapete de dados** con la tabla de tiradas.
+- **Conjuros completos**, leídos del SRD:
+  - Lanzar elige el espacio de conjuro, con mejora por nivel superior, y gasta la acción, la acción adicional o la reacción que toque.
+  - **Con salvación** (Bola de fuego, Rociada de color…):
+    - una tirada de daño para todos y una salvación por objetivo con la CD del lanzador;
+    - mitad de daño si la supera, cuando el conjuro lo dice;
+    - estados a quien falla;
+    - el botón «Marcar los del área» elige a quien está dentro del área;
+    - el máster revisa objetivo por objetivo (con avisos de resistencia, inmunidad y vulnerabilidad) y pulsa «Aplicar a todos».
+  - **Curación** (Curar heridas, Palabra de curación): dados más el modificador de aptitud mágica.
+  - **Con ataque** y **daño directo** (Proyectil mágico).
+  - **Beneficios**: Bendición y Perdición suman o restan 1d4 a ataques y salvaciones.
+  - Los trucos escalan con el nivel del personaje.
+- **Concentración**: un conjuro nuevo termina el anterior. Al recibir daño, salvación de Constitución (CD 10 o la mitad del daño); si falla, el conjuro y sus estados terminan.
+- **0 PG**:
+  - inconsciente y derribado;
+  - salvaciones contra muerte en el turno (10 o más es éxito, un 1 cuenta dos fallos, un 20 levanta con 1 PG);
+  - daño a 0 PG es un fallo, dos si es crítico;
+  - muerte instantánea si el daño sobrante iguala los PG máximos;
+  - cualquier curación despierta.
+- **Ataques de oportunidad**: al salir del alcance de un enemigo que conserva su reacción (y sin haberse destrabado), la mesa lo ofrece; quien lo controla ataca o lo deja pasar.
+- **Modificadores**:
+  - el agotamiento resta 2 por nivel a ataques y salvaciones;
+  - paralizado, aturdido, inconsciente o petrificado fallan las salvaciones de Fuerza y Destreza;
+  - apresado da desventaja y esquivando ventaja en Destreza;
+  - la cobertura suma a las salvaciones de Destreza.
+- **Descansos**:
+  - Corto: dados de golpe más Constitución; el brujo recupera sus espacios.
+  - Largo: todo se recupera y se quita un nivel de agotamiento.
+
+## Hito 12 · Feedback visual y lectura rápida
+
+Con ideas de referentes: registro de combate de una frase (Baldur's Gate), probabilidad de impactar (Baldur's Gate 3), tarjetas de acción con los detalles plegados y daño aplicable desde la misma tarjeta (Foundry VTT).
+
+- **Registro compacto**:
+  - Una línea por acción: icono, «Quién → a quién · con qué», número grande y una píldora con el resultado (Impacto, Fallo, ¡Crítico!, ✓/✗ CD).
+  - El daño del ataque va en la misma tarjeta, y el máster lo confirma ahí (✓, ½, ✎, ✕).
+  - Los conjuros llevan una ficha por objetivo con su salvación y el daño.
+  - Un clic en la línea despliega los dados, los motivos y las reglas.
+  - Color por tipo de acción, y borde dorado mientras algo espera al máster.
+- **Texto flotante sobre las figuras**: daño en rojo, curación en verde, «¡Cae!» o «Inconsciente», «Fallo», «¡Crítico!», «✓ Salva / ✗ Falla», «¡Oportunidad!», y los estados que se ponen o se quitan con su color. Lo que depende de los dados sale cuando la cajetilla muestra el resultado.
+- **Probabilidad antes de actuar**:
+  - Al apuntar, una barra con la probabilidad de impactar (con ventaja y cobertura).
+  - Al elegir objetivos de un conjuro, la de que fallen la salvación.
+  - El máster ve el porcentaje; los jugadores, una palabra («Probable», «Incierto»…), para no destapar la CA de los enemigos.
+- Menos avisos emergentes: lo que ya se ve en la mesa no se repite en un aviso.
+
+## Hito 13 · Editor de mapas y texturas
+
+- **Herramientas**:
+  - mover y seleccionar;
+  - pincel de terreno (1×1, 2×2, 3×3 o 5×5);
+  - rellenar un rectángulo;
+  - **habitación** (suelo y muros de un trazo);
+  - **muro en línea**;
+  - objetos por categorías;
+  - enemigo;
+  - borrar con tamaño;
+  - **deshacer y rehacer** (Ctrl+Z y Ctrl+Y).
+  - Se ve una vista previa de lo que vas a pintar y de las medidas en metros.
+- **Mapa**: cambiar el tamaño, rellenarlo todo, y **generar mazmorra** (salas, pasillos, puertas de varios tipos, antorchas, mobiliario según el tipo de sala, tesoro, trampa oculta y notas del máster) o **generar cueva**. Al crear una escena nueva se puede empezar por una mazmorra o una cueva generadas, o por el vacío.
+- **Terrenos**: 24 tipos.
+  - Interior: losas, adoquines, mármol, tablones, alfombra, suelo de cueva y escombros.
+  - Exterior: hierba, maleza, tierra, camino, arena, barro, nieve y hielo.
+  - Agua poco profunda y profunda, lava y abismo.
+  - Muros de piedra, ladrillo, madera, roca de cueva, seto y vacío.
+  - Reglas: el **terreno difícil** cuesta el doble al moverse (también en combate) y se marca con un rayado. Los peligros llevan una nota para el máster.
+- **Objetos**: 46, en Mobiliario, Luz, Mazmorra, Naturaleza, Puertas, Trampas, Tesoro y Marcas.
+  - **Puertas** normales, cerradas con llave, secretas y rastrillos. Al ponerlas en un muro abren el hueco solas. El rastrillo deja ver a través.
+  - **Cobertura** de la escenografía: media para mesas, barriles y árboles; tres cuartos para columnas, estatuas y peñascos. Lo macizo no se puede atravesar.
+  - **Ocultos** (trampas, puertas secretas, notas): el máster los ve con borde violeta discontinuo (en 3D, translúcidos) y los jugadores no los ven hasta que se revelan.
+  - **Tesoros** con su contenido, y **trampas** con CD para detectarlas, salvación, CD y daño. Se editan seleccionándolos; se giran con R y se quitan con Supr.
+- **En partida** (máster), tocando un objeto:
+  - revelarlo;
+  - **anunciar el contenido** en la mesa;
+  - **disparar la trampa** sobre quien esté en esa casilla.
+  - En combate, pisar una trampa la dispara sola: se revela, se tiran las salvaciones y el máster lo aplica como un conjuro.
+- **Texturas nuevas**, dibujadas por código y sin costuras, iguales en 2D y 3D. En 3D llevan relieve, el agua y la lava se mueven y la lava brilla. Cada tipo de muro tiene su textura, y hay escenografía 3D nueva para todo lo que no tenía modelo.

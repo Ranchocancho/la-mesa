@@ -4,7 +4,7 @@
 import { store } from "./store.js";
 import { publish } from "./dados.js";
 import { charOf, hpOf, order } from "./mesa.js";
-import { TERRAIN } from "../views/tablero.js";
+import { TERRAIN, PROPS, isDoor, doorBlocksSight } from "../data/mapas.js";
 
 const CELL_M = 1.5;
 export const dist = (a, b) => Math.max(Math.abs(a.c - b.c), Math.abs(a.r - b.r));
@@ -110,7 +110,10 @@ export function inRange(rng, a, b) {
 /* ---------- Cobertura ---------- */
 /** Líneas desde el centro del atacante a las 4 esquinas del objetivo: muros, puertas cerradas y criaturas tapan. */
 export function cover(s, a, b) {
-  const g = s.board, blocks = (c, r) => { const tt = (g.terrain || {})[c + "," + r]; return !!(TERRAIN[tt] && TERRAIN[tt].wall) || (g.props || []).some(p => p.k === "puerta" && !p.open && p.c === c && p.r === r); };
+  const g = s.board, blocks = (c, r) => { const tt = (g.terrain || {})[c + "," + r]; return !!(TERRAIN[tt] && TERRAIN[tt].wall) || (g.props || []).some(p => isDoor(p) && !p.open && p.c === c && p.r === r); };
+  // Mobiliario y escenografía: media cobertura (mesas, barriles, árboles…) o tres cuartos (columnas, estatuas, peñascos)
+  const propCover = (c, r) => { let best = 0; for (const p of g.props || []) if (p.c === c && p.r === r && !isDoor(p)) { const v = (PROPS[p.k] || {}).cover; best = Math.max(best, v === "3q" ? 2 : v === "half" ? 1 : 0); } return best; };
+  let furn = 0;
   const creature = (c, r) => s.tokens.some(t => t.c === c && t.r === r && t.id !== a.id && t.id !== b.id && !t.hidden && alive(s, t));
   let blocked = 0, soft = false;
   for (const [dx, dy] of [[0.05, 0.05], [0.95, 0.05], [0.05, 0.95], [0.95, 0.95]]) {
@@ -121,11 +124,13 @@ export function cover(s, a, b) {
       if ((c === a.c && r === a.r) || (c === b.c && r === b.r)) continue;
       if (blocks(c, r)) { hit = true; break; }
       if (creature(c, r)) soft = true;
+      furn = Math.max(furn, propCover(c, r));
     }
     if (hit) blocked++;
   }
   if (blocked >= 4) return { level: "total", bonus: null, txt: "cobertura total: no se puede elegir como objetivo" };
-  if (blocked === 3) return { level: "3/4", bonus: 5, txt: "cobertura de tres cuartos (+5 CA)" };
+  if (blocked === 3 || furn === 2) return { level: "3/4", bonus: 5, txt: blocked === 3 ? "cobertura de tres cuartos (+5 CA)" : "tres cuartos por la escenografía (+5 CA)" };
+  if (!blocked && furn === 1) return { level: "1/2", bonus: 2, txt: "media cobertura por la escenografía (+2 CA)" };
   if (blocked >= 1 || soft) return { level: "1/2", bonus: 2, txt: blocked ? "cobertura media (+2 CA)" : "media cobertura por otra criatura (+2 CA)" };
   return { level: null, bonus: 0, txt: "" };
 }

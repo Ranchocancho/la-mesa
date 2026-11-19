@@ -38,7 +38,7 @@ export function seed() {
         abilities: { fue: 14, des: 10, con: 14, int: 10, sab: 17, car: 12 }, saves: ["sab", "car"], skills: { medicina: 1, religion: 1, perspicacia: 1 },
         hp: { max: 38, cur: 38, temp: 0 }, ac: 18, speed: 9,
         spells: { slots: { 1: { max: 4, used: 0 }, 2: { max: 3, used: 0 }, 3: { max: 2, used: 0 } },
-          list: [{ id: "s1", name: "Llama sagrada", level: 0, prepared: true }, { id: "s2", name: "Curar heridas", level: 1, prepared: true }, { id: "s3", name: "Arma espiritual", level: 2, prepared: true }, { id: "s4", name: "Revivir", level: 3, prepared: true }] } })
+          list: [{ id: "s1", name: "Llama sagrada", level: 0, prepared: true }, { id: "s2", name: "Curar heridas", level: 1, prepared: true }, { id: "s5", name: "Bendición", level: 1, prepared: true }, { id: "s6", name: "Palabra de curación", level: 1, prepared: true }, { id: "s3", name: "Arma espiritual", level: 2, prepared: true }, { id: "s4", name: "Revivir", level: 3, prepared: true }] } })
     ],
     world: {
       map: null, // null = mapa de ejemplo generado; si no, clave de la imagen subida

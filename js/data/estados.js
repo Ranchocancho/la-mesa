@@ -18,7 +18,10 @@ export const ESTADOS = [
   { id: "agotamiento", n: "Agotamiento", c: "#b33a2e", t: "Por cada nivel: −2 a las tiradas d20 y −1,5 m de velocidad. A nivel 6 mueres. Un descanso largo quita un nivel.", levels: 6 },
   { id: "esquivando", n: "Esquivando", c: "#e8e2d0", t: "Acción de Esquivar: los ataques contra ti tienen desventaja y tienes ventaja en las salvaciones de Destreza, hasta el principio de tu siguiente turno." },
   { id: "destrabado", n: "Destrabado", c: "#a0d0c0", t: "Acción de Destrabarse: tu movimiento no provoca ataques de oportunidad durante el resto del turno." },
-  { id: "concentracion", n: "Concentración", c: "#d6aa4e", t: "Mantiene un conjuro. Al recibir daño, salvación de Constitución (CD 10 o la mitad del daño, la mayor) o se pierde." }
+  { id: "concentracion", n: "Concentración", c: "#d6aa4e", t: "Mantiene un conjuro. Al recibir daño, salvación de Constitución (CD 10 o la mitad del daño, la mayor) o se pierde." },
+  { id: "bendecido", n: "Bendecido", c: "#f2d36b", t: "Bendición: suma 1d4 a sus tiradas de ataque y de salvación mientras dure." },
+  { id: "perdicion", n: "Perdición", c: "#5a2a6a", t: "Perdición: resta 1d4 a sus tiradas de ataque y de salvación mientras dure." },
+  { id: "muerto", n: "Muerto", c: "#111111", t: "Ha fallado tres salvaciones contra muerte (o recibió daño masivo). Solo la magia puede devolverlo." }
 ];
 export const estado = id => ESTADOS.find(e => e.id === id);
 /** Texto corto para la etiqueta: "Aturdido", "Agotamiento 2"… */

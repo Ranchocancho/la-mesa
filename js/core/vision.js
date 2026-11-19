@@ -1,6 +1,6 @@
 // Visión y niebla de guerra. El grupo comparte lo que ve: una casilla es visible si algún personaje en pie
 // tiene línea de visión hasta ella (los muros y las puertas cerradas la tapan) y además está iluminada o dentro de su visión en la oscuridad.
-import { TERRAIN } from "../views/tablero.js";
+import { TERRAIN, doorBlocksSight } from "../data/mapas.js";
 
 // Radio de luz de cada fuente, en casillas de 1,5 m (luz brillante + tenue)
 export const LIGHTS = { antorcha: 8, hoguera: 8, velas: 3 };
@@ -17,7 +17,7 @@ export function darkvisionOf(ch) {
 }
 
 export function computeVision(grid, tokens, characters) {
-  const doors = new Set((grid.props || []).filter(p => p.k === "puerta" && !p.open).map(p => p.c + "," + p.r));
+  const doors = new Set((grid.props || []).filter(doorBlocksSight).map(p => p.c + "," + p.r));
   const wall = (c, r) => { const t = (grid.terrain || {})[c + "," + r]; return !!(TERRAIN[t] && TERRAIN[t].wall) || doors.has(c + "," + r); };
   const inside = (c, r) => c >= 0 && r >= 0 && c < grid.cols && r < grid.rows;
   // Línea de visión entre centros de casillas; los muros bloquean (la casilla del muro sí se ve)
