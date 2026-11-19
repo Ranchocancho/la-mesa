@@ -2,7 +2,7 @@
 import { store } from "../core/store.js";
 import { isDM, currentUser } from "../core/session.js";
 import { publish, RESULT, mySkin, setMySkin } from "../core/dados.js";
-import { decide, damageFor, nameOf, attack, attacksOf } from "../core/combate.js";
+import { decide, damageFor, nameOf, attack, attacksOf, oaOpen, answerOA } from "../core/combate.js";
 import { applySpell } from "../core/hechizos.js";
 import { spend } from "../core/turnos.js";
 import { $, $$, esc } from "../core/ui.js";
@@ -55,14 +55,14 @@ export function renderRolls(el, o) {
   const pe = poolExpr(0);
   el.innerHTML = `${o.tray === false ? "" : `<div class="tray">
       <div class="trayd">${[4, 6, 8, 10, 12, 20, 100].map(d => `<button class="die d${d} ${pool[d] ? "inpool" : ""}" data-d="${d}" title="Añadir un d${d} a la mano">d${d}${pool[d] ? `<i>${pool[d]}</i>` : ""}</button>`).join("")}</div>
-      <div class="trayh"><span class="trhand" title="Clic en un dado para añadirlo · clic derecho para quitarlo">${pe ? `<b>${pe}</b>` : `<em>1d20</em> <small>o elige dados</small>`}</span>${pe ? `<button class="btn small" id="trclear" title="Vaciar la mano">✕</button>` : ""}<button class="btn small gold" id="trgo">🎲 Tirar</button></div>
+      <div class="trayh"><input id="trexpr" value="${esc(pe)}" placeholder="1d20 · o escribe 2d6+3" aria-label="Dados a tirar" title="Toca los dados de arriba (clic derecho quita) o escribe la tirada">${pe ? `<button class="btn small" id="trclear" title="Vaciar la mano">✕</button>` : ""}<button class="btn small gold" id="trgo">🎲 Tirar</button></div>
       <div class="trayo"><select id="trskin" aria-label="Tus dados" title="Tus dados">${Object.entries(SKIN_NAMES).map(([k, n]) => `<option value="${k}" ${mySkin() === k ? "selected" : ""}>🎲 ${n}</option>`).join("")}</select>
         <input type="number" id="trmod" placeholder="+0" aria-label="Modificador" title="Modificador">
         <button class="btn small" id="tradv" aria-pressed="${adv === 1}" title="Ventaja (d20)">Vent.</button><button class="btn small" id="trdis" aria-pressed="${adv === -1}" title="Desventaja (d20)">Desv.</button>
         ${dm ? `<button class="btn small" id="trsec" aria-pressed="${secret}" title="Solo la ves tú">Secreta</button>` : ""}
-        <input id="trexpr" placeholder="2d6+3" aria-label="Expresión de dados"></div>
+</div>
     </div>`}
-    ${o.log === false ? "" : `<div class="rolls">${list.filter(r => !(r.link && list.some(x => x.id === r.link && (r.kind === "damage" || x.kind === "req")))).map(r => rowHTML(s, r, dm, me, hasDamage, list.find(x => x.kind === "damage" && x.link === r.id))).join("") || `<p class="empty">Aún no se ha tirado nada. ¡Que rueden los dados!</p>`}</div>`}`;
+    ${o.log === false ? "" : `<div class="rolls">${list.filter(r => r.kind !== "oapass" && !(r.link && list.some(x => x.id === r.link && (r.kind === "damage" || x.kind === "req")))).map(r => rowHTML(s, r, dm, me, hasDamage, list.find(x => x.kind === "damage" && x.link === r.id))).join("") || `<p class="empty">Aún no se ha tirado nada. ¡Que rueden los dados!</p>`}</div>`}`;
 
   if (o.tray !== false) {
   const mod = () => +($("#trmod", el).value || 0);
@@ -71,8 +71,8 @@ export function renderRolls(el, o) {
     b.oncontextmenu = e => { e.preventDefault(); const d = +b.dataset.d; pool[d] = Math.max(0, (pool[d] || 0) - 1); renderRolls(el); };
   });
   const throwNow = th => {
-    const typed = $("#trexpr", el).value.trim(), m = mod();
-    const expr = typed || poolExpr(m) || `1d20${m ? (m > 0 ? "+" : "") + m : ""}`;
+    const typed = $("#trexpr", el).value.trim().replace(/\s+/g, ""), m = mod();
+    const expr = (typed && typed !== poolExpr(0).replace(/\s+/g, "") ? typed : "") || poolExpr(m) || `1d20${m ? (m > 0 ? "+" : "") + m : ""}`;
     publish({ expr, label: expr, adv: /^1d20([+-]\d+)?$/.test(expr) ? adv : 0, secret, kind: "free", throw: th, by: o.by ? o.by() : null });
     adv = 0; pool = {}; $("#trexpr", el).value = ""; renderRolls(el);
   };
@@ -93,14 +93,9 @@ export function renderRolls(el, o) {
     $$(`[data-per^="${id}|"]`, el).forEach(x => { per[x.dataset.per.split("|")[1]] = x.value; });
     applySpell(id, per); delete spellPer[id];
   });
-  $$("[data-oa]", el).forEach(b => b.onclick = () => {
-    const st = store.get(), r = st.rolls.find(x => x.id === b.dataset.oa), h = st.tokens.find(t => t.id === r.tok);
-    const w = attacksOf(st, h).find(x => !x.rng.ranged || x.rng.melee);
-    store.commit("roll", z => { const x = z.rolls.find(y => y.id === r.id); if (x) x.status = "ok"; });
-    if (w) attack(h.id, r.target, w, null, "react");
-  });
+  $$("[data-oa]", el).forEach(b => b.onclick = () => answerOA(b.dataset.oa, true));
   $$("[data-xpok]", el).forEach(b => b.onclick = () => { const v = $(`[data-xpv="${b.dataset.xpok}"]`, el); import("../core/experiencia.js").then(m => m.grantXP(b.dataset.xpok, v ? Math.max(0, +v.value || 0) : null)); });
-  $$("[data-oano]", el).forEach(b => b.onclick = () => store.commit("roll", z => { const x = z.rolls.find(y => y.id === b.dataset.oano); if (x) { x.status = "ok"; x.note = "Lo deja pasar"; } }));
+  $$("[data-oano]", el).forEach(b => b.onclick = () => answerOA(b.dataset.oano, false));
   $$("[data-row]", el).forEach(b => b.querySelector(".r1").onclick = e => { if (e.target.closest("button,input,select")) return; const id = b.dataset.row; openInfo.has(id) ? openInfo.delete(id) : openInfo.add(id); renderRolls(el); });
   $$("[data-edit]", el).forEach(b => b.onclick = () => { editing = b.dataset.edit; renderRolls(el); const i = $("#rtot", el); if (i) i.focus(); });
   const ok = $("#rtotok", el); if (ok) ok.onclick = () => { const v = +$("#rtot", el).value, id = editing; editing = null; decide(id, { total: v }); };
@@ -215,7 +210,9 @@ function rowHTML(s, r, dm, me, hasDamage, dmgRow) {
     ${out.length || acts ? `<div class="r2">${out.join(" ")}${acts ? `<span class="ra2">${acts}</span>` : ""}</div>` : ""}
     ${r.kind === "xp" ? `<div class="r2">${esc(r.note || "")}${dm && r.status === "pending" ? ` <input type="number" class="xpin" data-xpv="${r.id}" value="${r.xp.share}" aria-label="PX por personaje"><button class="ib gold" data-xpok="${r.id}">⭐ Repartir</button>` : ""}</div>` : ""}
     ${r.saves ? spellTable(s, r, dm) : ""}
-    ${r.kind === "oa" && r.status === "pending" && (dm || ((s.tokens.find(t => t.id === r.tok) || {}).owner === me.id)) ? `<div class="r2"><button class="ib gold" data-oa="${r.id}">⚔ Atacar</button><button class="ib" data-oano="${r.id}">Dejar pasar</button></div>` : ""}
+    ${r.kind === "oa" ? (() => { const open = oaOpen(s, r), ans = (s.rolls || []).find(x => x.link === r.id && x.status !== "void"), mineOA = dm || ((s.tokens.find(t => t.id === r.tok) || {}).owner === me.id);
+      return open ? (mineOA ? `<div class="r2"><span class="wait">⏸ decide ${esc(who(s, r.tok))}</span><span class="ra2"><button class="ib gold" data-oa="${r.id}">⚔ Atacar</button><button class="ib" data-oano="${r.id}">Dejar pasar</button></span></div>` : `<div class="r2"><span class="wait">⏸ ${esc(who(s, r.tok))} decide si ataca</span></div>`)
+        : `<div class="r2"><small>${ans ? (ans.kind === "oapass" ? "Lo dejó pasar" : "Atacó") : "No la usó (el turno siguió)"}</small></div>`; })() : ""}
     ${open ? `<div class="rdet"><div class="dice">${(r.dice || []).map(x => `<span class="dv d${x.d} ${x.drop ? "drop" : ""} ${x.d === 20 && x.v === 20 && !x.drop ? "nat20" : ""} ${x.d === 20 && x.v === 1 && !x.drop ? "nat1" : ""}">${x.v}</span>`).join("")}${r.expr && r.expr.match(/[+-]\d+$/) ? `<span class="dmod">${r.expr.match(/[+-]\d+$/)[0]}</span>` : ""}</div>
       <div class="rl">${esc(r.label)}</div>${r.why ? `<small class="${r.adv > 0 ? "adv" : r.adv < 0 ? "dis" : ""}">${esc(r.why.join(" · "))}</small>` : ""}${r.note && r.kind !== "death" ? `<small>${esc(r.note)}</small>` : ""}
       <div class="rinfo">${rollInfo(s, r)}</div>

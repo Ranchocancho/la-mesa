@@ -1408,3 +1408,41 @@ b.ininum{display:block}
 .jnote.star{border-left-color:var(--oro);background:rgba(214,170,78,.06)}
 .jmeta{display:flex;align-items:center;gap:6px}.jmeta small{color:var(--tenue);font-size:11px}.jmeta .jsh{color:#9fcf7a}
 .jnote p{margin:2px 0 0;font-size:13px}
+
+/* ===== Hito 21: botonera del máster compacta (una franja) ===== */
+.dmquick{display:flex;flex-wrap:wrap;align-items:center;gap:4px;padding:5px 6px;border-bottom:1px solid var(--linea)}
+.dmquick .dmq-s{flex:1 1 auto;font-size:11.5px}
+.dmquick .qb{height:28px;min-width:28px;padding:0 6px;border-radius:7px;border:1px solid var(--linea);background:var(--piedra);color:var(--hueso);cursor:pointer;font-size:14px;line-height:1}
+.dmquick .qb:hover{border-color:var(--oro)}
+.dmquick .qb[aria-pressed="true"]{border-color:var(--oro);background:#33281b}
+.dmquick .qb.wide{font-size:11.5px;max-width:110px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.dmquick .qb.wide small{color:var(--tenue)}
+.dmquick .qsel{height:28px;max-width:92px;padding:0 3px;font-size:11.5px;background:var(--piedra);border:1px solid var(--linea);border-radius:7px;color:var(--hueso)}
+.dmquick .dmq-amb{display:none}
+.dmmode{padding:5px 6px;gap:4px}.dmmode button{padding:5px 6px;font-size:12px}
+.dm-tac .sidetabs button{padding:6px}
+/* PNJ del máster: compacto, sin desplazamiento */
+.dm-npc .npcpick{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:thin;margin-bottom:5px;padding-bottom:2px}
+.dm-npc .npcchip{flex:0 0 auto;padding:2px 6px;font-size:11.5px}
+.npcc{display:flex;flex-direction:column;gap:5px}
+.npcc.turn{box-shadow:inset 3px 0 0 var(--oro);padding-left:6px}
+.npch{display:flex;align-items:baseline;flex-wrap:wrap;gap:6px}.npch b{font-family:var(--display);font-size:15px;color:var(--oro)}.npch small{color:var(--tenue);font-size:11.5px}
+.npchp{display:flex;align-items:center;gap:4px}.npchp .hpbar{flex:1;margin:0}.npchp input{width:44px;background:var(--piedra);border:1px solid var(--linea);border-radius:6px;color:var(--hueso);padding:2px 4px}
+.npceco{display:flex;align-items:center;gap:3px;flex-wrap:wrap}.npceco .eco{padding:2px 6px;font-size:11px}.npceco em{font-style:normal;font-size:11px;color:var(--tenue);margin:0 2px}.npceco #endturn{margin-left:auto;padding:2px 8px}
+.npcw{grid-template-columns:repeat(auto-fill,minmax(120px,1fr))}
+.npcw .fw{padding:4px 7px}
+.npcmore{display:flex;gap:10px;flex-wrap:wrap;font-size:12px}
+.npcmore details summary{cursor:pointer;color:var(--tenue)}
+.npcc .condbox,.npcc .conds{margin:0}
+.farmed span{display:flex;gap:3px}
+/* Columna del jugador: la iniciativa ocupa toda la altura */
+.plpanel > .pl-ini{max-height:none!important;flex:1 1 auto}
+.trayh #trexpr{flex:1;min-width:0;background:var(--piedra);border:1px solid var(--linea);border-radius:8px;color:#fff;padding:5px 9px;font-family:var(--display);font-size:14px}
+.trayh #trexpr::placeholder{color:var(--tenue);font-family:Georgia,serif;font-size:12.5px}
+.tray{gap:5px}.trayo{gap:3px}.trayo .btn{padding:2px 7px;font-size:11.5px}.trayo select{height:26px;font-size:12px}.trayo #trmod{width:42px;height:26px}
+.tray .trayd .die{padding:4px 0}
+.lvlchips{display:flex;flex-wrap:wrap;gap:4px}
+.lvlc{padding:4px 8px;border-radius:8px;border:1px solid var(--linea);background:var(--piedra);color:var(--hueso);cursor:pointer;font-size:12.5px}
+.lvlc small{color:var(--tenue)}.lvlc.ready{border-color:#8a6a2a;color:#ffe7b0}.lvlc.on{border-color:var(--oro);background:#33281b;color:var(--oro)}
+.flvl{display:block;margin:6px 0;padding:6px 10px;border-radius:8px;background:#3a2a12;border:1px solid var(--oro);color:#ffe7b0;font-size:13px;text-decoration:none}
+.trayo #trmod{width:48px}

@@ -16,7 +16,7 @@ import { triggerTrap, announceLoot } from "../core/hechizos.js";
 import { EFECTOS } from "../data/efectos.js";
 import { computeVision, explored } from "../core/vision.js";
 import { renderRolls, visibleRolls } from "./tiradas.js";
-import { attacksOf, attack, acOf, nameOf, damageFor } from "../core/combate.js";
+import { attacksOf, attack, acOf, nameOf, damageFor, answerOA, decide } from "../core/combate.js";
 import { phase, current, pending, beginCombat, rollInit, startRounds, endTurn, stopCombat, eco, moveBudget, speedOf, spend, toggle, ACCIONES, rangeOf, inRange, cover, modifiers, dist, metres } from "../core/turnos.js";
 import { srd } from "../core/srd.js";
 import { nowState } from "./ahora.js";
@@ -48,12 +48,14 @@ export function mountTactical(host, opts = {}) {
   // Seleccionar una figura (desde la mesa, la iniciativa o la tira): se abre su consulta abajo
   // El jugador ha elegido arma o conjuro en su ficha: tocar una figura la usa como objetivo
   function aimAt(id) {
-    const A = armedNow(), st = S(); if (!A || isDM(st)) return false;
+    const A = armedNow(), st = S(), dm = isDM(st); if (!A) return false;
     if (A.kind === "atk") {
       if (id === A.tok) return false;
       const a = st.tokens.find(t => t.id === A.tok), w = a && attacksOf(st, a)[A.i]; if (!w) { arm(null); return false; }
-      sel = id; const r = attack(A.tok, id, w, null); if (r) arm(null); drawHud(); return true;
+      if (dm && a.kind === "pc") return false;
+      sel = id; const r = attack(A.tok, id, w, dm ? atkAdv : null); if (r) { arm(null); atkAdv = null; } actSig = ""; drawHud(); return true;
     }
+    if (dm) return false;
     if (A.kind === "spell") { togglePick(id); sel = id; drawHud(); return true; }
     return false;
   }
@@ -221,6 +223,10 @@ export function mountTactical(host, opts = {}) {
         else if (a.k === "end") endTurn();
         else if (a.k === "dmg") damageFor(a.id);
         else if (a.k === "death") deathSave(a.id);
+        else if (a.k === "ok" || a.k === "flip" || a.k === "half") decide(a.id, a.k);
+        else if (a.k === "oa") answerOA(a.id, true);
+        else if (a.k === "oapass") answerOA(a.id, false);
+        else if (a.k === "npc") selectTok(a.id);
         else if (a.k === "rolls") wantRolls(); });
     }
     // Aviso momentáneo cuando algo pasa a depender de ti (tirar daño, decidir una reacción, confirmar…)
@@ -322,9 +328,11 @@ export function mountTactical(host, opts = {}) {
         const pickId = npcId && s.tokens.some(t => t.id === npcId) ? npcId : cur && cur.kind !== "pc" ? cur.id : (target ? target.id : npcs[0] && npcs[0].id);
         const t = s.tokens.find(x => x.id === pickId); npcPick = pickId;
         html = `<div class="npcpick">${npcs.map(n => { const h = hpOf(s, n); return `<button class="npcchip ${n.id === pickId ? "on" : ""} ${h && h.cur <= 0 ? "down" : ""} ${cur && cur.id === n.id ? "turn" : ""}" data-npc="${n.id}" title="${esc(n.name)}${h ? ` · ${h.cur}/${h.max}` : ""}">${esc(n.name.split(" ")[0])}${h ? `<small>${h.cur}</small>` : ""}</button>`; }).join("") || `<p class="empty">No hay PNJ ni enemigos en la mesa.</p>`}</div>
-          ${t && live && cur && cur.id === t.id && t.kind !== "pc" ? turnCard(s, t) : ""}${t ? card(t, t.kind === "pc" ? "Personaje" : t.kind === "npc" ? "PNJ" : "Enemigo") : ""}`;
+          ${t ? npcCard(s, t, live && cur && cur.id === t.id, !!(board && board.pick)) : ""}`;
       }
-      if (html !== actSig) { actSig = html; actHost.innerHTML = html; bindActs(actHost); $$("[data-npc]", actHost).forEach(b => b.onclick = () => { npcId = b.dataset.npc; if (board) board.select(npcId); drawHud(); }); }
+      if (html !== actSig) { actSig = html; actHost.innerHTML = html; bindActs(actHost);
+        $$("[data-narm]", actHost).forEach(b => b.onclick = () => { const [tid, i] = b.dataset.narm.split("|"), A = armedNow(); arm(A && A.kind === "atk" && A.tok === tid && A.i === +i ? null : { kind: "atk", tok: tid, i: +i }); actSig = ""; drawHud(); });
+        $$("[data-ndisarm]", actHost).forEach(b => b.onclick = () => { arm(null); actSig = ""; drawHud(); }); $$("[data-npc]", actHost).forEach(b => b.onclick = () => { npcId = b.dataset.npc; if (board) board.select(npcId); drawHud(); }); }
     }
     $("#hudt", hud).onclick = () => { hudOpen = !hudOpen; drawHud(); };
     const pc = $(".hudprop", hud);
@@ -344,7 +352,7 @@ export function mountTactical(host, opts = {}) {
     const amt = id => Math.max(0, +($(`[data-amt="${id}"]`, R) || {}).value || 0);
     $$("[data-hurt]", R).forEach(b => b.onclick = () => { const a = amt(b.dataset.hurt); if (a) applyHP(b.dataset.hurt, -a); });
     $$("[data-heal]", R).forEach(b => b.onclick = () => { const a = amt(b.dataset.heal); if (a) applyHP(b.dataset.heal, a); });
-    bindTokenEditor(hud, (id, fn) => store.commit("board", st => { const t = st.tokens.find(x => x.id === id); if (t) fn(t); }));
+    bindTokenEditor(R, (id, fn) => store.commit("board", st => { const t = st.tokens.find(x => x.id === id); if (t) fn(t); }));
     const T = (id, fn) => store.commit("token", st => { const t = st.tokens.find(x => x.id === id); if (t) fn(t); });
     $$("[data-addcond]", R).forEach(b => b.onclick = () => { condPick = condPick === b.dataset.addcond ? null : b.dataset.addcond; drawHud(); });
     $$("[data-cond]", R).forEach(b => b.onclick = () => { const [id, cid] = b.dataset.cond.split("|"); if (!mineOk(id)) return; T(id, t => { t.conds = t.conds || []; const i = t.conds.findIndex(c => c.id === cid); if (i >= 0) t.conds.splice(i, 1); else t.conds.push({ id: cid, lvl: estado(cid).levels ? 1 : undefined }); }); });
@@ -477,6 +485,21 @@ function infoCard(s, t, dm, meId) {
     ${dm && sp && sp.length ? `<div class="hudmeta">Espacios: ${sp.map(([l, v]) => `nv${l} ${v.max - v.used}/${v.max}`).join(" · ")}</div>` : ""}
     ${t.owner && t.owner === meId && !dm ? `<small class="note" style="border:0;padding:0;margin:4px 0 0">Tus acciones están en la pestaña «Personaje».</small>` : ""}${dm && t.kind !== "pc" ? `<small class="note" style="border:0;padding:0;margin:4px 0 0">Para jugarlo: pestaña «PNJ».</small>` : ""}</div>`;
 }
+/* Ficha de juego de un PNJ/enemigo para el máster (pestaña PNJ): compacta, todo a la vista */
+function npcCard(s, t, turn, canPick) {
+  const h = hpOf(s, t), A = armedNow(), atks = attacksOf(s, t), e = turn ? eco(s, t) : null;
+  const pct = h ? Math.max(0, Math.min(100, h.cur / Math.max(1, h.max) * 100)) : 0;
+  const chip = (k, n, on) => `<button class="eco ${on ? "used" : ""}" data-eco="${t.id}|${k}">${n}</button>`;
+  return `<div class="npcc ${turn ? "turn" : ""}">
+    <div class="npch"><b>${esc(t.name)}</b><small>${t.kind === "npc" ? "PNJ" : "Enemigo"} · CA ${t.ac ?? "—"} · Vel. ${esc(String(t.speed || 9))} m${t.init != null && t.init !== "" ? ` · Inic. ${t.init}` : ""}</small>${turn ? `<span class="pill hit">su turno</span>` : ""}</div>
+    ${h ? `<div class="npchp"><div class="hpbar ${pct <= 25 ? "low" : pct <= 50 ? "mid" : ""}"><i style="width:${pct}%"></i><em>${h.cur}/${h.max} PG</em></div><input type="number" min="0" placeholder="0" data-amt="${t.id}" aria-label="Cantidad"><button class="ib red" data-hurt="${t.id}" title="Daño">−</button><button class="ib" data-heal="${t.id}" title="Curar">+</button></div>` : ""}
+    ${turn ? `<div class="npceco">${chip("act", "⚡ Acción", e.act)}${chip("bonus", "✦ Adic.", e.bonus)}${chip("react", "↺ Reac.", !!e.react)}<em>🦶 ${e.mov.toLocaleString("es-ES")}/${moveBudget(s, t).toLocaleString("es-ES")} m</em><button class="btn gold small" id="endturn">Terminar ▶</button></div>` : ""}
+    ${condBlock(t, true)}
+    <div class="fweap npcw">${atks.map((w, i) => `<button class="fw ${A && A.kind === "atk" && A.tok === t.id && A.i === i ? "armed" : ""}" data-narm="${t.id}|${i}"><b>${esc(w.name)}</b><span>${w.atk >= 0 ? "+" : ""}${w.atk} · ${esc(w.expr)}</span><small>${esc(w.type || "")} · ${w.rng.ranged ? `${w.rng.n}/${w.rng.l} m` : `${w.rng.l} m`}</small></button>`).join("") || `<p class="note" style="margin:0">Sin ataques: añádelos en «Editar».</p>`}</div>
+    ${A && A.kind === "atk" && A.tok === t.id ? `<div class="farmed">🎯 Toca al objetivo en la mesa <span><button class="ib ${atkAdv === 1 ? "gold" : ""}" data-atkadv="1">Ventaja</button><button class="ib ${atkAdv === -1 ? "gold" : ""}" data-atkadv="-1">Desv.</button><button class="ib" data-ndisarm>✕</button></span></div>` : ""}
+    <div class="npcmore">${canPick ? `<details class="castbox"><summary>✨ Efecto</summary><div class="castlist">${Object.entries(EFECTOS).map(([k, x]) => `<button class="btn small" data-cast="${t.id}|${k}" title="${x.hint || ""}">${x.n}</button>`).join("")}</div></details>` : ""}
+      <details class="tkdetails" ${editOpen ? "open" : ""}><summary>✎ Editar</summary>${tokenEditor(t)}</details></div></div>`;
+}
 function turnCard(s, t) {
   const e = eco(s, t), max = moveBudget(s, t), pct = Math.min(100, e.mov / Math.max(1, max) * 100);
   const chip = (k, n, on) => `<button class="eco ${on ? "used" : ""}" data-eco="${t.id}|${k}" title="${on ? "Gastada (pulsa para devolverla)" : "Disponible (pulsa para marcarla)"}">${n}</button>`;
@@ -565,7 +588,7 @@ function offerOA(byId, targetId) {
   const s = store.get(), h = s.tokens.find(t => t.id === byId), t = s.tokens.find(x => x.id === targetId), u = currentUser(s) || {};
   if (!h || !t) return;
   store.commit("roll", st => { st.rolls = st.rolls || []; st.rolls.push({ id: "oa" + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), at: Date.now(), who: u.id || null, whoName: u.name || "", kind: "oa",
-    label: `${nameOf(s, t)} sale del alcance de ${nameOf(s, h)}: ataque de oportunidad`, expr: "", dice: [], total: null, nat: null, tok: h.id, target: t.id, status: "pending", secret: false }); });
+    label: `${nameOf(s, t)} sale del alcance de ${nameOf(s, h)}: ataque de oportunidad`, expr: "", dice: [], total: null, nat: null, tok: h.id, target: t.id, status: "pending", secret: false, seq: s.board ? s.board.seq : null }); });
 }
 /** Sin objetivo elegido: una pista mínima (la ficha completa ya está en la columna de la derecha). */
 function atkOnly(s, t) { return s.board && s.board.turn === t.id ? `<p class="note hudhint">⚔️ Toca a un enemigo para atacarlo o lanzarle un conjuro.</p>` : ""; }

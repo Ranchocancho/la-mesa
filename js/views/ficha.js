@@ -35,6 +35,7 @@ export function renderSheet(el) {
     <header class="fhead"><div class="fport" data-portrait="${esc(c.portrait || "")}" style="--c:${esc(c.color || "#888")}">${c.portrait ? "" : esc(c.name.slice(0, 2).toUpperCase())}</div>
       <div><b>${esc(c.name)}</b><small>${esc(c.cls)} ${c.level}${c.species ? " · " + esc(c.species) : ""}</small></div>
       <a class="btn small" href="#personajes" title="Ficha completa">Ficha ↗</a></header>
+    ${(+c.lvlGrant || 0) > c.level ? `<a class="flvl" href="#personajes">⬆ El máster te concede subir a nivel ${c.lvlGrant} · abrir la ficha</a>` : ""}
     <div class="fstats">
       <div class="fhp ${c.hp.cur === 0 ? "zero" : hpPct < 34 ? "low" : ""}"><div class="bar"><i style="width:${hpPct}%"></i></div><span><b>${c.hp.cur}</b>/${c.hp.max} PG${c.hp.temp ? ` <em>+${c.hp.temp}</em>` : ""}</span></div>
       <span class="fst"><small>CA</small><b>${c.ac}</b></span><span class="fst"><small>Vel.</small><b>${(+c.speed).toLocaleString("es-ES")} m</b></span><span class="fst"><small>Inic.</small><b>${sign(mod(c.abilities.des))}</b></span>

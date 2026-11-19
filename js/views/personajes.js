@@ -3,7 +3,7 @@
 import { store } from "../core/store.js";
 import { currentUser, isDM, can } from "../core/session.js";
 import { getImage, putImage, readImageFile } from "../core/images.js";
-import { ABILITIES, AB_SHORT, SKILLS, CLASSES, classInfo, xpFor, canLevelUp, mod, sign, prof, skillBonus, saveBonus, passive, carried, capacity, levelNotes, newCharacter } from "../data/dnd.js";
+import { ABILITIES, AB_SHORT, SKILLS, CLASSES, classInfo, xpFor, canLevelUp, levelGranted, mod, sign, prof, skillBonus, saveBonus, passive, carried, capacity, levelNotes, newCharacter } from "../data/dnd.js";
 import { $, $$, esc, toast, debounce, pickFile } from "../core/ui.js";
 import { darkvisionOf } from "../core/vision.js";
 import { publish } from "../core/dados.js";
@@ -62,7 +62,7 @@ function card(state, c) {
     <span class="pjimg" data-portrait="${c.portrait || ""}" style="background:radial-gradient(circle at 35% 30%, ${c.color || "#888"}, #2a1f15 130%)">${c.portrait ? "" : esc(c.initials || initials(c.name))}</span>
     <span class="pjbody"><b>${esc(c.name)}</b><span>${esc([c.species, c.cls].filter(Boolean).join(" · "))} ${c.level}</span>
       <span class="hpbar ${pct <= 25 ? "low" : pct <= 50 ? "mid" : ""}"><i style="width:${pct}%"></i><em>${c.hp.cur}/${c.hp.max} PG${c.hp.temp ? ` +${c.hp.temp}` : ""}</em></span>
-      <span class="pjmeta">CA ${c.ac} · ${owner ? esc(owner.name) : "sin jugador"}${canLevelUp(c) ? ` · <b class="lvlup">¡Sube de nivel!</b>` : ""}</span></span>
+      <span class="pjmeta">CA ${c.ac} · ${owner ? esc(owner.name) : "sin jugador"}${levelGranted(c) ? ` · <b class="lvlup">⬆ Nivel concedido</b>` : canLevelUp(c) ? ` · <small>PX para subir · lo decide el máster</small>` : ""}</span></span>
   </button>`;
 }
 const initials = n => (n || "?").split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0].toUpperCase()).join("");
@@ -102,7 +102,7 @@ function drawSheet(state, c) {
           <div class="xpbar" title="${c.xp} PX"><i style="width:${xpPct}%"></i></div>
           <span class="xptext">${c.xp} ${nextXP ? `/ ${nextXP} PX` : "PX"}</span>
           ${dm ? `<span class="addxp"><input type="number" id="xpadd" placeholder="PX" aria-label="Experiencia a sumar"><button class="btn small" id="xpgo">Sumar</button></span>` : ""}
-          ${canLevelUp(c) && ed ? `<button class="btn gold small" id="lvlup">Subir a nivel ${c.level + 1}</button>` : ""}
+          ${ed && (levelGranted(c) || (dm && c.level < 20)) ? `<button class="btn ${levelGranted(c) ? "gold" : ""} small" id="lvlup" title="${levelGranted(c) ? "El máster te ha concedido el nivel" : "Como máster puedes subirlo directamente"}">⬆ Subir a nivel ${c.level + 1}</button>` : canLevelUp(c) ? `<span class="note" style="margin:0;border:0;padding:0">Tiene los PX para nivel ${c.level + 1}: el máster decidirá cuándo subir (al acabar la escena o la sesión).</span>` : ""}
         </div>
         <div class="pjmeta">${owner ? `Jugador: ${esc(owner.name)}` : "Sin jugador asignado"}</div>
       </div>
@@ -284,7 +284,7 @@ function bind(state, c, ed) {
     const hd = classInfo(c.cls).hd, gain = Math.max(1, (leveling.roll || Math.floor(hd / 2) + 1) + mod(c.abilities.con));
     const msg = `${c.name} sube a nivel ${c.level + 1}`;
     leveling = null;
-    store.commit("char", s => { const x = C(s); x.level += 1; x.hp.max += gain; x.hp.cur += gain; });
+    store.commit("char", s => { const x = C(s); x.level += 1; x.hp.max += gain; x.hp.cur += gain; if ((+x.lvlGrant || 0) <= x.level) delete x.lvlGrant; });
     toast(msg);
   });
   on("#portrait", async () => {

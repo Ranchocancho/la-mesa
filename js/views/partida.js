@@ -10,6 +10,7 @@ import { mountTactical } from "./mesa.js";
 import { renderRolls } from "./tiradas.js";
 import { renderSheet } from "./ficha.js";
 import { onAim } from "../core/apuntar.js";
+import { canLevelUp, levelGranted } from "../data/dnd.js";
 import { floorsHTML, bindFloors } from "./plantasui.js";
 import { AMBIENTES } from "../core/sonido.js";
 const LUCES = { dia: "☀️ Día", interior: "🕯 Interior", noche: "🌙 Noche" };
@@ -122,7 +123,7 @@ function draw() {
   wasTac = tacOn;
   if (dm && !panelHidden && !typing(rol)) {
     const open = [...$$("details[open]", rol)].map(d => d.dataset.k);
-    rol.innerHTML = sessionBlock(state) + directionBlock(state) + tacticalBlock(state) + showBlock(state);
+    rol.innerHTML = sessionBlock(state) + levelBlock(state) + directionBlock(state) + tacticalBlock(state) + showBlock(state);
     open.forEach(k => { const d = $(`details[data-k="${k}"]`, rol); if (d) d.open = true; });
     if (!typing($("#dmtools", el))) $("#dmtools", el).innerHTML = toolsBlock(state);
     bind(state);
@@ -132,11 +133,31 @@ function draw() {
 }
 
 // Barra rápida del modo Táctica: lo que el máster necesita a mano en mitad del combate
+// Barra del modo Táctica: una sola franja de botones cuadrados con icono (el texto, en la ayuda al pasar el ratón)
 function toolsBlock(state) {
-  const live = liveSession(state), b = state.board;
-  return `<div class="dmquick"><span class="dmq-s">${live ? `<b>${esc(sessionName(live))}</b>` : "Sin sesión"}${b ? ` · ${esc(b.name)}` : ""}</span>
-    ${b ? `${tactical(state) ? "" : `<button class="btn small gold" data-show='{"type":"tactical"}'>Mostrar la mesa</button>`}<button class="btn small" id="qtedit" aria-pressed="${tacEdit}" title="Editar la mesa (los jugadores siguen viendo la mesa)">✏️ ${tacEdit ? "Terminar" : "Editar"}</button><button class="btn small" id="qtmon" title="Añadir criaturas a la mesa">👹 Criaturas</button><button class="btn small gold" data-askroll title="Pide a todos o a alguien una tirada de habilidad, característica o salvación">🎲 Pedir tirada</button><span class="dmq-amb"><select class="btn small" id="qtluz" title="Luz de la mesa" aria-label="Luz">${Object.entries(LUCES).map(([k, n]) => `<option value="${k}" ${(b.ambient || "interior") === k ? "selected" : ""}>${n}</option>`).join("")}</select><select class="btn small" id="qtsnd" title="Música y sonido ambiente" aria-label="Sonido ambiente">${Object.entries(AMBIENTES).map(([k, n]) => `<option value="${k}" ${(b.sound || "") === k ? "selected" : ""}>🎵 ${n}</option>`).join("")}</select><button class="btn small" id="qtfog" aria-pressed="${!!b.fog}" title="Niebla de guerra para los jugadores">🌫 Niebla${b.fog ? ": sí" : ""}</button></span><button class="btn small" id="qtfloor" aria-pressed="${floorsOpen}" title="Plantas del mapa: torres, sótanos…">🏰 ${esc(floorName(b))}${floorsOf(b).length > 1 ? ` <small>${floorsOf(b).length}</small>` : ""} ▾</button>` : ""}</div>
-    ${b && floorsOpen ? `<div class="dmfloors">${floorsHTML(state, tac && tac.selected ? tac.selected() : null)}</div>` : ""}`;
+  const b = state.board;
+  if (!b) return `<div class="dmquick"><span class="dmq-s">Sin mesa táctica · cárgala en 🎭 Roleplay</span><button class="qb" data-askroll title="Pedir una tirada a los jugadores">🎲</button></div>`;
+  const q = (id, ic, tip, on, extra = "") => `<button class="qb" ${id.startsWith("data-") ? id : `id="${id}"`} title="${tip}" ${on != null ? `aria-pressed="${!!on}"` : ""} ${extra}>${ic}</button>`;
+  return `<div class="dmquick">
+    ${tactical(state) ? "" : `<button class="btn small gold" data-show='{"type":"tactical"}'>Mostrar la mesa</button>`}
+    ${q("qtedit", "✏️", tacEdit ? "Terminar de editar la mesa" : "Editar la mesa (los jugadores siguen viéndola)", tacEdit)}
+    ${q("qtmon", "👹", "Añadir criaturas")}
+    ${q("data-askroll", "🎲", "Pedir una tirada (habilidad, característica o salvación)")}
+    ${q("qtfog", "🌫", b.fog ? "Niebla de guerra: activada" : "Niebla de guerra: desactivada", !!b.fog)}
+    <select class="qsel" id="qtluz" title="Luz de la mesa" aria-label="Luz">${Object.entries(LUCES).map(([k, n]) => `<option value="${k}" ${(b.ambient || "interior") === k ? "selected" : ""}>${n}</option>`).join("")}</select>
+    <select class="qsel" id="qtsnd" title="Música y sonido ambiente" aria-label="Sonido ambiente">${Object.entries(AMBIENTES).map(([k, n]) => `<option value="${k}" ${(b.sound || "") === k ? "selected" : ""}>🎵 ${n}</option>`).join("")}</select>
+    <button class="qb wide" id="qtfloor" aria-pressed="${floorsOpen}" title="Plantas del mapa: torres, sótanos…">🏰 ${esc(floorName(b))}${floorsOf(b).length > 1 ? ` <small>${floorsOf(b).length}</small>` : ""}</button></div>
+    ${floorsOpen ? `<div class="dmfloors">${floorsHTML(state, tac && tac.selected ? tac.selected() : null)}</div>` : ""}`;
+}
+
+// Subidas de nivel: las concede el máster cuando conviene (al acabar una escena o la sesión), con PX o por hitos
+function levelBlock(state) {
+  const pcs = state.characters.filter(c => c.owner || (state.tokens || []).some(t => t.char === c.id)); if (!pcs.length) return "";
+  const ready = pcs.filter(c => canLevelUp(c) && !levelGranted(c));
+  return `<div class="panel lvlpanel"><h2 class="sec">⬆ Subidas de nivel</h2>
+    <div class="lvlchips">${pcs.map(c => `<button class="lvlc ${levelGranted(c) ? "on" : canLevelUp(c) ? "ready" : ""}" data-lvlg="${c.id}" title="${levelGranted(c) ? "Concedido: pulsa para retirarlo" : canLevelUp(c) ? "Tiene los PX: pulsa para concederlo" : "Por hitos: pulsa para concederlo"}">${esc(c.name.split(" ")[0])} <small>${c.level}→${c.level + 1}</small>${levelGranted(c) ? " ✓" : canLevelUp(c) ? " ★" : ""}</button>`).join("")}</div>
+    ${ready.length > 1 ? `<button class="btn small gold" data-lvlall>Conceder a todos los que tienen PX (${ready.length})</button>` : ""}
+    <p class="note" style="margin:6px 0 0">★ tiene los PX · ✓ concedido. El jugador sube desde su ficha cuando tú lo concedes.</p></div>`;
 }
 
 function sessionBlock(state) {
@@ -238,6 +259,8 @@ function bind(state) {
   { const L = $("#qtluz", el); if (L) L.onchange = () => store.commit("board", st => { if (st.board) st.board.ambient = L.value; });
     const S2 = $("#qtsnd", el); if (S2) S2.onchange = () => store.commit("board", st => { if (st.board) st.board.sound = S2.value; }); }
   on("qtfog", () => store.commit("board", st => { if (st.board) st.board.fog = !st.board.fog; }));
+  $$("[data-lvlg]", el).forEach(b => b.onclick = () => { const c = store.get().characters.find(x => x.id === b.dataset.lvlg); import("../core/experiencia.js").then(m => m.grantLevel(c.id, !levelGranted(c))); });
+  $$("[data-lvlall]", el).forEach(b => b.onclick = () => import("../core/experiencia.js").then(m => store.get().characters.filter(c => canLevelUp(c) && !levelGranted(c)).forEach(c => m.grantLevel(c.id))));
   $$("[data-give]", el).forEach(b => b.onclick = () => import("./tesorosui.js").then(m => m.openGiveDialog()));
   $$("[data-askroll]", el).forEach(b => b.onclick = () => import("./peticiones.js").then(m => m.openAskDialog()));
   on("qtfloor", () => { floorsOpen = !floorsOpen; draw(); });

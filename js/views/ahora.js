@@ -1,7 +1,7 @@
 // «Ahora»: qué está pasando en la mesa y quién tiene que hacer qué.
 // Lo lee la barra superior de la mesa (a la izquierda de la iniciativa) para que, aunque
 // os pongáis a hablar, siempre se sepa qué falta por tirar o por resolver.
-import { nameOf } from "../core/combate.js";
+import { nameOf, oaOpen } from "../core/combate.js";
 import { hpOf, order } from "../core/mesa.js";
 import { phase, current, pending, eco, moveBudget } from "../core/turnos.js";
 import { visibleRolls } from "./tiradas.js";
@@ -30,12 +30,16 @@ export function nowState(s, me, dm) {
   const after = (() => { const o = order(s).filter(t => !(hpOf(s, t) && hpOf(s, t).cur <= 0 && t.kind !== "pc")); const i = o.findIndex(t => t.id === (cur && cur.id)); return o.length > 1 && i >= 0 ? o[(i + 1) % o.length] : null; })();
   const base = { head: `Ronda ${s.board.round} · turno de ${cur ? N(cur) : "—"}`, next: after ? N(after) : null, nextMine: !!(after && after.owner === me) };
   const task = (who, text, mine, acts = [], tone = "wait") => ({ ...base, who, text, mine, acts, tone });
-  const oa = rolls.find(r => r.kind === "oa" && r.status === "pending");
-  if (oa) { const a = tok(oa.tok), o = ownerOf(a), mine = o ? o === me : dm; return task(a ? N(a) : "?", `Puede atacar de oportunidad a ${N(tok(oa.target))}. ¿Ataca o lo deja pasar?`, mine, mine ? [{ k: "rolls", label: "Decidir" }] : []); }
+  // 1. Reacciones: interrumpen el turno en curso hasta que quien puede reaccionar decide (el máster puede decidir por él)
+  const oa = rolls.find(r => oaOpen(s, r));
+  if (oa) { const a = tok(oa.tok), t = tok(oa.target), o = ownerOf(a), mine = o ? o === me : dm, can = mine || dm;
+    return task(a ? N(a) : "?", `⏸ Reacción: ${N(t)} sale del alcance de ${N(a)}. ${o ? N(a) + " decide" : "El máster decide"}: ¿ataque de oportunidad o lo deja pasar? Después sigue el turno de ${cur ? N(cur) : "—"}.`, mine,
+      can ? [{ k: "oa", id: oa.id, label: "⚔ Atacar", gold: true }, { k: "oapass", id: oa.id, label: "Dejar pasar" }] : [], "alert"); }
   const atk = rolls.find(r => r.kind === "attack" && r.status === "pending");
-  if (atk) return task("Máster", `Confirma el ataque de ${N(tok(atk.tok))} a ${N(tok(atk.target))}.`, dm, dm ? [{ k: "rolls", label: "✓ Revisar", gold: true }] : []);
+  if (atk) return task("Máster", `Confirma el ataque de ${N(tok(atk.tok))} a ${N(tok(atk.target))}: ${atk.total} contra CA ${atk.ac ?? "?"} → ${atk.result === "miss" ? "falla" : atk.result === "crit" ? "¡crítico!" : "impacta"}.`, dm,
+    dm ? [{ k: "ok", id: atk.id, label: "✓ Vale", gold: true }, { k: "flip", id: atk.id, label: atk.result === "miss" ? "Que impacte" : "Que falle" }] : [], "wait");
   const dmg = rolls.find(r => r.kind === "damage" && r.status === "pending");
-  if (dmg) return task("Máster", `Aplica ${dmg.total} de daño a ${N(tok(dmg.target))}.`, dm, dm ? [{ k: "rolls", label: "✓ Aplicar", gold: true }] : []);
+  if (dmg) return task("Máster", `Aplica ${dmg.total} de daño${dmg.dtype ? " " + dmg.dtype : ""} a ${N(tok(dmg.target))}.`, dm, dm ? [{ k: "ok", id: dmg.id, label: `✓ Aplicar ${dmg.total}`, gold: true }, { k: "half", id: dmg.id, label: "½" }, { k: "rolls", label: "Más…" }] : [], "wait");
   const sp = rolls.find(r => r.saves && r.status === "pending");
   if (sp) return task("Máster", `Resuelve el conjuro de ${N(tok(sp.tok))}: salvaciones y daño.`, dm, dm ? [{ k: "rolls", label: "Resolver", gold: true }] : []);
   const hit = rolls.find(r => r.kind === "attack" && (r.status === "ok" || r.status === "mod") && r.result && r.result !== "miss" && r.dmg && !hasDmg(r.id) && r.seq === s.board.seq);
@@ -48,8 +52,13 @@ export function nowState(s, me, dm) {
   }
   const e = eco(s, cur), budget = moveBudget(s, cur);
   const left = [e.act ? null : "acción", e.bonus ? null : "acción adicional", e.mov < budget ? `${fm(budget - e.mov)} m de movimiento` : null].filter(Boolean);
+  const foe = cur.kind !== "pc";
+  // Qué hay que hacer en este turno, paso a paso, según quién lo lleva
   const text = mineTurn
-    ? (left.length ? `Te queda: ${left.join(", ")}. Cuando acabes, termina el turno.` : "Lo has gastado todo: termina el turno.")
-    : cur.kind === "pc" ? `${N(cur)} está actuando${left.length ? ` (le queda ${left.join(", ")})` : ""}.` : `El máster mueve a ${N(cur)}.`;
-  return { ...task(mineTurn ? "Tú" : N(cur), text, mineTurn, mineTurn ? [{ k: "end", label: "Terminar turno ▶", gold: !left.length }] : [], mineTurn ? "go" : "calm"), eco: { act: !!e.act, bonus: !!e.bonus, mov: `${fm(e.mov)}/${fm(budget)} m` } };
+    ? (foe ? (left.length ? `Lo llevas tú: muévelo arrastrándolo, elige su ataque (pestaña PNJ) y toca al objetivo. Le queda: ${left.join(", ")}.` : `${N(cur)} ya lo ha hecho todo: termina su turno.`)
+      : (left.length ? `Te toca: muévete arrastrando tu figura; para atacar, elige arma en «Personaje» y toca al enemigo. Te queda: ${left.join(", ")}.` : "Lo has gastado todo: termina tu turno."))
+    : foe ? `El máster mueve a ${N(cur)} y decide qué hace. Espera${base.nextMine ? ": vas tú después" : " tu turno"}.`
+    : `${N(cur)} está actuando${left.length ? ` (le queda ${left.join(", ")})` : ""}.${base.nextMine ? " Vas tú después." : ""}`;
+  const acts = mineTurn ? [...(foe && dm ? [{ k: "npc", id: cur.id, label: "👹 Sus ataques" }] : []), { k: "end", label: "Terminar turno ▶", gold: !left.length }] : [];
+  return { ...task(mineTurn ? (foe ? "Máster" : "Tú") : N(cur), text, mineTurn, acts, mineTurn ? "go" : "calm"), eco: { act: !!e.act, bonus: !!e.bonus, mov: `${fm(e.mov)}/${fm(budget)} m` } };
 }

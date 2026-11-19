@@ -42,5 +42,8 @@ export function grantXP(rollId, share) {
     r.status = "ok"; r.note = `${each} PX para cada personaje · ${r.note.split(" → ")[0]}`;
     const live = (s.sessions || []).find(x => x.status === "open"); if (live) { live.combatXP = (live.combatXP || 0) + each; }
   });
-  if (ups.length) toast(`¡${ups.join(" y ")} puede${ups.length > 1 ? "n" : ""} subir de nivel!`);
+  if (ups.length) toast(`${ups.join(" y ")} ya tiene${ups.length > 1 ? "n" : ""} los PX para subir: concédelo cuando acabe la escena (🎭 Roleplay → Subidas de nivel).`);
 }
+
+/** El máster concede (o retira) la subida de nivel a un personaje. */
+export const grantLevel = (charId, on = true) => store.commit("char", s => { const c = s.characters.find(x => x.id === charId); if (!c) return; if (on) c.lvlGrant = c.level + 1; else delete c.lvlGrant; });

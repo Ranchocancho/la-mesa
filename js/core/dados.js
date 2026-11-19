@@ -69,7 +69,7 @@ export function publish(r) {
   if (r.dc != null && (e.kind === "check" || e.kind === "save")) e.result = out.total >= r.dc ? "save" : "fail";
   // Las tiradas sin consecuencias (pruebas libres) no necesitan confirmación
   if (e.kind === "free" || e.kind === "check" || e.kind === "init" || r.link && e.kind === "save") e.status = "ok";
-  if (isDM(s) && e.kind !== "attack" && e.kind !== "damage") e.status = "ok";
+  if (isDM(s) && e.kind !== "damage") e.status = "ok"; // lo que tira el propio máster no necesita su confirmación (el daño sí: se aplica)
   store.commit("roll", st => { st.rolls = st.rolls || []; st.rolls.push(e); if (st.rolls.length > 120) st.rolls.splice(0, st.rolls.length - 120); });
   return e;
 }

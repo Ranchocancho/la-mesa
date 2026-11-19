@@ -37,7 +37,7 @@ export function attacksOf(s, t) {
 }
 
 /** Ataque según las reglas: alcance, cobertura y ventaja/desventaja automáticas (el jugador puede forzar una). */
-export function attack(attackerId, targetId, weapon, force = null, use = "act") {
+export function attack(attackerId, targetId, weapon, force = null, use = "act", opt = {}) {
   const s = store.get(), a = s.tokens.find(t => t.id === attackerId), t = s.tokens.find(x => x.id === targetId);
   if (!a || !t) return null;
   { const me = currentUser(s); if (!isDM(s) && !(a.owner && me && a.owner === me.id)) { toast("Solo puedes atacar con tu propio personaje."); return null; } }
@@ -57,7 +57,7 @@ export function attack(attackerId, targetId, weapon, force = null, use = "act") 
   return publish({
     kind: "attack", label: `${use === "react" ? "Ataque de oportunidad: " : ""}${nameOf(s, a)} ataca a ${nameOf(s, t)} · ${weapon.name}`, expr: `1d20${atk >= 0 ? "+" : ""}${atk}${extra}`,
     adv, by: a.id, target: t.id, ac: acOf(s, t) + (cov.bonus || 0), dmg: weapon.expr, dtype: weapon.type,
-    why: why.length ? why : null, cov: cov.txt || null, auto: mods.autoCrit ? "Objetivo paralizado o inconsciente a 1,5 m: si impacta, es crítico" : null
+    why: why.length ? why : null, link: opt.link || null, cov: cov.txt || null, auto: mods.autoCrit ? "Objetivo paralizado o inconsciente a 1,5 m: si impacta, es crítico" : null
   });
 }
 
@@ -87,4 +87,24 @@ export function decide(rollId, action) {
     r.status = r.status === "pending" ? "ok" : r.status;
   });
   if (apply) hurt(apply.target, apply.amt, { crit: apply.crit });
+}
+
+/* ---------- Ataques de oportunidad ----------
+   Quien tiene la reacción responde con una tirada SUYA enlazada al aviso (atacar o dejar pasar):
+   así no hace falta modificar el aviso (en Firestore solo el máster puede tocar tiradas ajenas). */
+export const oaOpen = (s, r) => r && r.kind === "oa" && r.status === "pending" && !(s.rolls || []).some(x => x.link === r.id && x.status !== "void")
+  && (r.seq == null || !s.board || r.seq === s.board.seq);
+export function answerOA(oaId, go) {
+  const s = store.get(), r = (s.rolls || []).find(x => x.id === oaId); if (!oaOpen(s, r)) return;
+  const h = s.tokens.find(t => t.id === r.tok), t = s.tokens.find(x => x.id === r.target); if (!h) return;
+  if (go) {
+    const w = attacksOf(s, h).find(x => !x.rng.ranged || x.rng.melee);
+    if (!w) { toast(`${nameOf(s, h)} no tiene un ataque cuerpo a cuerpo.`); go = false; }
+    else if (!attack(h.id, r.target, w, null, "react", { link: r.id })) go = false;
+  }
+  if (!go) {
+    const me = currentUser(s);
+    store.commit("roll", st => { st.rolls.push({ id: "oap" + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), at: Date.now(), who: me ? me.id : null, whoName: me ? me.name : "", kind: "oapass",
+      label: `${nameOf(s, h)} deja pasar a ${nameOf(s, t)}`, expr: "", dice: [], total: null, status: "ok", secret: false, link: r.id, tok: h.id, target: r.target }); });
+  }
 }

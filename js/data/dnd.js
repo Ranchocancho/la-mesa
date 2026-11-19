@@ -34,6 +34,8 @@ export const classInfo = cls => CLASSES[cls] || CLASSES[Object.keys(CLASSES).fin
 export const XP = [0, 300, 900, 2700, 6500, 14000, 23000, 34000, 48000, 64000, 85000, 100000, 120000, 140000, 165000, 195000, 225000, 265000, 305000, 355000];
 export const xpFor = lvl => XP[Math.min(20, Math.max(1, lvl)) - 1];
 export const canLevelUp = c => c.level < 20 && (c.xp || 0) >= xpFor(c.level + 1);
+/** El máster decide cuándo se sube (al terminar la escena o la sesión): solo con su permiso. */
+export const levelGranted = c => c.level < 20 && (+c.lvlGrant || 0) > c.level;
 
 export const mod = score => Math.floor(((+score || 10) - 10) / 2);
 export const sign = n => (n >= 0 ? "+" : "−") + Math.abs(n);

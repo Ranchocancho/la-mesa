@@ -41,7 +41,8 @@ export function watchGifts() {
   store.subscribe(() => {
     const s = store.get(), me = currentUser(s); if (!me || isDM(s)) return;
     const mine = s.characters.filter(c => c.owner === me.id).flatMap(c => (c.treasures || []).map(t => [t, c]));
-    if (seen === null) { seen = new Set(mine.map(([t]) => t.id)); return; }
+    if (seen === null) { seen = new Set([...mine.map(([t]) => t.id), ...s.characters.filter(c => c.owner === me.id && c.lvlGrant).map(c => "lvl:" + c.id + ":" + c.lvlGrant)]); return; }
     mine.forEach(([t, c]) => { if (seen.has(t.id)) return; seen.add(t.id); if (t.gift) toast(`🎁 ${c.name.split(" ")[0]} recibe: ${t.name}${t.from ? ` (de ${t.from})` : ""}`); });
+    s.characters.filter(c => c.owner === me.id && (+c.lvlGrant || 0) > c.level).forEach(c => { const k = "lvl:" + c.id + ":" + c.lvlGrant; if (!seen.has(k)) { seen.add(k); toast(`⬆ El máster concede a ${c.name.split(" ")[0]} subir a nivel ${c.lvlGrant}: hazlo desde su ficha`); } });
   });
 }

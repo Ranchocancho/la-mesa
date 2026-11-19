@@ -378,3 +378,23 @@ Con ideas de referentes: registro de combate de una frase (Baldur's Gate), proba
   - Se pueden marcar como **⭐ descubrimiento** y filtrar.
   - Con **📣** se comparten con el grupo en la crónica.
   - Tiene pestaña propia en la ficha completa, y las últimas notas salen en la pestaña Personaje.
+
+## Hito 21 · Saber siempre por dónde vamos (y reglas en orden)
+
+- **Ataques de oportunidad arreglados**: antes, al responder un jugador, el aviso no se cerraba en la partida real (Firestore no deja a un jugador modificar el aviso). Ahora la respuesta («⚔ Atacar» o «Dejar pasar») es una tirada suya enlazada y el aviso se cierra al momento. Si nadie responde, caduca al cambiar el turno. El máster puede decidir por un jugador ausente.
+- **Panel «Ahora» paso a paso**, siguiendo el orden del reglamento:
+  1. Reacciones pendientes (interrumpen el turno: «⏸ Brena decide…»; luego sigue el turno).
+  2. Ataque por confirmar (máster: «✓ Vale» / «Que falle»).
+  3. Daño por tirar (quien atacó: «🩸 Tirar daño»).
+  4. Daño por aplicar (máster: «✓ Aplicar 6», «½»).
+  5. Lo que queda del turno y «Terminar turno».
+  - En el turno de un enemigo: «Lo llevas tú: muévelo, elige su ataque (PNJ) y toca al objetivo». Los jugadores leen: «El máster mueve al Lobo… vas tú después».
+- **El máster ataca con sus criaturas igual que los jugadores**: en la pestaña PNJ eliges el ataque (con ventaja o desventaja si hace falta) y tocas al objetivo en la mesa o en la tira. Sus ataques no necesitan que él mismo los confirme.
+- **Ficha de PNJ compacta**: vida con daño/curación en línea, acciones del turno, estados, ataques como botones, y Efecto/Editar plegados. Se ve entera sin desplazarse.
+- **Botonera del máster en una franja**: ✏️ 👹 🎲 🌫, luz, música y 🏰 planta, en botones pequeños con su ayuda al pasar el ratón.
+- **Dados**: el campo para escribir (2d6+3) ocupa el sitio de «1d20 o elige dados»; los dados que tocas se escriben ahí.
+- **Iniciativa del jugador** a toda la altura de la columna.
+- **Subir de nivel lo decide el máster**:
+  - Los PX marcan quién podría subir (★).
+  - En 🎭 Roleplay → «⬆ Subidas de nivel», el máster concede el nivel (a uno, a todos los que tienen PX o por hitos) cuando acaba la escena o la sesión.
+  - El jugador recibe un aviso y sube desde su ficha.
