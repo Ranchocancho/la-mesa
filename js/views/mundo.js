@@ -3,6 +3,7 @@ import { store, uid } from "../core/store.js";
 import { isDM, can } from "../core/session.js";
 import { getImage, putImage, readImageFile } from "../core/images.js";
 import { exampleMap } from "../data/worldmap.js";
+import { MAP_ICONS, ICON_CATS, iconURL, PIN_SIZES, PIN_TINTS, pinDefaults } from "../data/simbolos.js";
 import { $, $$, esc, toast, debounce, pickFile } from "../core/ui.js";
 
 const KINDS = ["Región", "Ciudad", "Pueblo", "Distrito", "Localización", "Mazmorra", "Punto de interés"];
@@ -142,8 +143,9 @@ function drawPins() {
   const live = state.presentation && (state.presentation.place);
   // En el mapa del mundo solo van los lugares de primer nivel; los de dentro (distritos, posadas…) viven en el Lore
   pinsEl.innerHTML = state.world.places.filter(p => !p.parent && can.seePlace(state, p)).map(p =>
-    `<button class="pin ${p.visible ? "" : "hidden"} ${p.id === sel ? "sel" : ""} ${p.id === live ? "live" : ""}" data-id="${p.id}" style="left:${p.x * imgW}px;top:${p.y * imgH}px" aria-label="${esc(p.name)}">
-      ${PIN(p.visible ? "#d6aa4e" : "#9aa0c8")}<span>${esc(p.name)}</span></button>`).join("");
+    { const d = pinDefaults(p), z = PIN_SIZES[d.size] || PIN_SIZES.normal, t = PIN_TINTS[d.tint] || PIN_TINTS.neutro;
+      return `<button class="pin sz-${d.size} ${p.visible ? "" : "hidden"} ${p.id === sel ? "sel" : ""} ${p.id === live ? "live" : ""}" data-id="${p.id}" style="left:${p.x * imgW}px;top:${p.y * imgH}px;--d:${z.d}px;--f:${z.f}px;--ring:${t.ring};--bg:${t.bg};--ink:${t.ink}" aria-label="${esc(p.name)}">
+      <i class="medal"><b style="-webkit-mask-image:url(${iconURL(d.icon)});mask-image:url(${iconURL(d.icon)})"></b></i><span>${esc(p.name)}</span></button>`; }).join("");
   $$(".pin", pinsEl).forEach(b => {
     b.onclick = e => { e.stopPropagation(); if (adding) return; sel = b.dataset.id; drawPins(); drawSide(); };
     // El máster puede arrastrar los marcadores para recolocarlos
@@ -206,10 +208,22 @@ function drawReader(state, place) {
   fillImages(state, place);
 }
 
+/** Símbolo, tamaño y color del marcador en el mapa del mundo. */
+let symCat = null;
+function symbolPicker(place) {
+  const d = pinDefaults(place), cat = symCat || MAP_ICONS[d.icon].cat;
+  return `<details class="sympick" open><summary><i class="medal mini" style="--ring:${PIN_TINTS[d.tint].ring};--bg:${PIN_TINTS[d.tint].bg};--ink:${PIN_TINTS[d.tint].ink}"><b style="-webkit-mask-image:url(${iconURL(d.icon)});mask-image:url(${iconURL(d.icon)})"></b></i> Símbolo en el mapa · ${esc(MAP_ICONS[d.icon].n)}</summary>
+    <div class="symcats">${Object.entries(ICON_CATS).map(([k, n]) => `<button data-symcat="${k}" aria-pressed="${cat === k}">${n}</button>`).join("")}</div>
+    <div class="symgrid">${Object.entries(MAP_ICONS).filter(([, v]) => v.cat === cat).map(([k, v]) => `<button data-sym="${k}" aria-pressed="${d.icon === k}" title="${esc(v.n)}"><b style="-webkit-mask-image:url(${iconURL(k)});mask-image:url(${iconURL(k)})"></b><span>${esc(v.n)}</span></button>`).join("")}</div>
+    <div class="symrow"><small>Tamaño</small>${Object.entries(PIN_SIZES).map(([k, v]) => `<button data-psize="${k}" aria-pressed="${d.size === k}" title="${v.n}"><i style="width:${v.d / 2.2}px;height:${v.d / 2.2}px"></i></button>`).join("")}<em>${PIN_SIZES[d.size].n}</em></div>
+    <div class="symrow"><small>Pueblo / bando</small>${Object.entries(PIN_TINTS).map(([k, v]) => `<button data-ptint="${k}" aria-pressed="${d.tint === k}" title="${v.n}" style="--ring:${v.ring};--bg:${v.bg}"></button>`).join("")}<em>${PIN_TINTS[d.tint].n}</em></div></details>`;
+}
+
 function drawEditor(state, place) {
   side.innerHTML = `<div class="row"><button class="btn small" id="back">← Todos los lugares</button><a class="btn small gold" href="#lore/${place.id}">📖 Abrir en el Lore</a></div>
     <label class="field">Nombre<input id="f-name" data-f="name" value="${esc(place.name)}"></label>
     <label class="field">Tipo<select data-f="kind">${KINDS.map(k => `<option ${k === place.kind ? "selected" : ""}>${k}</option>`).join("")}</select></label>
+    ${symbolPicker(place)}
     <label class="switch"><input type="checkbox" id="f-vis" ${place.visible ? "checked" : ""}> Visible para los jugadores</label>
     <div class="row"><button class="btn gold" id="present">Mostrar este lugar a todos</button></div>
     <div class="row"><button class="btn small" id="placemap">${place.map ? "Cambiar el mapa del lugar" : "+ Mapa del lugar (ciudad, mazmorra…)"}</button>${place.map ? `<button class="btn small danger" id="noplacemap">Quitar mapa</button>` : ""}</div>
@@ -235,6 +249,10 @@ function drawEditor(state, place) {
     saveField(i.dataset.f, i.value);
     if (i.dataset.f === "name") { const pin = pinsEl.querySelector(`[data-id="${pid}"] span`); if (pin) pin.textContent = i.value; }
   }));
+  $$("[data-sym]", side).forEach(b => b.onclick = () => store.commit("place", s => { P(pid)(s).icon = b.dataset.sym; }));
+  $$("[data-symcat]", side).forEach(b => b.onclick = () => { symCat = b.dataset.symcat; drawSide(); });
+  $$("[data-psize]", side).forEach(b => b.onclick = () => store.commit("place", s => { P(pid)(s).size = b.dataset.psize; }));
+  $$("[data-ptint]", side).forEach(b => b.onclick = () => store.commit("place", s => { P(pid)(s).tint = b.dataset.ptint; }));
   $("#f-vis", side).onchange = e => store.commit("place", s => { P(pid)(s).visible = e.target.checked; });
   $("#placemap", side).onclick = async () => {
     const f = await pickFile(); if (!f) return;

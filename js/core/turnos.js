@@ -55,6 +55,7 @@ export function endTurn() {
   });
 }
 export function stopCombat() {
+  import("./experiencia.js").then(m => m.postCombatXP());
   store.commit("board", s => { s.tokens.forEach(t => { t.init = null; t.eco = null; }); s.board.combat = null; s.board.turn = null; s.board.round = 0; s.board.from = null; });
 }
 

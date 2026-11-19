@@ -189,7 +189,7 @@ function refresh() {
     dms: c.dms || [], live: c.live || null,
     users, characters: [...cache.characters.entries()].map(([id, x]) => ({ id, ...x })).sort((a, b) => (a.order || 0) - (b.order || 0)).map(x => strip(x, "order")),
     world: { map: c.map ? c.map.key : null, mapW: c.map ? c.map.w : null, mapH: c.map ? c.map.h : null, places },
-    sessions: c.sessions || [], presentation: c.presentation || null, clock: c.clock || null, backdrop: c.backdrop || null,
+    sessions: c.sessions || [], presentation: c.presentation || null, clock: c.clock || null, backdrop: c.backdrop || null, bestiary: c.bestiary || {},
     lore: [...cache.lore.entries()].map(([id, x]) => ({ id, ...x, secret: (cache.secrets.get(id) || {}).secret || "" })).sort((a, b) => (a.order ?? 0) - (b.order ?? 0) || (a.at || 0) - (b.at || 0)),
     scenes: [...cache.scenes.entries()].map(([id, x]) => ({ id, ...x })).sort((a, b) => (a.order || 0) - (b.order || 0)).map(x => strip(x, "order")),
     rolls: [...cache.rolls.entries()].map(([id, x]) => ({ id, ...x })).sort((a, b) => a.at - b.at),
@@ -211,7 +211,7 @@ function docsOf(s, dm) {
   out.set("C", {
     name: s.campaign.name, rules: s.campaign.rules,
     dms: s.dms || [], live: s.live || null,
-    sessions: s.sessions, presentation: s.presentation || null, clock: s.clock || null, backdrop: s.backdrop || null,
+    sessions: s.sessions, presentation: s.presentation || null, clock: s.clock || null, backdrop: s.backdrop || null, bestiary: s.bestiary || {},
     map: s.world.map ? { key: s.world.map, w: s.world.mapW, h: s.world.mapH } : null,
     members
   });

@@ -19,3 +19,6 @@ Autores: Lorc, Delapouite, Carl Olsen, Caro Asercion, Cathelineau, DarkZaitzev y
 ## Código
 - three.js r160 (`vendor/three`) · MIT · https://github.com/mrdoob/three.js
 - cannon-es (`vendor/cannon`) · MIT · https://github.com/pmndrs/cannon-es — física de los dados
+
+## Símbolos del mapa del mundo
+`assets/mapa` · 64 iconos de https://game-icons.net (https://github.com/game-icons/icons), de **Delapouite** y **Lorc**, licencia CC BY 3.0 (https://creativecommons.org/licenses/by/3.0/). Se ha quitado el fondo negro original para poder colorearlos.

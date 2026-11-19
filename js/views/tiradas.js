@@ -38,7 +38,7 @@ function rollInfo(s, r) {
 let adv = 0, secret = false, editing = null, pool = {};
 const SKIN_NAMES = { rubi: "Rubí", zafiro: "Zafiro", esmeralda: "Esmeralda", amatista: "Amatista", obsidiana: "Obsidiana", oro: "Oro", hueso: "Hueso", madera: "Madera" };
 const poolExpr = mod => { const p = Object.entries(pool).filter(([, n]) => n).map(([d, n]) => `${n}d${d}`).join("+"); return (p || "") + (mod ? (mod > 0 ? "+" : "") + mod : ""); };
-const KIND = { attack: "Ataque", damage: "Daño", check: "Prueba", save: "Salvación", init: "Iniciativa", free: "Tirada", spell: "Conjuro", cast: "Conjuro", heal: "Curación", death: "Contra muerte", oa: "Reacción", loot: "Tesoro" };
+const KIND = { attack: "Ataque", damage: "Daño", check: "Prueba", save: "Salvación", init: "Iniciativa", free: "Tirada", spell: "Conjuro", cast: "Conjuro", heal: "Curación", death: "Contra muerte", oa: "Reacción", loot: "Tesoro", xp: "Experiencia" };
 const HOW = { full: "Completo", half: "Mitad", none: "Nada", double: "Doble" };
 let spellPer = {};
 
@@ -104,6 +104,7 @@ export function renderRolls(el) {
     store.commit("roll", z => { const x = z.rolls.find(y => y.id === r.id); if (x) x.status = "ok"; });
     if (w) attack(h.id, r.target, w, null, "react");
   });
+  $$("[data-xpok]", el).forEach(b => b.onclick = () => { const v = $(`[data-xpv="${b.dataset.xpok}"]`, el); import("../core/experiencia.js").then(m => m.grantXP(b.dataset.xpok, v ? Math.max(0, +v.value || 0) : null)); });
   $$("[data-oano]", el).forEach(b => b.onclick = () => store.commit("roll", z => { const x = z.rolls.find(y => y.id === b.dataset.oano); if (x) { x.status = "ok"; x.note = "Lo deja pasar"; } }));
   $$("[data-row]", el).forEach(b => b.querySelector(".r1").onclick = e => { if (e.target.closest("button,input,select")) return; const id = b.dataset.row; openInfo.has(id) ? openInfo.delete(id) : openInfo.add(id); renderRolls(el); });
   $$("[data-edit]", el).forEach(b => b.onclick = () => { editing = b.dataset.edit; renderRolls(el); const i = $("#rtot", el); if (i) i.focus(); });
@@ -128,7 +129,7 @@ function spellTable(s, r, dm) {
 }
 
 /* ---------- Una línea por acción (estilo registro de combate): quién → a quién · qué · resultado ---------- */
-const ICON = { loot: "💰", attack: "⚔", damage: "🩸", save: "🛡", check: "🎯", init: "⏱", spell: "✨", cast: "✨", heal: "✚", death: "💀", oa: "⚠", free: "🎲" };
+const ICON = { xp: "⭐", loot: "💰", attack: "⚔", damage: "🩸", save: "🛡", check: "🎯", init: "⏱", spell: "✨", cast: "✨", heal: "✚", death: "💀", oa: "⚠", free: "🎲" };
 const first = n => String(n || "").split(" ")[0];
 function who(s, id) { const t = s.tokens.find(x => x.id === id); return t ? first(nameOf(s, t)) : ""; }
 function title(s, r) {
@@ -138,6 +139,7 @@ function title(s, r) {
   if (r.kind === "spell" || r.kind === "cast") { const m = r.label.match(/lanza (.+?)(?: \(nivel (\d)\))?(?: ·|$)/); return `<b>${esc(a || first(r.whoName))}</b> <em>${esc(m ? m[1] : r.label)}${m && m[2] ? ` · nv ${m[2]}` : ""}</em>`; }
   if (r.kind === "heal") return `<b>${esc(a || first(r.whoName))}</b>${t && t !== a ? ` → ${esc(t)}` : ""} <em>${esc((r.label.match(/lanza (.+?) sobre/) || [, "curación"])[1])}</em>`;
   if (r.kind === "loot") return `<b>${esc(r.label)}</b>`;
+  if (r.kind === "xp") return `<b>${esc(r.label)}</b>`;
   if (r.kind === "oa") return `<b>${esc(a)}</b> puede atacar a ${esc(t)} <em>oportunidad</em>`;
   if (r.kind === "death") return `<b>${esc(a)}</b> <em>contra muerte</em>`;
   return esc(r.label.replace(/ de ([A-ZÁÉÍÓÚ][\wáéíóúñ]+)( [A-ZÁÉÍÓÚ][\wáéíóúñ-]+)*/, (m0, n) => " · " + n));
@@ -167,6 +169,7 @@ function rowHTML(s, r, dm, me, hasDamage, dmgRow) {
     ${dmgLine}
     ${r.applied != null && r.kind === "damage" ? `<div class="r2">−${r.applied} PG a ${esc(who(s, r.target))}</div>` : ""}
     ${r.kind === "death" && r.note ? `<div class="r2">${esc(r.note)}</div>` : ""}
+    ${r.kind === "xp" ? `<div class="r2">${esc(r.note || "")}${dm && r.status === "pending" ? ` <input type="number" class="xpin" data-xpv="${r.id}" value="${r.xp.share}" aria-label="PX por personaje"><button class="ib gold" data-xpok="${r.id}">⭐ Repartir</button>` : ""}</div>` : ""}
     ${r.saves ? spellTable(s, r, dm) : ""}
     ${r.kind === "oa" && r.status === "pending" && (dm || ((s.tokens.find(t => t.id === r.tok) || {}).owner === me.id)) ? `<div class="r2"><button class="ib gold" data-oa="${r.id}">⚔ Atacar</button><button class="ib" data-oano="${r.id}">Dejar pasar</button></div>` : ""}
     ${open ? `<div class="rdet"><div class="dice">${(r.dice || []).map(x => `<span class="dv d${x.d} ${x.drop ? "drop" : ""} ${x.d === 20 && x.v === 20 && !x.drop ? "nat20" : ""} ${x.d === 20 && x.v === 1 && !x.drop ? "nat1" : ""}">${x.v}</span>`).join("")}${r.expr && r.expr.match(/[+-]\d+$/) ? `<span class="dmod">${r.expr.match(/[+-]\d+$/)[0]}</span>` : ""}<small>${esc(r.whoName || "")} · ${esc(r.expr || "")}${r.kind === "attack" && dm && r.ac != null ? ` · CA ${r.ac}` : ""}</small></div>

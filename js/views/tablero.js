@@ -6,6 +6,7 @@ import { estado } from "../data/estados.js";
 import { TERRAIN, TERRAIN_CATS, PROPS, PROP_CATS, isDoor, isWallT, propVisible } from "../data/mapas.js";
 import { terrainURL } from "./texturas.js";
 import { generateDungeon } from "../core/generador.js";
+import { pathTo, moveHint } from "../core/movimiento.js";
 export { TERRAIN, PROPS };
 
 const T = 44, S = T / 2; // lado de la casilla en el plano 2D
@@ -160,7 +161,11 @@ export function createBoard(host, opts) {
     const aim = opts.aim && opts.aim(), A = aim && tokens.find(t => t.id === aim.from), B = aim && tokens.find(t => t.id === aim.to);
     let aimSvg = "";
     if (A && B && (opts.dm || !B.hidden)) { const [x0, y0] = center(A.c, A.r), [x1, y1] = center(B.c, B.r); aimSvg = `<line x1="${x0}" y1="${y0}" x2="${x1}" y2="${y1}" stroke="${aim.color}" stroke-width="3" stroke-dasharray="8 5"/><text x="${(x0 + x1) / 2}" y="${(y0 + y1) / 2 - 8}" class="aimtxt" fill="${aim.color}">${esc(aim.label)}</text>`; }
-    world.innerHTML = `<g class="cells">${cells}</g><g>${dif}</g><g filter="url(#wsh)">${walls}</g>${grid2}${start}<g class="props">${props}</g><g class="fog">${fogSvg}</g><g class="toks">${toks}</g><g class="aim">${aimSvg}</g><g class="ghost"></g>`;
+    // Alcance del movimiento de la ficha que tiene el turno
+    const R = selected && opts.reach ? opts.reach(selected) : null; let reach = "";
+    if (R) { R.cells.forEach((v, k) => { if (!v.cost || v.occ) return; const [c, r] = k.split(",").map(Number), [x, y] = center(c, r); reach += `<rect x="${x - S + 2}" y="${y - S + 2}" width="${T - 4}" height="${T - 4}" rx="4" class="rch ${v.dash ? "dash" : v.dif ? "dif" : ""}"/>`; });
+      const [ox, oy] = center(R.from.c, R.from.r); reach += `<circle cx="${ox}" cy="${oy}" r="${S * .8}" class="rorig"/>`; }
+    world.innerHTML = `<g class="cells">${cells}</g><g>${dif}</g><g filter="url(#wsh)">${walls}</g>${grid2}${start}<g class="reach">${reach}</g><g class="props">${props}</g><g class="fog">${fogSvg}</g><g class="toks">${toks}</g><g class="aim">${aimSvg}</g><g class="ghost"></g>`;
     ghost();
   }
   function propSvg(p, grid, wallAt) {
@@ -246,8 +251,9 @@ export function createBoard(host, opts) {
       drag.moved = true;
       const g = world.querySelector(`[data-tok="${drag.token.id}"]`); if (g) g.setAttribute("transform", `translate(${x},${y})`);
       const [cx, cy] = center(h.c, h.r), cost = moveCost(opts.model().grid, drag.from, h);
-      world.querySelector(".ghost").innerHTML = inside(h) ? `<polygon points="${corners(cx, cy)}" class="target"/>` : "";
-      showTip(`${(cost * 1.5).toLocaleString("es-ES")} m${cost > dist(drag.from, h) ? " (terreno difícil)" : ""}`);
+      const R = opts.reach ? opts.reach(drag.token.id) : null, path = R ? pathTo(R, h.c, h.r) : [], ok = !R || (R.cells.has(h.c + "," + h.r) && !R.cells.get(h.c + "," + h.r).occ);
+      world.querySelector(".ghost").innerHTML = (inside(h) ? `<polygon points="${corners(cx, cy)}" class="target ${ok ? "" : "bad"}"/>` : "") + (path.length > 1 ? `<polyline points="${path.map(q => center(q.c, q.r).join(",")).join(" ")}" class="rpath ${R.cells.get(h.c + "," + h.r).dash ? "dash" : ""}"/>` : "");
+      showTip(R ? moveHint(R, h.c, h.r) : `${(cost * 1.5).toLocaleString("es-ES")} m${cost > dist(drag.from, h) ? " (terreno difícil)" : ""}`);
     }
   });
   svg.addEventListener("pointerleave", () => { hover = null; if (!drag) { tip.hidden = true; ghost(); } });

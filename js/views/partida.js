@@ -122,6 +122,7 @@ function tacticalBlock(state) {
       <div class="showlist">
         <button class="btn small" data-show='{"type":"tactical"}' ${p.type === "tactical" ? 'aria-pressed="true"' : ""}>Mostrar la mesa</button>
         <button class="btn small" id="tedit" aria-pressed="${tacEdit}">${tacEdit ? "Terminar de editar" : "Editar la mesa"}</button>
+        <button class="btn small gold" id="tmon">👹 Añadir criaturas…</button>
         <button class="btn small" id="tsave">Guardar como escena</button>
         <button class="btn small danger" id="tclear">Retirar la mesa</button>
       </div>
@@ -175,6 +176,7 @@ function bind(state) {
   $$("[data-showlore]", el).forEach(b => b.onclick = () => showEntry(b.dataset.showlore));
   on("nobackdrop", () => setBackdrop(null));
   $$("[data-pc]", el).forEach(b => b.onchange = () => b.checked ? addPC(b.dataset.pc) : removePC(b.dataset.pc));
+  on("tmon", () => import("./reglas.js").then(m => m.openCreaturePicker({ title: "Añadir criaturas a la mesa", onAdd: (x, n) => m.addToBoard(x, n) })));
   on("tclear", () => { const b = $("#tclear", el); if (!b.dataset.sure) { b.dataset.sure = 1; b.textContent = "Pulsa otra vez"; return; } tacEdit = false; clearBoard(); });
   on("tsave", () => {
     const b = $("#tsave", el);

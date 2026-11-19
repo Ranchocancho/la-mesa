@@ -242,3 +242,43 @@ Con ideas de referentes: registro de combate de una frase (Baldur's Gate), proba
   - **disparar la trampa** sobre quien esté en esa casilla.
   - En combate, pisar una trampa la dispara sola: se revela, se tiran las salvaciones y el máster lo aplica como un conjuro.
 - **Texturas nuevas**, dibujadas por código y sin costuras, iguales en 2D y 3D. En 3D llevan relieve, el agua y la lava se mueven y la lava brilla. Cada tipo de muro tiene su textura, y hay escenografía 3D nueva para todo lo que no tenía modelo.
+
+## Hito 14 · Movimiento por turnos, combate más legible, experiencia, bestiario, Lore y personajes
+
+- **Movimiento según las reglas**:
+  - En tu turno se mide siempre desde la casilla donde empezaste. Puedes recolocarte y volver al origen, que queda marcado.
+  - Las casillas a las que llegas se sombrean en un tono translúcido, el terreno difícil en ámbar, y la zona que solo alcanzas Corriendo, más tenue y en violeta.
+  - Al arrastrar se ve el recorrido y un texto discreto: metros gastados, «Correr: gastas tu acción», «terreno difícil», «arrastrándote».
+  - No se puede ir más allá: el jugador no pasa de su límite (el máster sí, con aviso). Si vuelves a tu alcance normal, recuperas la acción.
+  - Muros, objetos macizos, puertas cerradas y enemigos bloquean el paso; los aliados se atraviesan, pero no se acaba encima de nadie.
+  - Estar derribado cuesta el doble; apresado, aturdido, paralizado o inconsciente impiden moverse.
+- **Combate más compacto**: el turno ocupa dos líneas (acción, adicional, reacción, movimiento y «Terminar») con las otras acciones plegadas. El jugador ve el objetivo en pequeño, con la probabilidad de impactar y sus ataques; su ficha está en la columna de la derecha.
+- **Lectura del mapa**: texto flotante más grande y con brillo, peanas y etiquetas algo mayores, y estados en 3D con etiquetas grandes de alto contraste. Cada jugador pone y quita los estados de su personaje desde su ficha, y puede leer qué hacen.
+- **Experiencia** (SRD 5.2.1): cada criatura vale los PX de su VD. Al terminar el combate aparece el reparto de lo derrotado a partes iguales entre los personajes que estaban en la mesa. El máster puede cambiar la cantidad y pulsa «Repartir»; se avisa si alguien puede subir de nivel.
+- **Bestiario**:
+  - Un selector de criaturas con búsqueda, filtros por tipo (No muerto, Bestia, Dragón…) y por VD, y la ficha completa.
+  - **Ajuste de nivel (VD)** antes de desplegar: PG, CA, ataque y daño escalados, con sus PX.
+  - Elegir cuántas se despliegan.
+  - El máster puede **poner imagen** y cambiar CA, PG y notas de cada criatura en su mundo; la imagen sale en la peana.
+  - Se usa desde Escenas, desde la Partida («👹 Añadir criaturas…») y desde Reglas › Monstruos, que ahora también filtra por tipo.
+- **Lore**: nuevas secciones **Dioses** (dominio y símbolo) y **Batallas** (cuándo y resultado).
+- **Personajes**: pestaña **Trasfondo** con la historia y hasta 5 recuerdos (foto con su texto).
+- **Crónica**: cada sesión se pliega en una línea con su título, la fecha, un extracto, las notas y los PX. Se despliega al pulsarla, y hay botones para desplegarlo o plegarlo todo.
+
+## Hito 15 · Símbolos del mapa y luz más natural en 3D
+
+- **64 símbolos** para el mapa del mundo (game-icons.net, CC BY 3.0), en 8 categorías:
+  - asentamientos (capital, ciudad, pueblo, aldea, granja, molino, puerto);
+  - pueblos y culturas (ciudad élfica, árbol sagrado, fortaleza enana, mina, villa mediana, campamento orco, salón del norte, campamento del desierto, guarida pirata);
+  - fortalezas y caminos;
+  - mazmorras y guaridas;
+  - religión y magia;
+  - viaje y descanso (posada, campamento, faro, cruce…);
+  - naturaleza;
+  - aventura.
+- **Tamaño por importancia**: capital (con doble aro y nombre en mayúsculas), grande, normal, pequeño y diminuto.
+- **Color por pueblo o bando**: humanos, elfos, enanos, medianos, orcos y goblins, feéricos, no muertos, mar y peligro.
+- Si no se elige, el símbolo y el tamaño se deducen del tipo de lugar. Los ocultos se ven con borde discontinuo (solo el máster).
+- **3D**:
+  - Las antorchas ya no parpadean deprisa: respiran despacio.
+  - Muros y suelos son mates y con menos relieve, así que los reflejos ya no «bailan» por las paredes.

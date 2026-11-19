@@ -13,7 +13,7 @@ import { inRange, dist, metres, phase } from "../core/turnos.js";
 import { getImage } from "../core/images.js";
 import { $, $$, esc, toast } from "../core/ui.js";
 
-let charSel = null, openSpell = null, picked = new Set(), slotPick = {}, restOpen = false, hdN = 1, testsOpen = false;
+let condOpen = false, charSel = null, openSpell = null, picked = new Set(), slotPick = {}, restOpen = false, hdN = 1, testsOpen = false;
 
 const myChars = s => { const u = currentUser(s); return s.characters.filter(c => c.owner === (u && u.id)); };
 
@@ -36,7 +36,9 @@ export function renderSheet(el) {
       <div class="fhp ${c.hp.cur === 0 ? "zero" : hpPct < 34 ? "low" : ""}"><div class="bar"><i style="width:${hpPct}%"></i></div><span><b>${c.hp.cur}</b>/${c.hp.max} PG${c.hp.temp ? ` <em>+${c.hp.temp}</em>` : ""}</span></div>
       <span class="fst"><small>CA</small><b>${c.ac}</b></span><span class="fst"><small>Vel.</small><b>${(+c.speed).toLocaleString("es-ES")} m</b></span><span class="fst"><small>Inic.</small><b>${sign(mod(c.abilities.des))}</b></span>
     </div>
-    ${conds.length ? `<div class="fconds">${conds.map(x => { const e = ESTADOS.find(y => y.id === x.id) || { n: x.id, c: "#888", t: "" }; return `<span class="cchip" style="--c:${e.c}" title="${esc(e.t)}">${esc(e.n)}${x.lvl > 1 ? " " + x.lvl : ""}${x.note ? ` · ${esc(x.note)}` : ""}</span>`; }).join("")}</div>` : ""}
+    ${tok ? `<div class="fconds">${conds.map(x => { const e = ESTADOS.find(y => y.id === x.id) || { n: x.id, c: "#888", t: "" }; return `<span class="cchip big" style="--c:${e.c}" title="${esc(e.t)}"><b>${esc(e.n)}${x.lvl > 1 ? " " + x.lvl : ""}</b>${x.note ? ` · ${esc(x.note)}` : ""}<button data-uncond="${x.id}" aria-label="Quitar ${esc(e.n)}">✕</button></span>`; }).join("")}<button class="cchip add" id="faddcond">${condOpen ? "Cerrar" : "+ Estado"}</button></div>
+      ${condOpen ? `<div class="fcondpick">${ESTADOS.filter(e => !conds.some(c => c.id === e.id)).map(e => `<button class="cchip" style="--c:${e.c}" data-addc="${e.id}" title="${esc(e.t)}">${esc(e.n)}</button>`).join("")}</div>` : ""}
+      ${conds.length ? `<details class="fcondtxt"><summary>Qué hace${conds.length > 1 ? "n" : ""}</summary>${conds.map(x => { const e = ESTADOS.find(y => y.id === x.id); return e ? `<p><b style="color:${e.c}">${esc(e.n)}:</b> ${esc(e.t)}</p>` : ""; }).join("")}</details>` : ""}` : ""}
     ${c.hp.cur === 0 ? `<div class="fdeath ${d.dead ? "dead" : d.stable ? "stable" : ""}"><b>${d.dead ? "Muerto" : d.stable ? "Estable a 0 PG" : "A 0 PG · inconsciente"}</b>
       ${d.dead ? "" : `<div class="dsv"><span>Éxitos ${pip(d.s, "ok")}</span><span>Fallos ${pip(d.f, "ko")}</span></div>${d.stable ? "" : `<button class="btn gold small" id="fdeath" ${live && !myTurn ? "disabled title='En tu turno'" : ""}>🎲 Salvación contra muerte</button>`}`}</div>` : ""}
 
@@ -123,6 +125,9 @@ function bind(el, s, c, tok) {
     const r = cast(tok.id, d.n, m.lvl ? slotPick[d.n] : 0, targets);
     if (r !== null) { openSpell = null; picked = new Set(); }
   });
+  on("faddcond", () => { condOpen = !condOpen; renderSheet(el); });
+  $$("[data-addc]", el).forEach(b => b.onclick = () => { condOpen = false; store.commit("token", st => { const k = st.tokens.find(x => x.id === tok.id); k.conds = k.conds || []; if (!k.conds.some(c => c.id === b.dataset.addc)) k.conds.push({ id: b.dataset.addc }); }); });
+  $$("[data-uncond]", el).forEach(b => b.onclick = () => store.commit("token", st => { const k = st.tokens.find(x => x.id === tok.id); k.conds = (k.conds || []).filter(c => c.id !== b.dataset.uncond); }));
   const hd = $("#hdn", el); if (hd) hd.oninput = () => { hdN = +hd.value || 1; };
   on("srest", () => shortRest(c.id, hdN));
   on("lrest", () => { const b = $("#lrest", el); if (!b.dataset.sure) { b.dataset.sure = 1; b.textContent = "¿Seguro? Pulsa otra vez"; return; } longRest(c.id); });

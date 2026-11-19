@@ -10,6 +10,7 @@ import { SILUETAS } from "../data/siluetas.js";
 import { ESTADOS, estado, etiqueta } from "../data/estados.js";
 import { floatAt } from "./flotantes.js";
 import { PROPS } from "../data/mapas.js";
+import { reachMap, pathTo, moveHint } from "../core/movimiento.js";
 import { propEditorHTML, bindPropEditor } from "./propeditor.js";
 import { triggerTrap, announceLoot } from "../core/hechizos.js";
 import { EFECTOS } from "../data/efectos.js";
@@ -24,7 +25,7 @@ import { publish, mySkin, SKIN_HEX } from "../core/dados.js";
 export const MINI_NAMES = { peana: "Peana de cartón", Skeleton_Minion: "Esqueleto", Skeleton_Warrior: "Esqueleto guerrero", Skeleton_Rogue: "Esqueleto pícaro", Skeleton_Mage: "Esqueleto mago", Knight: "Caballero", Barbarian: "Bárbaro", Mage: "Mago", Rogue: "Pícaro", Rogue_Hooded: "Encapuchado" };
 
 let want3d = true;
-let editOpen = false, condPick = null, lastArea = null, sideTab = "ini", atkAdv = null, dmTarget = null, atkIdx = 0, ruleOpen = null, lastTurnSeen = null;
+let editOpen = false, condPick = null, lastArea = null, accOpen = false, sideTab = "ini", atkAdv = null, dmTarget = null, atkIdx = 0, ruleOpen = null, lastTurnSeen = null;
 let GLOS = null; srd("glosario").then(g => (GLOS = g));
 let hudOpen = !(window.matchMedia && window.matchMedia("(max-width: 900px)").matches);
 
@@ -64,11 +65,19 @@ export function mountTactical(host, opts = {}) {
         // Trampas: quien pisa una trampa armada la dispara (se revela y se tiran las salvaciones)
         for (const t of s.tokens) { const o = before.get(t.id); if (!o || (o.c === t.c && o.r === t.r)) continue;
           const p = (s.board.props || []).find(x => x.c === t.c && x.r === t.r && (PROPS[x.k] || {}).trap && !x.sprung && !x.disarmed); if (p) traps.push({ p: p.id, t: t.id }); }
-        // Movimiento en combate: se descuenta de la velocidad de quien tiene el turno
+        // Movimiento en combate: se mide desde la casilla de inicio del turno; más allá de tu velocidad, Correr gasta la acción
         if (phase(s) === "live") for (const t of s.tokens) {
           const o = before.get(t.id); if (!o || (o.c === t.c && o.r === t.r) || s.board.turn !== t.id) continue;
-          const e = eco(s, t); e.mov = Math.round((e.mov + moveCost(s.board, o, t) * 1.5) * 10) / 10; t.eco = e;
-          if (e.mov > moveBudget(s, t) + 0.01) warn = `${nameOf(s, t)} se ha movido ${metres(e.mov / 1.5)} de ${metres(moveBudget(s, t) / 1.5)}: supera su velocidad`;
+          const e = eco(s, t); const from = e.from || o, dm = isDM(s);
+          const R = reachMap(s, { ...t, c: from.c, r: from.r, eco: { ...e, from } }, { dm }), x = R && R.cells.get(t.c + "," + t.r);
+          if (!x || x.occ) {
+            if (!dm) { t.c = o.c; t.r = o.r; warn = x && x.occ ? "Esa casilla está ocupada." : R && R.stopped ? `No puede moverse: ${R.stopped}.` : "No llega tan lejos este turno."; continue; }
+            warn = `${nameOf(s, t)} va más allá de su movimiento (el máster lo permite).`;
+          }
+          e.from = from; e.mov = x ? x.cost : e.mov;
+          if (x && x.dash && !e.dash) { e.dash = true; e.act = true; e.dashAuto = true; warn = `${nameOf(s, t)} corre: gasta su acción.`; }
+          else if (x && !x.dash && e.dashAuto) { e.dash = false; e.act = false; e.dashAuto = false; }
+          t.eco = e;
         }
       });
       if (warn) toast(warn);
@@ -76,8 +85,10 @@ export function mountTactical(host, opts = {}) {
       traps.forEach(tr => triggerTrap(tr.p, [tr.t]));
     },
     onProp: p => { selPropId = p.id; hudOpen = true; drawHud(); },
+    // Hasta dónde puede llegar la ficha que tiene el turno (la suya o, para el máster, cualquiera)
+    reach: id => { const s = S(); if (phase(s) !== "live" || !s.board || s.board.turn !== id) return null; const t = s.tokens.find(k => k.id === id); if (!t || (!isDM(s) && t.owner !== me())) return null; return reachMap(s, t, { dm: isDM(s) }); },
     onSelectProp: id => { selPropId = id; if (id) hudOpen = true; drawHud(); },
-    decorate: t => { const c = charOf(S(), t); return { ...(c ? { name: c.name, color: c.color, portrait: c.portrait } : {}), isTurn: S().board.turn === t.id }; },
+    decorate: t => { const c = charOf(S(), t); return { ...(c ? { name: c.name, color: c.color, portrait: c.portrait } : t.portrait ? { portrait: t.portrait } : {}), isTurn: S().board.turn === t.id }; },
     hpOf: t => hpOf(S(), t),
     onSelect: id => { sel = id; drawHud(); },
     charOf: t => charOf(S(), t),
@@ -192,6 +203,11 @@ export function mountTactical(host, opts = {}) {
     const ae = document.activeElement; if (ae && hud.contains(ae) && ae.closest(".hudprop") && /INPUT|TEXTAREA/.test(ae.tagName)) return;
     const mineT = s.tokens.find(t => t.kind === "pc" && t.owner && t.owner === me());
     const target = s.tokens.find(t => t.id === sel && (dm || !t.hidden));
+    // Jugador con columna propia: el objetivo en pequeño, con sus opciones de ataque desde tu figura
+    const tcard = tg => { const h = hpOf(s, tg), exact = tg.kind === "pc", pct = h ? Math.max(0, Math.min(100, h.cur / Math.max(1, h.max) * 100)) : 0;
+      return `<div class="hudcard tcard"><div class="tch"><b>🎯 ${esc(nameOf(s, tg))}</b>${h ? `<span class="hw ${pct <= 25 ? "low" : pct <= 50 ? "mid" : ""}">${exact ? `${h.cur}/${h.max} PG` : healthWord(h.cur, h.max)}</span>` : ""}</div>
+        ${(tg.conds || []).length ? `<div class="tconds">${tg.conds.map(x => { const e = estado(x.id); return e ? `<span class="cchip" style="--c:${e.c}" title="${esc(e.t)}">${esc(e.n)}</span>` : ""; }).join("")}</div>` : ""}
+        ${atkBlock(s, mineT, true, tg.id)}</div>`; };
     const card = (t, title) => {
       const h = hpOf(s, t), c = charOf(s, t), canHurt = dm || (t.owner && t.owner === me());
       const exact = dm || t.kind === "pc";
@@ -208,7 +224,7 @@ export function mountTactical(host, opts = {}) {
     hud.classList.toggle("open", hudOpen);
     const act = actorTok(), cur = current(s), myTurn = phase(s) === "live" && cur && (cur.owner === me() || (dm && cur.kind !== "pc"));
     hud.innerHTML = `<button class="hudtoggle" id="hudt" aria-expanded="${hudOpen}">${hudOpen ? "▾ Ocultar" : "▸ Ficha y objetivo"}</button>
-      ${hudOpen ? `<div class="hudbody">${propCard(s)}${myTurn ? turnCard(s, cur) : ""}${areaBlock(s)}${mineT ? card(mineT, "Tu personaje") : ""}${target && target !== mineT ? card(target, "Objetivo") : ""}${!mineT && !target ? `<p class="empty">Toca una ficha para ver sus datos.</p>` : ""}</div>` : ""}`;
+      ${hudOpen ? `<div class="hudbody">${propCard(s)}${myTurn ? turnCard(s, cur) : ""}${areaBlock(s)}${mineT && (dm || !opts.sideHost) ? card(mineT, "Tu personaje") : ""}${target && target !== mineT ? (mineT && opts.sideHost && !dm ? tcard(target) : card(target, "Objetivo")) : mineT && opts.sideHost && !dm ? atkOnly(s, mineT) : ""}${!mineT && !target ? `<p class="empty">Toca una ficha para ver sus datos.</p>` : ""}</div>` : ""}`;
     $("#hudt", hud).onclick = () => { hudOpen = !hudOpen; drawHud(); };
     const pc = $(".hudprop", hud);
     if (pc) {
@@ -219,6 +235,7 @@ export function mountTactical(host, opts = {}) {
         rot: () => setP(p => { p.rot = ((p.rot || 0) + 1) % 4; }), del: () => { store.commit("board", st => { st.board.props = st.board.props.filter(y => y.id !== id); }); selPropId = null; drawHud(); } });
     }
     $$(".tkdetails", hud).forEach(d => d.ontoggle = () => { editOpen = d.open; });
+    $$(".accd", hud).forEach(d => d.ontoggle = () => { accOpen = d.open; });
     const amt = id => Math.max(0, +($(`[data-amt="${id}"]`, hud) || {}).value || 0);
     $$("[data-hurt]", hud).forEach(b => b.onclick = () => { const a = amt(b.dataset.hurt); if (a) applyHP(b.dataset.hurt, -a); });
     $$("[data-heal]", hud).forEach(b => b.onclick = () => { const a = amt(b.dataset.heal); if (a) applyHP(b.dataset.heal, a); });
@@ -359,12 +376,10 @@ function turnCard(s, t) {
       <p class="note">d20: 10 o más es un éxito; un 1 son dos fallos; un 20 te levanta con 1 PG. Tres éxitos te estabilizan; tres fallos…</p>
       <button class="btn gold" data-death="${t.id}">🎲 Tirar salvación contra muerte</button> <button class="btn" id="endturn">Terminar turno ▶</button></div>`;
   }
-  return `<div class="hudcard turncard"><small>Turno de ${esc(nameOf(s, t))} · ronda ${s.board.round}</small>
-    <div class="movebar ${e.mov > max ? "over" : ""}"><i style="width:${pct}%"></i><em>🦶 Movimiento ${e.mov.toLocaleString("es-ES")} / ${max.toLocaleString("es-ES")} m${e.dash ? " (corriendo)" : ""}</em></div>
-    <div class="ecos">${chip("act", "⚡ Acción", e.act)}${chip("bonus", "✦ Acción adicional", e.bonus)}${chip("react", "↺ Reacción", !!e.react)}</div>
-    <div class="accs">${ACCIONES.map(([n, d]) => `<button class="btn small" data-acc="${t.id}|${n}" title="${esc(d)}" ${e.act && n !== "Atacar" && n !== "Magia" ? "disabled" : ""}>${n}</button>`).join("")}</div>
-    ${rule ? `<div class="rulebox"><b>${esc(ruleOpen)}</b> <small>[${esc(rule.tipo || "regla")}]</small>${rule.txt.split("\n").slice(0, 4).map(p => `<p>${esc(p)}</p>`).join("")}<button class="btn small" data-rule="${esc(ruleOpen)}">Cerrar</button></div>` : ""}
-    <button class="btn gold" id="endturn">Terminar turno ▶</button></div>`;
+  return `<div class="hudcard turncard compact"><div class="tch"><b>${esc(nameOf(s, t).split(" ")[0])}</b><small>ronda ${s.board.round}</small><span class="ecos">${chip("act", "⚡ Acción", e.act)}${chip("bonus", "✦ Adic.", e.bonus)}${chip("react", "↺ Reac.", !!e.react)}</span><button class="btn gold small" id="endturn">Terminar ▶</button></div>
+    <div class="movebar thin ${e.mov > max ? "over" : ""}"><i style="width:${pct}%"></i><em>🦶 ${e.mov.toLocaleString("es-ES")} / ${max.toLocaleString("es-ES")} m${e.dash ? " · corriendo" : ""}</em></div>
+    <details class="accd" ${accOpen ? "open" : ""}><summary>Otras acciones</summary><div class="accs">${ACCIONES.map(([n, d]) => `<button class="btn small" data-acc="${t.id}|${n}" title="${esc(d)}" ${e.act && n !== "Atacar" && n !== "Magia" ? "disabled" : ""}>${n}</button>`).join("")}</div></details>
+    ${rule ? `<div class="rulebox"><b>${esc(ruleOpen)}</b> <small>[${esc(rule.tipo || "regla")}]</small>${rule.txt.split("\n").slice(0, 3).map(p => `<p>${esc(p)}</p>`).join("")}<button class="btn small" data-rule="${esc(ruleOpen)}">Cerrar</button></div>` : ""}</div>`;
 }
 
 /* Ataques: el jugador ataca al objetivo que tenga seleccionado; el máster elige objetivo para sus enemigos */
@@ -439,3 +454,5 @@ function offerOA(byId, targetId) {
   store.commit("roll", st => { st.rolls = st.rolls || []; st.rolls.push({ id: "oa" + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), at: Date.now(), who: u.id || null, whoName: u.name || "", kind: "oa",
     label: `${nameOf(s, t)} sale del alcance de ${nameOf(s, h)}: ataque de oportunidad`, expr: "", dice: [], total: null, nat: null, tok: h.id, target: t.id, status: "pending", secret: false }); });
 }
+/** Sin objetivo elegido: una pista mínima (la ficha completa ya está en la columna de la derecha). */
+function atkOnly(s, t) { return s.board && s.board.turn === t.id ? `<p class="note hudhint">⚔️ Toca a un enemigo para atacarlo o lanzarle un conjuro.</p>` : ""; }

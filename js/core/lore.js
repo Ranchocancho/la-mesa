@@ -7,6 +7,8 @@ import { isDM, currentUser } from "./session.js";
 export const LORE = {
   npc: { n: "Personaje", pl: "Personajes", icon: "👤", hint: "PNJ: quién es, qué quiere, qué sabe." },
   faction: { n: "Facción", pl: "Facciones", icon: "⚑", hint: "Gremios, órdenes, bandas, casas nobles…" },
+  god: { n: "Dios", pl: "Dioses", icon: "☀", hint: "Deidades del mundo: dominio, símbolo, fieles y lo que piden." },
+  battle: { n: "Batalla", pl: "Batallas", icon: "⚔", hint: "Batallas y guerras: cuándo, quién luchó, quién ganó y qué quedó." },
   event: { n: "Evento", pl: "Eventos", icon: "⚡", hint: "Situaciones preparadas que activas cuando quieras." },
   image: { n: "Imagen", pl: "Galería", icon: "🖼", hint: "Ilustraciones de lugares, personajes y escenas." },
   note: { n: "Nota", pl: "Notas", icon: "📝", hint: "Apuntes privados del máster." },
@@ -53,10 +55,10 @@ export function newEntry(kind, extra = {}) {
   const id = uid(kind);
   store.commit("lore", s => {
     s.lore = s.lore || [];
-    const base = { id, kind, name: `${LORE[kind].n} nuevo`.replace("Imagen nuevo", "Imagen nueva").replace("Facción nuevo", "Facción nueva").replace("Nota nuevo", "Nota nueva").replace("Escena preparada nuevo", "Escena nueva"),
+    const base = { id, kind, name: `${LORE[kind].n} nuevo`.replace("Imagen nuevo", "Imagen nueva").replace("Facción nuevo", "Facción nueva").replace("Nota nuevo", "Nota nueva").replace("Escena preparada nuevo", "Escena nueva").replace("Batalla nuevo", "Batalla nueva"),
       place: null, summary: "", secret: "", revealed: false, img: null, links: [], at: Date.now() };
     if (kind === "event") Object.assign(base, { etype: "preparado", status: "pendiente", actions: "" });
-    if (kind === "npc") Object.assign(base, { role: "" });
+    if (kind === "npc" || kind === "god" || kind === "battle") Object.assign(base, { role: "" });
     if (kind === "chapter") Object.assign(base, { session: null, order: loreOf(s).filter(e => e.kind === "chapter").length });
     s.lore.push(Object.assign(base, extra));
   });

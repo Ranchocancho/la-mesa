@@ -11,7 +11,7 @@ import { getImage, putImage, readImageFile } from "../core/images.js";
 import { $, $$, esc, toast, debounce, pickFile } from "../core/ui.js";
 
 let el = null, q = "";
-const SECTIONS = [["places", "📍", "Lugares"], ["npc"], ["faction"], ["event"], ["image"], ["note", , , true], ["chapter", , , true], ["sessions", "📜", "Sesiones"]];
+const SECTIONS = [["places", "📍", "Lugares"], ["npc"], ["faction"], ["god"], ["battle"], ["event"], ["image"], ["note", , , true], ["chapter", , , true], ["sessions", "📜", "Sesiones"]];
 const sec = k => { const x = SECTIONS.find(s => s[0] === k); return x && LORE[k] ? [k, LORE[k].icon, LORE[k].pl, x[3]] : x; };
 
 export function mount(root) {
@@ -85,7 +85,7 @@ function page(s, t, dm) {
 const thumb = (key, cls = "") => key ? `<div class="lthumb ${cls}" data-img="${esc(key)}"></div>` : "";
 function card(s, e) {
   const pl = e.place ? placeOf(s, e.place) : null;
-  const sub = e.kind === "npc" ? e.role : e.kind === "event" ? `${EVENT_TYPES[e.etype] || ""} · ${EVENT_STATUS[e.status] || ""}` : pl ? pl.name : "";
+  const sub = e.kind === "npc" || e.kind === "god" || e.kind === "battle" ? e.role || (pl ? pl.name : "") : e.kind === "event" ? `${EVENT_TYPES[e.etype] || ""} · ${EVENT_STATUS[e.status] || ""}` : pl ? pl.name : "";
   return `<a class="lcard k-${e.kind}${e.kind === "event" ? " st-" + e.status : ""}" href="#lore/${e.id}">${thumb(e.img)}<span class="li">${LORE[e.kind].icon}</span><b>${esc(e.name)}</b>${sub ? `<small>${esc(sub)}</small>` : ""}${isDM(s) && !e.revealed && e.kind !== "note" && e.kind !== "chapter" ? `<i class="lock" title="Oculto a los jugadores">🔒</i>` : ""}</a>`;
 }
 const placeCard = (s, p) => `<a class="lcard k-place" href="#lore/${p.id}"><span class="li">📍</span><b>${esc(p.name)}</b><small>${esc(p.kind || "")}${childrenOf(s, p.id).length ? ` · ${childrenOf(s, p.id).length} dentro` : ""}</small>${isDM(s) && !p.visible ? `<i class="lock">🔒</i>` : ""}</a>`;
@@ -96,7 +96,7 @@ function placesHome(s, dm) {
       <p class="lsub">${dm ? "Todo lo que creas aquí queda a mano durante la partida. Los jugadores solo ven lo que reveles." : "Lo que sabéis del mundo. El máster os irá revelando más."}</p></header>
     <h3 class="lsec">Lugares</h3><div class="lgrid">${top.map(p => placeCard(s, p)).join("") || `<p class="empty">Aún no hay lugares.</p>`}</div>
     ${dm ? `<div class="row"><button class="btn gold small" data-newplace="">+ Lugar</button><a class="btn small" href="#mundo">Colocar en el mapa del mundo</a></div>` : ""}
-    ${["npc", "faction", "event"].map(k => { const l = loreOf(s).filter(e => e.kind === k && canSee(s, e)).slice(0, 8); return l.length ? `<h3 class="lsec"><a href="#lore/s:${k}">${LORE[k].icon} ${LORE[k].pl}</a></h3><div class="lgrid">${l.map(e => card(s, e)).join("")}</div>` : ""; }).join("")}</div>`;
+    ${["npc", "faction", "god", "battle", "event"].map(k => { const l = loreOf(s).filter(e => e.kind === k && canSee(s, e)).slice(0, 8); return l.length ? `<h3 class="lsec"><a href="#lore/s:${k}">${LORE[k].icon} ${LORE[k].pl}</a></h3><div class="lgrid">${l.map(e => card(s, e)).join("")}</div>` : ""; }).join("")}</div>`;
 }
 
 function listPage(s, k, dm) {
@@ -124,7 +124,7 @@ function placePage(s, p, dm) {
     ${dm ? `<div class="ltools"><button class="btn gold small" data-showplace>Mostrar a todos</button>${!p.parent ? `<a class="btn small" href="#mundo">Ver en el mapa</a>` : ""}</div>` : ""}
     ${twoCols(dm, p.summary, p.secret, "pf", "Cómo es: ambiente, sonidos, olores… (lo ven los jugadores)")}
     <h3 class="lsec">📍 Lugares dentro</h3><div class="lgrid">${kids.map(c => placeCard(s, c)).join("") || (dm ? "" : `<p class="empty">Nada más que sepáis.</p>`)}${dm ? `<button class="lcard add" data-newplace="${p.id}">+ Lugar dentro</button>` : ""}</div>
-    ${block("npc")}${block("faction")}${block("event")}${block("image")}${dm ? block("note") : ""}
+    ${block("npc")}${block("faction")}${block("battle")}${block("event")}${block("image")}${dm ? block("note") : ""}
     ${dm && scenes.length ? `<h3 class="lsec">⚔️ Escenas tácticas (3D)</h3><div class="lgrid">${scenes.map(x => `<div class="lcard"><span class="li">⚔️</span><b>${esc(x.name)}</b><small>${x.tokens.length} fichas</small><button class="btn small gold" data-loadscene="${x.id}">Cargar en la mesa</button></div>`).join("")}</div>` : ""}
     ${(p.items || []).filter(i => dm || i.revealed).length ? `<h3 class="lsec">🗺 Contenido del mapa</h3><div class="lgrid">${p.items.filter(i => dm || i.revealed).map(i => `<a class="lcard" href="#mundo"><span class="li">${i.type === "image" ? "🖼" : "📄"}</span><b>${esc(i.title)}</b><small>${i.revealed ? "revelado" : "oculto"}</small></a>`).join("")}</div>` : ""}
     ${dm ? `<div class="row ldanger"><button class="btn small danger" data-delplace>Eliminar lugar</button></div>` : ""}</div>`;
@@ -150,7 +150,8 @@ function entryPage(s, e, dm) {
       ${e.img ? `<button class="btn small" data-showimg>Mostrar solo la imagen</button><button class="btn small" data-bg>${s.backdrop === e.img ? "✓ Fondo de la escena" : "Usar de fondo"}</button>` : ""}
       ${shown || (s.backdrop && s.backdrop === e.img) ? `<button class="btn small" data-retire>Retirar de la mesa</button>` : ""}
       ${e.kind === "event" ? Object.entries(EVENT_STATUS).map(([k, n]) => `<button class="btn small st" data-status="${k}" aria-pressed="${e.status === k}">${n}</button>`).join("") : ""}</div>`;
-  const kindMeta = { npc: dm ? `<input data-ef="role" value="${esc(e.role || "")}" placeholder="Quién es (oficio, cargo…)">` : e.role ? `<span>${esc(e.role)}</span>` : "",
+  const roleIn = ph => dm ? `<input data-ef="role" value="${esc(e.role || "")}" placeholder="${ph}">` : e.role ? `<span>${esc(e.role)}</span>` : "";
+  const kindMeta = { npc: roleIn("Quién es (oficio, cargo…)"), god: roleIn("Dominio y símbolo (p. ej. Luz y sol · un disco dorado)"), battle: roleIn("Cuándo y resultado (p. ej. Año 1120 · victoria de la Corona)"),
     event: dm ? `<select data-ef="etype">${Object.entries(EVENT_TYPES).map(([k, n]) => `<option value="${k}" ${e.etype === k ? "selected" : ""}>${n}</option>`).join("")}</select>` : "",
     chapter: dm ? `<select data-ef="session"><option value="">Próxima sesión</option>${[liveSession(s), ...pastSessions(s)].filter(Boolean).map(x => `<option value="${x.id}" ${e.session === x.id ? "selected" : ""}>${esc(sessionName(x))}${x.status === "open" ? " (en curso)" : ""}</option>`).join("")}</select>` : "" }[e.kind] || "";
   return `<div class="lpage"><nav class="crumbs"><a href="#lore">Lore</a> › <a href="#lore/s:${e.kind}">${LORE[e.kind].pl}</a>${pl ? ` · en <a href="#lore/${pl.id}">${esc(pl.name)}</a>` : ""}</nav>

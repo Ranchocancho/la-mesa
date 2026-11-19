@@ -11,7 +11,7 @@ import { srdNow, findSpell } from "../core/srd.js";
 import { spellCard } from "./reglas.js";
 
 let el = null, openId = null, tab = "car", leveling = null;
-const TABS = [["car", "Características"], ["com", "Combate"], ["inv", "Inventario"], ["con", "Conjuros"], ["ras", "Rasgos y notas"]];
+const TABS = [["car", "Características"], ["com", "Combate"], ["inv", "Inventario"], ["con", "Conjuros"], ["ras", "Rasgos y notas"], ["tras", "Trasfondo"]];
 const uidl = p => p + "-" + Math.random().toString(36).slice(2, 8);
 
 export function mount(root) {
@@ -119,7 +119,7 @@ function drawSheet(state, c) {
       ${stat("Dados de golpe", `<b>${c.level - (c.hdUsed || 0)}</b><em>/ ${c.level}d${classInfo(c.cls).hd}</em>`)}
     </section>
     <nav class="tabs" role="tablist">${TABS.map(([k, t]) => `<button role="tab" class="tab" data-tab="${k}" aria-selected="${tab === k}">${t}</button>`).join("")}</nav>
-    <section class="tabbody">${({ car: tabCar, com: tabCom, inv: tabInv, con: tabCon, ras: tabRas })[tab](c)}</section>
+    <section class="tabbody">${({ car: tabCar, com: tabCom, inv: tabInv, con: tabCon, ras: tabRas, tras: tabTras })[tab](c)}</section>
   </div>`;
   bind(state, c, ed);
   portraits();
@@ -189,6 +189,17 @@ function tabCon(c) {
     <div id="spinfo"></div>`;
 }
 
+/** Trasfondo: la historia del personaje y hasta 5 recuerdos (foto con su texto). */
+function tabTras(c) {
+  const g = c.gallery || [];
+  return `<h2 class="sec">Tu historia</h2>
+    <textarea data-p="story" rows="9" class="storybox" placeholder="De dónde vienes, qué perdiste, a quién buscas, qué te mueve…">${esc(c.story || "")}</textarea>
+    <h2 class="sec" style="margin-top:18px">Recuerdos <small class="note">${g.length} de 5</small></h2>
+    <div class="memgrid">${g.map((m, i) => `<figure class="mem"><div class="memimg" data-portrait="${esc(m.img || "")}">${m.img ? "" : "Sin foto"}</div>
+        <figcaption><textarea data-l="gallery.${i}.text" rows="3" placeholder="Qué muestra este recuerdo">${esc(m.text || "")}</textarea></figcaption>
+        <div class="row edonly"><button class="btn small" data-memimg="${i}">${m.img ? "Cambiar foto" : "+ Foto"}</button><button class="btn small danger" data-memdel="${i}">Quitar</button></div></figure>`).join("")}
+      ${g.length < 5 ? `<button class="mem add edonly" id="memadd">+ Añadir recuerdo</button>` : ""}</div>`;
+}
 function tabRas(c) {
   return `<h2 class="sec">Rasgos y dotes</h2>
     <div class="rows">${(c.features || []).map((f, i) => `<div class="feat"><div class="rowi"><input data-l="features.${i}.name" value="${esc(f.name)}" placeholder="Rasgo" style="flex:1;font-weight:700" aria-label="Rasgo"><button class="btn small danger edonly" data-del="features.${i}" aria-label="Quitar">✕</button></div>
@@ -215,6 +226,13 @@ function bind(state, c, ed) {
   const on = (sel, fn) => { const b = $(sel, el); if (b) b.onclick = fn; };
   on("#back", () => { openId = null; leveling = null; draw(); });
   $$("[data-tab]", el).forEach(b => b.onclick = () => { tab = b.dataset.tab; draw(); });
+  on("#memadd", () => store.commit("char", s => { const x = C(s); x.gallery = x.gallery || []; if (x.gallery.length < 5) x.gallery.push({ img: null, text: "" }); }));
+  $$("[data-memdel]", el).forEach(b => b.onclick = () => store.commit("char", s => { const x = C(s); x.gallery.splice(+b.dataset.memdel, 1); }));
+  $$("[data-memimg]", el).forEach(b => b.onclick = async () => {
+    const f = await pickFile(); if (!f) return;
+    try { const r = await readImageFile(f, 1400), key = uidl("recuerdo"); await putImage(key, r.dataURL); store.commit("char", s => { C(s).gallery[+b.dataset.memimg].img = key; }); }
+    catch (e) { toast("No se pudo cargar la imagen. Prueba con un JPG o PNG."); }
+  });
   $$("[data-roll]", el).forEach(b => b.onclick = e => {
     e.preventDefault(); const [kind, label, m] = b.dataset.roll.split("|");
     const tok = (state.tokens || []).find(t => t.char === c.id);

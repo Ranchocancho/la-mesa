@@ -8,6 +8,7 @@ import { clone as skClone } from "three/addons/utils/SkeletonUtils.js";
 import { getImage } from "../core/images.js";
 import { TERRAIN, dist } from "./tablero.js";
 import { PROPS, isDoor, propVisible } from "../data/mapas.js";
+import { pathTo, moveHint } from "../core/movimiento.js";
 import { terrainCanvas } from "./texturas.js";
 import { PROC } from "./props3d.js";
 import { siluetaFor, siluetaURL } from "../data/siluetas.js";
@@ -47,7 +48,7 @@ function terrainMat(k) {
   const ty = TERRAIN[k] || TERRAIN.piedra, map = new THREE.CanvasTexture(terrainCanvas(k));
   map.wrapS = map.wrapT = THREE.RepeatWrapping; map.colorSpace = THREE.SRGBColorSpace; map.anisotropy = 8;
   const bump = new THREE.CanvasTexture(terrainCanvas(k)); bump.wrapS = bump.wrapT = THREE.RepeatWrapping;
-  const m = new THREE.MeshStandardMaterial({ map, bumpMap: bump, bumpScale: ty.liquid ? 0.4 : 2.2, roughness: k === "hielo" || k === "marmol" ? 0.35 : ty.liquid ? 0.15 : 0.92, metalness: k === "hielo" ? 0.1 : 0,
+  const m = new THREE.MeshStandardMaterial({ map, bumpMap: bump, bumpScale: ty.liquid ? 0.3 : ty.wall ? 0.5 : 1.1, roughness: k === "hielo" || k === "marmol" ? 0.5 : ty.liquid ? 0.2 : 1, metalness: 0,
     ...(ty.liquid && k !== "lava" ? { transparent: true, opacity: 0.9 } : {}), ...(ty.glow ? { emissive: 0xff5a10, emissiveMap: map, emissiveIntensity: 1.1 } : {}) });
   TEXMAT.set(k, m); return m;
 }
@@ -165,26 +166,28 @@ function labelSprite(text, sub, pct, color) {
   const g = c.getContext("2d");
   g.fillStyle = "rgba(20,15,12,.85)"; g.beginPath(); g.roundRect(2, 2, 252, 80, 12); g.fill();
   g.strokeStyle = color; g.lineWidth = 3; g.stroke();
-  g.fillStyle = "#f1e6cc"; g.font = "bold 26px Georgia"; g.textAlign = "center"; g.fillText(text.slice(0, 18), 128, 34);
+  g.fillStyle = "#f1e6cc"; g.font = "bold 28px Georgia"; g.textAlign = "center"; g.fillText(text.slice(0, 18), 128, 34);
   if (pct != null) { g.fillStyle = "#2b1512"; g.fillRect(24, 48, 208, 14); g.fillStyle = pct > 0.5 ? "#6f9a3d" : pct > 0.25 ? "#c9a23d" : "#c4513f"; g.fillRect(24, 48, 208 * Math.max(0, pct), 14); }
   if (sub) { g.fillStyle = "#cdbb98"; g.font = "18px Georgia"; g.fillText(sub, 128, pct != null ? 78 : 62); }
   const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(c), depthTest: false, transparent: true }));
-  s.scale.set(3.2, 1.05, 1); s.renderOrder = 10;
+  s.scale.set(3.8, 1.25, 1); s.renderOrder = 10;
   return s;
 }
 
 function condTag(conds) {
   const list = conds.map(cd => ({ e: estado(cd.id || cd), lvl: cd.lvl })).filter(x => x.e);
-  const c = document.createElement("canvas"), rowH = 34; c.width = 300; c.height = rowH * list.length + 8;
-  const g = c.getContext("2d"); g.font = "bold 22px Georgia"; g.textAlign = "center";
+  const c = document.createElement("canvas"), rowH = 50; c.width = 400; c.height = rowH * list.length + 10;
+  const g = c.getContext("2d"); g.font = "bold 30px Georgia"; g.textAlign = "center";
   list.forEach(({ e, lvl }, i) => {
-    const y = 4 + i * rowH; g.fillStyle = e.c; g.beginPath(); g.roundRect(20, y, 260, rowH - 4, 14); g.fill();
-    g.strokeStyle = "rgba(0,0,0,.6)"; g.lineWidth = 2; g.stroke();
-    const lum = new THREE.Color(e.c); g.fillStyle = (lum.r * 0.3 + lum.g * 0.59 + lum.b * 0.11) > 0.55 ? "#1a140c" : "#fff";
-    g.fillText(etiqueta(e.id, lvl).toUpperCase(), 150, y + 23);
+    const y = 5 + i * rowH; g.shadowColor = "rgba(0,0,0,.8)"; g.shadowBlur = 8;
+    g.fillStyle = e.c; g.beginPath(); g.roundRect(14, y, 372, rowH - 8, 20); g.fill(); g.shadowBlur = 0;
+    g.strokeStyle = "rgba(255,255,255,.75)"; g.lineWidth = 3; g.stroke();
+    const lum = new THREE.Color(e.c), dark = (lum.r * 0.3 + lum.g * 0.59 + lum.b * 0.11) > 0.55;
+    g.lineWidth = 5; g.strokeStyle = dark ? "rgba(255,255,255,.5)" : "rgba(0,0,0,.65)"; g.strokeText(etiqueta(e.id, lvl).toUpperCase(), 200, y + 32);
+    g.fillStyle = dark ? "#1a140c" : "#fff"; g.fillText(etiqueta(e.id, lvl).toUpperCase(), 200, y + 32);
   });
   const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(c), depthTest: false, transparent: true }));
-  s.scale.set(2.6, 2.6 * c.height / 300, 1); s.renderOrder = 11; s.center.set(0.5, 0);
+  s.scale.set(3.6, 3.6 * c.height / 400, 1); s.renderOrder = 11; s.center.set(0.5, 0);
   return s;
 }
 
@@ -325,13 +328,16 @@ export function createBoard3D(host, opts) {
     }
     for (const [kind, list] of Object.entries(byType)) {
       const hgt = (kind === "seto" ? 2.6 : 4) * wh, mt = terrainMat(kind).clone(); mt.map = mt.map.clone(); mt.map.repeat.set(2, hgt / 2); mt.map.needsUpdate = true;
+      mt.roughness = 1; mt.metalness = 0; mt.bumpScale = 0.5;
       const top = new THREE.MeshStandardMaterial({ color: kind === "seto" ? 0x2e4a22 : 0x2a2622, roughness: 1 });
       const bm = new THREE.InstancedMesh(new THREE.BoxGeometry(CELL, hgt, CELL), [mt, mt, top, top, mt, mt], list.length);
       list.forEach(([c, r], i) => bm.setMatrixAt(i, m4.compose(v.set(cx(c), hgt / 2, cz(r)), q.identity(), one)));
       bm.castShadow = bm.receiveShadow = true; grp.add(bm);
     }
     if (faces.length && wallMesh) {
-      const fm = new THREE.InstancedMesh(wallMesh.geometry, wallMesh.material, faces.length);
+      // Las caras de muro de KayKit traen algo de brillo: se dejan mates para que la luz no «resbale» por ellas
+      const wmat = (Array.isArray(wallMesh.material) ? wallMesh.material : [wallMesh.material]).map(x => { const c = x.clone(); if ("roughness" in c) c.roughness = 1; if ("metalness" in c) c.metalness = 0; return c; });
+      const fm = new THREE.InstancedMesh(wallMesh.geometry, wmat.length === 1 ? wmat[0] : wmat, faces.length);
       const sc = new THREE.Vector3(1, wh, 1);
       faces.forEach(([x, z, rot], i) => fm.setMatrixAt(i, m4.compose(v.set(x, 0, z), q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), rot), sc)));
       fm.castShadow = fm.receiveShadow = true; grp.add(fm);
@@ -437,7 +443,7 @@ export function createBoard3D(host, opts) {
       }
     }
     if (!mini) mini = await card(t);
-    mini.scale.multiplyScalar(size * (key === "peana" ? 1 : 1.3));
+    mini.scale.multiplyScalar(size * (key === "peana" ? 1.22 : 1.35));
     mini.position.y = 0.28;
     mini.traverse(o => { if (o.isMesh) { o.castShadow = true; o.frustumCulled = false; } });
     rec.tilt = 0; rec.hitT = 0;
@@ -542,7 +548,7 @@ export function createBoard3D(host, opts) {
           else o.material = o.userData.baseMat;
         } });
       }
-      if (rec.tag) rec.tag.position.y = (selected === t.id || (opts.decorate(t) || {}).isTurn ? 4.9 : 3.9) * (+t.size || 1) + 0.4;
+      if (rec.tag) rec.tag.position.y = (selected === t.id || (opts.decorate(t) || {}).isTurn ? 5.7 : 4.6) * (+t.size || 1) + 0.4;
       const d = opts.decorate(t) || {};
       rec.turn.visible = !!d.isTurn;
       rec.sel.visible = selected === t.id;
@@ -554,7 +560,7 @@ export function createBoard3D(host, opts) {
         if (showLabel) {
           const pct = hp ? hp.cur / Math.max(1, hp.max) : null;
           rec.label = labelSprite(d.name || t.name || "", hp ? (exact ? `${hp.cur}/${hp.max} PG` : (pct > 0.75 ? "Ileso" : pct > 0.5 ? "Herido" : pct > 0.25 ? "Malherido" : pct > 0 ? "Al borde" : "Fuera de combate")) : "", exact ? pct : null, t.kind === "pc" ? "#d6aa4e" : t.kind === "npc" ? "#7d8fe0" : "#b33a2e");
-          rec.label.position.y = 3.6 * (+t.size || 1) + 0.6; rec.root.add(rec.label);
+          rec.label.position.y = 4.2 * (+t.size || 1) + 0.6; rec.root.add(rec.label);
         }
         rec.labelKey = labelKey;
       }
@@ -589,6 +595,7 @@ export function createBoard3D(host, opts) {
     }
     // Los dados ya no ruedan sobre el tablero: salen en la cajetilla (dicecam.js)
     fxReady = true;
+    refreshReach();
   }
 
   // ---------- Línea de puntería: distancia, alcance y cobertura hasta el objetivo ----------
@@ -642,6 +649,40 @@ export function createBoard3D(host, opts) {
   const FOG_BLACK = new THREE.MeshStandardMaterial({ color: 0x0c0a08, roughness: 1 });
   const FOG_DIM = new THREE.MeshBasicMaterial({ color: 0x05070c, transparent: true, opacity: 0.62, depthWrite: false });
 
+  // ---------- Alcance del movimiento: casillas a las que llegas este turno ----------
+  const reachGrp = new THREE.Group(); scene.add(reachGrp);
+  let reachFor = null, reachR = null, pathMesh = null;
+  const RMAT = {
+    walk: new THREE.MeshBasicMaterial({ color: 0x6fd0e8, transparent: true, opacity: 0.17, depthWrite: false }),
+    dif: new THREE.MeshBasicMaterial({ color: 0xe0b45a, transparent: true, opacity: 0.22, depthWrite: false }),
+    dash: new THREE.MeshBasicMaterial({ color: 0xa88ae0, transparent: true, opacity: 0.12, depthWrite: false })
+  };
+  const tileGeo = new THREE.PlaneGeometry(CELL * 0.92, CELL * 0.92).rotateX(-Math.PI / 2);
+  function showReach(id) {
+    reachGrp.clear(); reachFor = id; reachR = id && opts.reach ? opts.reach(id) : null;
+    if (!reachR || !G) return;
+    const groups = { walk: [], dif: [], dash: [] };
+    reachR.cells.forEach((x, k) => { if (!x.cost || x.occ) return; const [c, r] = k.split(",").map(Number); groups[x.dash ? "dash" : x.dif ? "dif" : "walk"].push([c, r]); });
+    const m4 = new THREE.Matrix4();
+    for (const [k, list] of Object.entries(groups)) {
+      if (!list.length) continue;
+      const im = new THREE.InstancedMesh(tileGeo, RMAT[k], list.length); im.renderOrder = 2;
+      list.forEach(([c, r], i) => im.setMatrixAt(i, m4.makeTranslation(cx(c), 0.07, cz(r)))); reachGrp.add(im);
+    }
+    // La casilla de origen queda marcada: siempre puedes volver a ella
+    const o = reachR.from, ring = new THREE.Mesh(new THREE.RingGeometry(CELL * 0.36, CELL * 0.46, 32).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0xffd27a, transparent: true, opacity: 0.75, depthWrite: false }));
+    ring.position.set(cx(o.c), 0.09, cz(o.r)); reachGrp.add(ring);
+  }
+  function showPath(h) {
+    if (pathMesh) { reachGrp.remove(pathMesh); pathMesh.geometry.dispose(); pathMesh = null; }
+    if (!reachR || !h) return;
+    const p = pathTo(reachR, h.c, h.r); if (p.length < 2) return;
+    const x = reachR.cells.get(h.c + "," + h.r);
+    const curve = new THREE.CatmullRomCurve3(p.map(q => new THREE.Vector3(cx(q.c), 0.3, cz(q.r))), false, "centripetal", 0.2);
+    pathMesh = new THREE.Mesh(new THREE.TubeGeometry(curve, p.length * 6, 0.16, 6), new THREE.MeshBasicMaterial({ color: x && x.dash ? 0xc8a8ff : 0xffe2a0, transparent: true, opacity: 0.85, depthWrite: false }));
+    pathMesh.renderOrder = 3; reachGrp.add(pathMesh);
+  }
+
   // ---------- Interacción: seleccionar y arrastrar miniaturas ----------
   const ray = new THREE.Raycaster(), ndc = new THREE.Vector2(), ground = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0), hit = new THREE.Vector3();
   let drag = null, down = null;
@@ -670,7 +711,7 @@ export function createBoard3D(host, opts) {
       const ph = opts.onProp && ray.intersectObjects(world.children, true).find(h => h.object.userData.prop);
       if (ph) { const pr = (G.props || []).find(x => x.id === ph.object.userData.prop); if (pr && (PROPS[pr.k] || {}).loot || pr && (PROPS[pr.k] || {}).trap || pr && pr.hidden || pr && pr.label) { opts.onProp(pr); return; } }
     }
-    if (t && opts.canMove(t)) { drag = { id, from: { c: t.c, r: t.r }, moved: false }; controls.enabled = false; renderer.domElement.setPointerCapture(e.pointerId); }
+    if (t && opts.canMove(t)) { drag = { id, from: { c: t.c, r: t.r }, moved: false }; controls.enabled = false; renderer.domElement.setPointerCapture(e.pointerId); if (reachFor !== id) showReach(id); }
     else if (t) down.tok = id;
   });
   renderer.domElement.addEventListener("pointermove", e => {
@@ -681,9 +722,11 @@ export function createBoard3D(host, opts) {
     const h = cellAt(); if (!h) return;
     const rec = toks.get(drag.id);
     if (rec && rec.root) { rec.root.position.set(hit.x, 1.2, hit.z); rec.target.copy(rec.root.position); }
-    if (inside(h)) { hl.visible = true; hl.position.x = cx(h.c); hl.position.z = cz(h.r); hl.material.color.set(isWall(h.c, h.r) ? 0xb33a2e : 0xd6aa4e); }
+    const ok = reachR ? reachR.cells.has(h.c + "," + h.r) && !reachR.cells.get(h.c + "," + h.r).occ : !isWall(h.c, h.r);
+    if (inside(h)) { hl.visible = true; hl.position.x = cx(h.c); hl.position.z = cz(h.r); hl.material.color.set(ok ? 0xd6aa4e : 0xb33a2e); }
+    if (!drag.last || drag.last.c !== h.c || drag.last.r !== h.r) { drag.last = h; showPath(h); }
     const d = dist(drag.from, h);
-    tip.hidden = false; tip.textContent = `${(d * 1.5).toLocaleString("es-ES")} m (${d} casillas)`;
+    tip.hidden = false; tip.textContent = reachR ? moveHint(reachR, h.c, h.r) : `${(d * 1.5).toLocaleString("es-ES")} m (${d} casillas)`;
     const r = host.getBoundingClientRect(); tip.style.left = (e.clientX - r.left + 14) + "px"; tip.style.top = (e.clientY - r.top + 14) + "px";
   });
   const up = e => {
@@ -703,8 +746,9 @@ export function createBoard3D(host, opts) {
     down = null;
   };
   renderer.domElement.addEventListener("pointerup", up);
-  renderer.domElement.addEventListener("pointercancel", () => { drag = null; controls.enabled = true; hl.visible = false; tip.hidden = true; });
+  renderer.domElement.addEventListener("pointercancel", () => { showPath(null); drag = null; controls.enabled = true; hl.visible = false; tip.hidden = true; });
   function select(id) { selected = id; opts.onSelect && opts.onSelect(id); sync(); }
+  function refreshReach() { try { if (drag) return; const id = selected && opts.reach && opts.reach(selected) ? selected : null; showReach(id); showPath(null); } catch (e) { /* aún montándose */ } }
 
   // ---------- Bucle de dibujo ----------
   function resize() {
@@ -726,7 +770,8 @@ export function createBoard3D(host, opts) {
     controls.update();
     ticks.forEach(f => f(dt));
     if (fxList.length) fxList = fxList.filter(f => f(dt));
-    torches.forEach(t => { t.light.intensity = t.base * (0.82 + 0.12 * Math.sin(time * 9 + t.seed) + 0.08 * Math.sin(time * 23 + t.seed * 2)); });
+    // Luz de antorcha: una respiración lenta y suave (el parpadeo rápido hacía «bailar» los reflejos de las paredes)
+    torches.forEach(t => { t.light.intensity = t.base * (0.95 + 0.035 * Math.sin(time * 2.1 + t.seed) + 0.015 * Math.sin(time * 4.7 + t.seed * 2)); });
     for (const rec of toks.values()) {
       if (!rec.root) continue;
       if (rec.mixer) rec.mixer.update(dt);

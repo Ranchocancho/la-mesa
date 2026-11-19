@@ -3,8 +3,12 @@ import { store } from "../core/store.js";
 import { isDM } from "../core/session.js";
 import { srd, CAPITULOS, ESCUELAS, norm, monsterToken } from "../core/srd.js";
 import { $, $$, esc, toast } from "../core/ui.js";
+import { openCreaturePicker } from "./criaturas.js";
+import { TYPES, typeOf, withCustom } from "../core/bestiario.js";
+import { isWallT } from "../data/mapas.js";
+import { getImage } from "../core/images.js";
 
-let el = null, tab = "libro", page = 5, q = "", sel = null, filt = { lvl: "", cls: "", vd: "" };
+let el = null, tab = "libro", page = 5, q = "", sel = null, filt = { lvl: "", cls: "", vd: "", ty: "" };
 const CLASES = ["bardo", "brujo", "clérigo", "druida", "explorador", "hechicero", "mago", "paladín"];
 
 export function mount(root) {
@@ -137,16 +141,20 @@ export function monsterCard(m, withAdd) {
 }
 const VDS = ["0", "1/8", "1/4", "1/2", ...Array.from({ length: 30 }, (_, i) => String(i + 1))];
 function monstruos(body, M) {
-  const list = M.filter(m => (!q || norm(m.n).includes(norm(q)) || norm(m.tipo).includes(norm(q))) && (!filt.vd || m.vd === filt.vd));
+  const list = M.filter(m => (!q || norm(m.n).includes(norm(q)) || norm(m.tipo).includes(norm(q))) && (!filt.vd || m.vd === filt.vd) && (!filt.ty || typeOf(m) === filt.ty));
   const cur = M.find(m => m.n === sel) || null, s = store.get(), canAdd = isDM(s) && s.board;
   body.innerHTML = `<aside class="rside">
       <input id="rq" type="search" placeholder="Buscar monstruo o tipo («dragón», «muerto viviente»)" value="${esc(q)}">
       <select id="fvd"><option value="">Cualquier VD</option>${VDS.map(v => `<option ${filt.vd === v ? "selected" : ""}>${v}</option>`).join("")}</select>
-      <div class="places">${list.map(m => `<button class="place ${cur === m ? "on" : ""}" data-m="${esc(m.n)}"><span>${esc(m.n)}</span><small>VD ${m.vd}</small></button>`).join("")}</div>
+      <div class="cptypes side"><button data-fty="" aria-pressed="${!filt.ty}">Todas</button>${TYPES.map(t => `<button data-fty="${t}" aria-pressed="${filt.ty === t}">${t}</button>`).join("")}</div>
+      <div class="places">${list.map(m => `<button class="place ${cur === m ? "on" : ""}" data-m="${esc(m.n)}"><span>${esc(m.n)}</span><small>${esc(typeOf(m))} · VD ${m.vd}</small></button>`).join("")}</div>
       <p class="note" style="margin:0">${list.length} criaturas</p>
-    </aside><article class="rpage">${cur ? monsterCard(cur, canAdd) : `<p class="empty">Elige una criatura.${isDM(s) && !s.board ? " Para ponerla en la mesa, carga antes una escena en la Partida." : ""}</p>`}</article>`;
+    </aside><article class="rpage">${cur ? `${isDM(s) ? `<div class="row" style="max-width:820px;margin:0 auto 10px"><button class="btn small gold" id="mpick">${canAdd ? "👹 Ajustar nivel y añadir a la mesa…" : "✎ Imagen, datos y nivel…"}</button></div>` : ""}${withCustom(s, cur).img ? `<div class="mimg" data-img="${esc(withCustom(s, cur).img)}"></div>` : ""}${monsterCard(withCustom(s, cur), canAdd)}` : `<p class="empty">Elige una criatura.${isDM(s) && !s.board ? " Para ponerla en la mesa, carga antes una escena en la Partida." : ""}</p>`}</article>`;
   bindList(body, () => monstruos(body, M));
   $("#fvd", body).onchange = e => { filt.vd = e.target.value; monstruos(body, M); };
+  $$("[data-fty]", body).forEach(b => b.onclick = () => { filt.ty = b.dataset.fty; monstruos(body, M); });
+  const mp = $("#mpick", body); if (mp) mp.onclick = () => openCreaturePicker({ preselect: cur.n, title: "Criatura", onAdd: canAdd ? (m, n) => addToBoard(m, n) : null });
+  $$("[data-img]", body).forEach(async e => { const u = await getImage(e.dataset.img); if (u) e.style.backgroundImage = `url('${u}')`; });
   $$("[data-m]", body).forEach(b => b.onclick = () => { sel = b.dataset.m; monstruos(body, M); });
   const add = $("#addmon", body);
   if (add) add.onclick = () => { const n = Math.max(1, +$("#addn", body).value || 1); addToBoard(cur, n); toast(`${n} × ${cur.n} en la mesa`); };
@@ -157,13 +165,14 @@ function bindList(body, redraw) {
 }
 
 /** Coloca n criaturas en casillas libres cerca del centro de la mesa. */
+export { openCreaturePicker };
 export function addToBoard(m, n = 1) {
   store.commit("board", s => {
     const b = s.board; if (!b) return;
     const busy = new Set(s.tokens.map(t => t.c + "," + t.r)), out = [];
     const cc = Math.floor(b.cols * 0.65), cr = Math.floor(b.rows / 2);
     for (let d = 0; d < 12 && out.length < n; d++) for (let r = cr - d; r <= cr + d && out.length < n; r++) for (let c = cc - d; c <= cc + d && out.length < n; c++) {
-      if (c < 0 || r < 0 || c >= b.cols || r >= b.rows || busy.has(c + "," + r) || (b.terrain || {})[c + "," + r] === "muro") continue;
+      if (c < 0 || r < 0 || c >= b.cols || r >= b.rows || busy.has(c + "," + r) || isWallT((b.terrain || {})[c + "," + r])) continue;
       busy.add(c + "," + r); out.push([c, r]);
     }
     out.forEach(([c, r], i) => { const t = monsterToken(m, c, r); if (n > 1) t.name = `${m.n} ${i + 1}`; s.tokens.push(t); });

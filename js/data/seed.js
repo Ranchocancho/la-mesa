@@ -44,7 +44,7 @@ export function seed() {
       map: null, // null = mapa de ejemplo generado; si no, clave de la imagen subida
       places: [
         {
-          id: "velarath", name: "Vel Arath", kind: "Ciudad", x: 0.47, y: 0.42, visible: true,
+          id: "velarath", name: "Vel Arath", kind: "Ciudad", icon: "capital", size: "capital", tint: "humanos", x: 0.47, y: 0.42, visible: true,
           summary: "Ciudad amurallada sobre el río Grisvela. Sus campanas llevan tres días calladas.",
           secret: "El gremio de herreros guarda la llave de la cripta bajo el campanario.",
           items: [
@@ -61,7 +61,7 @@ export function seed() {
         { id: "campanario", parent: "velarath", name: "El campanario", kind: "Localización", x: 0.5, y: 0.5, visible: true,
           summary: "Una torre de piedra negra que domina la plaza.", secret: "Bajo la torre está la cripta. La llave la tiene el gremio.", items: [] },
         {
-          id: "hollin", name: "Bosque de Hollín", kind: "Región", x: 0.3, y: 0.33, visible: true,
+          id: "hollin", name: "Bosque de Hollín", kind: "Región", icon: "bosque", size: "grande", tint: "elfos", x: 0.3, y: 0.33, visible: true,
           summary: "Un bosque quemado que aún humea. Los caminos cambian de sitio.",
           secret: "La druida Ceniza vive en el corazón del bosque y conoce el origen del fuego.",
           items: [
@@ -69,18 +69,18 @@ export function seed() {
           ]
         },
         {
-          id: "salobre", name: "Puerto Salobre", kind: "Pueblo", x: 0.62, y: 0.66, visible: true,
+          id: "salobre", name: "Puerto Salobre", kind: "Pueblo", icon: "puerto", size: "normal", tint: "mar", x: 0.62, y: 0.66, visible: true,
           summary: "Puerto pesquero con mala fama y buena cerveza.",
           secret: "", items: []
         },
         {
-          id: "grisvela", name: "Paso de Grisvela", kind: "Punto de interés", x: 0.57, y: 0.5, visible: false,
+          id: "grisvela", name: "Paso de Grisvela", kind: "Punto de interés", icon: "montana", size: "pequeno", tint: "enanos", x: 0.57, y: 0.5, visible: false,
           summary: "Un paso de montaña helado con un altar que nadie recuerda.",
           secret: "El altar es la segunda llave. Lo vigila un gigante de escarcha.",
           items: []
         },
         {
-          id: "torre", name: "Torre de Ceniza", kind: "Mazmorra", x: 0.38, y: 0.62, visible: false,
+          id: "torre", name: "Torre de Ceniza", kind: "Mazmorra", icon: "torreoscura", size: "normal", tint: "peligro", x: 0.38, y: 0.62, visible: false,
           summary: "Ruinas de una torre de magos.",
           secret: "Aquí empezó el fuego del bosque.",
           items: []
