@@ -57,7 +57,7 @@ export async function initCloud() {
   const app = fb.initializeApp(firebaseConfig);
   auth = fb.getAuth(app);
   db = fb.getFirestore(app);
-  useCloud(push);
+  useCloud(queuePush);
   setImageBackend({ put: putImageCloud, get: getImageCloud });
   fb.onAuthStateChanged(auth, async u => {
     cloud.user = u;
@@ -234,6 +234,15 @@ function docsOf(s, dm) {
   return out;
 }
 
+// Los cambios seguidos del mismo momento (publicar una tirada y completarla) salen juntos: así una tirada nueva
+// de un jugador llega como una sola creación, que es lo que las reglas le permiten (no puede actualizarla después).
+let queued = null;
+function queuePush(state) {
+  if (queued) { queued = state; return; }
+  queued = state;
+  queueMicrotask(() => { const st = queued; queued = null; push(st); });
+}
+
 function push(state) {
   if (!cloud.cid) return;
   const me = cloud.user.uid;
@@ -242,15 +251,19 @@ function push(state) {
   const lb = last.get("board/live"), lastTurn = lb ? (o => JSON.stringify([o.turn, o.round, o.seq]))(JSON.parse(lb)) : "";
   const allowed = (k, v) => cloud.isEditor || ((k.startsWith("characters/") || k.startsWith("tokens/")) && v && v.owner === me) || (k.startsWith("chronicle/") && v && v.by === me) || (k.startsWith("rolls/") && v && v.who === me) || (k === "board/live" && lastTurn !== JSON.stringify([v.turn, v.round, v.seq]));
   const ref = k => k === "C" ? fb.doc(db, "campaigns", cloud.cid) : fb.doc(db, "campaigns", cloud.cid, ...k.split("/"));
-  const batch = fb.writeBatch(db);
-  let n = 0;
+  // Firestore admite 500 escrituras por lote: los cambios grandes (restaurar una copia) se parten en varios
+  const ops = [];
   for (const [k, v] of all) {
     const j = JSON.stringify(v);
-    if (last.get(k) !== j && allowed(k, v)) { batch.set(ref(k), clean(v), k === "C" ? { merge: true } : {}); n++; }
+    if (last.get(k) !== j && allowed(k, v)) ops.push(b => b.set(ref(k), clean(v), k === "C" ? { merge: true } : {}));
   }
-  for (const [k, j] of last) if (!all.has(k) && allowed(k, JSON.parse(j))) { batch.delete(ref(k)); n++; }
+  for (const [k, j] of last) if (!all.has(k) && allowed(k, JSON.parse(j))) ops.push(b => b.delete(ref(k)));
   last = new Map([...all].map(([k, v]) => [k, JSON.stringify(v)]));
-  if (n) batch.commit().catch(e => { console.error(e); cloud.error = "No se pudo guardar el último cambio. Comprueba la conexión."; ping(); });
+  for (let i = 0; i < ops.length; i += 450) {
+    const batch = fb.writeBatch(db);
+    ops.slice(i, i + 450).forEach(op => op(batch));
+    batch.commit().catch(e => { console.error(e); cloud.error = "No se pudo guardar el último cambio. Comprueba la conexión."; ping(); });
+  }
 }
 
 /* ---------- Imágenes en Firestore (troceadas) ---------- */

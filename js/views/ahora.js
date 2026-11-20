@@ -7,15 +7,26 @@ import { phase, current, pending, eco, moveBudget } from "../core/turnos.js";
 import { visibleRolls } from "./tiradas.js";
 
 const fm = n => (Math.round(n * 10) / 10).toLocaleString("es-ES");
-const first = n => String(n || "").split(/\s+/)[0];
+// Nombre corto: «Brena Martillo-Ceniza» → «Brena»; «Goblin 2 (en la maleza)» → «Goblin 2» (el número distingue a los repetidos)
+const first = n => { const w = String(n || "").replace(/\s*\(.*?\)/g, "").trim().split(/\s+/); return w.length > 1 && /^\d+$/.test(w[w.length - 1]) ? `${w[0]} ${w[w.length - 1]}` : w[0]; };
 
 /** Devuelve { head, text, who, mine, tone, acts: [{k, id, label, gold}], next } */
 export function nowState(s, me, dm) {
-  const ph = phase(s), cur = current(s), N = t => first(nameOf(s, t));
+  const ph = phase(s), cur = current(s), N = t => (!dm && t && t.hidden ? "?" : first(nameOf(s, t)));
   const tok = id => s.tokens.find(t => t.id === id);
   const ownerOf = t => t && t.kind === "pc" ? t.owner : null; // de las criaturas se encarga el máster
   const mineT = s.tokens.find(t => t.kind === "pc" && t.owner === me);
-  if (!ph) return { head: "Exploración", text: "Movimiento libre. Habla con el máster o explora la mesa.", tone: "calm", acts: dm ? [{ k: "begin", label: "⚔️ Iniciar combate", gold: true }] : [] };
+  if (!ph) {
+    // Fuera de combate también hay cosas a medias: una trampa que ha saltado, un conjuro o un aliento por resolver
+    const pend = visibleRolls(s).filter(r => r.kind === "spell" && r.status === "pending" && Date.now() - (r.at || 0) < 3600e3).pop();
+    if (pend) {
+      const mine = (pend.targets || []).some(id => { const t = tok(id); return t && t.owner === me; });
+      const sv = (pend.saves || []).map(x => `${first(x.name)} ${x.total}${x.ok ? " ✓" : " ✗"}`).join(", ");
+      return dm ? { head: "Exploración · por resolver", who: "Máster", mine: true, tone: "alert", text: `${pend.label.replace(/ ·.*/, "")}${sv ? ` — salvaciones: ${sv} (CD ${pend.dc}).` : "."} Aplica el resultado.`, acts: [{ k: "rolls", label: "Resolver", gold: true }] }
+        : { head: "Exploración", who: "Máster", mine: false, tone: mine ? "alert" : "wait", text: mine ? `${pend.label.replace(/ ·.*/, "")}: el máster está aplicando el resultado.` : "El máster está resolviendo algo.", acts: [] };
+    }
+    return { head: "Exploración", text: "Movimiento libre. Habla con el máster o explora la mesa.", tone: "calm", acts: dm ? [{ k: "begin", label: "⚔️ Iniciar combate", gold: true }] : [] };
+  }
   if (ph === "init") {
     const miss = pending(s), acts = [];
     let text = miss.length ? `Faltan: ${miss.map(N).join(", ")}` : "Todos han tirado. El máster empieza la ronda.";
@@ -30,7 +41,9 @@ export function nowState(s, me, dm) {
   const rolls = visibleRolls(s).filter(r => r.status !== "void" && (r.at || 0) >= since).slice(-40);
   const hasDmg = id => rolls.some(x => x.link === id);
   const after = (() => { const o = order(s).filter(t => !(hpOf(s, t) && hpOf(s, t).cur <= 0 && t.kind !== "pc")); const i = o.findIndex(t => t.id === (cur && cur.id)); return o.length > 1 && i >= 0 ? o[(i + 1) % o.length] : null; })();
-  const base = { head: `Ronda ${s.board.round} · turno de ${cur ? N(cur) : "—"}`, next: after ? N(after) : null, nextMine: !!(after && after.owner === me) };
+  const base = { head: `Ronda ${s.board.round} · turno de ${cur ? N(cur) : "—"}`, next: after && !(after.hidden && !dm) ? N(after) : null, nextMine: !!(after && after.owner === me) };
+  // Turno de una criatura oculta: los jugadores no deben saber ni quién es
+  if (!dm && cur && cur.hidden) return { head: `Ronda ${s.board.round}`, next: base.next, nextMine: base.nextMine, who: "Máster", text: `El máster está resolviendo un turno. Espera${base.nextMine ? ": vas tú después" : ""}.`, mine: false, acts: [], tone: "calm" };
   const task = (who, text, mine, acts = [], tone = "wait") => ({ ...base, who, text, mine, acts, tone });
   // 1. Reacciones: interrumpen el turno en curso hasta que quien puede reaccionar decide (el máster puede decidir por él)
   const oa = rolls.find(r => oaOpen(s, r));

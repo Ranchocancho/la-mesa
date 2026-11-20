@@ -15,12 +15,16 @@ export const ESTADOS = [
   { id: "invisible", n: "Invisible", c: "#bfe4ff", t: "Ventaja en iniciativa. No te ven sin magia o sentidos especiales. Tus ataques con ventaja; los ataques contra ti, con desventaja." },
   { id: "paralizado", n: "Paralizado", c: "#3a8ad6", t: "Incapacitado y velocidad 0. Fallas salvaciones de Fuerza y Destreza. Ataques contra ti con ventaja; crítico a 1,5 m." },
   { id: "petrificado", n: "Petrificado", c: "#8c8c8c", t: "Convertido en piedra: incapacitado, velocidad 0, resistencia a todo el daño, inmune a veneno. Ataques contra ti con ventaja." },
-  { id: "agotamiento", n: "Agotamiento", c: "#b33a2e", t: "Por cada nivel: −2 a las tiradas d20 y −1,5 m de velocidad. A nivel 6 mueres. Un descanso largo quita un nivel.", levels: 6 },
+  { id: "agotamiento", n: "Cansancio", c: "#b33a2e", t: "Por cada nivel: −2 a las pruebas con d20 y −1,5 m de velocidad. A nivel 6 mueres. Un descanso largo quita un nivel.", levels: 6 },
+  { id: "ardiendo", n: "Ardiendo", c: "#e0662a", t: "SRD «Fuego»: 1d4 de daño de fuego al principio de cada uno de sus turnos. Con una acción se apaga rodando por el suelo (queda derribado)." },
   { id: "esquivando", n: "Esquivando", c: "#e8e2d0", t: "Acción de Esquivar: los ataques contra ti tienen desventaja y tienes ventaja en las salvaciones de Destreza, hasta el principio de tu siguiente turno." },
   { id: "destrabado", n: "Destrabado", c: "#a0d0c0", t: "Acción de Destrabarse: tu movimiento no provoca ataques de oportunidad durante el resto del turno." },
   { id: "concentracion", n: "Concentración", c: "#d6aa4e", t: "Mantiene un conjuro. Al recibir daño, salvación de Constitución (CD 10 o la mitad del daño, la mayor) o se pierde." },
   { id: "bendecido", n: "Bendecido", c: "#f2d36b", t: "Bendición: suma 1d4 a sus tiradas de ataque y de salvación mientras dure." },
   { id: "perdicion", n: "Perdición", c: "#5a2a6a", t: "Perdición: resta 1d4 a sus tiradas de ataque y de salvación mientras dure." },
+  { id: "debilitado", n: "Debilitado (maestría)", c: "#b08a6a", t: "Debilitar: desventaja en su próxima tirada de ataque antes del principio del siguiente turno de quien le acertó." },
+  { id: "ralentizado", n: "Ralentizado (maestría)", c: "#6a8ab0", t: "Ralentizar: su velocidad baja 3 m hasta el principio del siguiente turno de quien le acertó (no se acumula)." },
+  { id: "molestar", n: "Molestar (maestría)", c: "#c9a14a", t: "Molestar: ventaja en su siguiente tirada de ataque contra la criatura a la que dañó, antes del final de su siguiente turno." },
   { id: "muerto", n: "Muerto", c: "#111111", t: "Ha fallado tres salvaciones contra muerte (o recibió daño masivo). Solo la magia puede devolverlo." }
 ];
 export const estado = id => ESTADOS.find(e => e.id === id);

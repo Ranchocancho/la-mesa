@@ -1,6 +1,7 @@
 // Estructura de un combate (reglas 2024): posiciones → iniciativa → turnos en orden → rondas.
 // En su turno, cada criatura tiene movimiento (su velocidad), una acción, una acción adicional y una reacción por ronda.
 // También: alcance, cobertura y ventaja/desventaja según los estados, con el motivo escrito.
+import { vexOn } from "./maestria.js";
 import { store } from "./store.js";
 import { publish, roll } from "./dados.js";
 import { uid } from "./store.js";
@@ -46,7 +47,7 @@ export function rollInit(tokenId) {
   const s = store.get(), t = s.tokens.find(x => x.id === tokenId), c = t && charOf(s, t);
   // Una sola iniciativa por combate: si ya la tiene, no se vuelve a tirar (el máster puede corregirla a mano)
   if (!t || (t.init != null && t.init !== "")) { if (t) toast(`${c ? c.name : t.name} ya tiene iniciativa (${t.init}).`); return; }
-  const m = c ? Math.floor(((+c.abilities.des || 10) - 10) / 2) : +t.initBonus || 0;
+  const m = c ? Math.floor(((+c.abilities.des || 10) - 10) / 2) + (+c.initBonus || 0) : +t.initBonus || 0;
   const r = publish({ kind: "init", expr: `1d20${m >= 0 ? "+" : ""}${m}`, label: `Iniciativa de ${c ? c.name : t.name}`, by: t.id });
   store.commit("token", st => { const k = st.tokens.find(x => x.id === tokenId); if (k) k.init = r.total; });
 }
@@ -56,11 +57,17 @@ export function startRounds() {
     const o = order(s).filter(t => alive(s, t)); if (!o.length) return;
     s.board.combat = "live"; s.board.round = 1; advanceTo(s, o[0]);
   });
+  turnStarted();
 }
 function advanceTo(s, t) {
   s.board.turn = t.id; s.board.seq = (s.board.seq || 0) + 1;
   s.board.starts = { ...(s.board.starts || {}), [t.id]: s.board.seq };
   s.board.from = { c: t.c, r: t.r };
+  // Se quitan los estados que caducan al empezar este turno (Esquivar, Debilitar, Ralentizar…) y Molestar ya pasado
+  const st = s.board.starts;
+  s.tokens.forEach(k => {
+    if (k.conds) k.conds = k.conds.filter(c => !(c.seq != null && (st[c.until || k.id] || 0) > c.seq) && !(c.id === "molestar" && (st[k.id] || 0) > c.vseq && t.id !== k.id));
+  });
   onTurnStart(s, t); // criaturas: recarga (d6) de lo gastado y acciones legendarias de nuevo
 }
 /** 3. Terminar el turno: pasa a la siguiente criatura en pie; al dar la vuelta, nueva ronda. */
@@ -71,7 +78,10 @@ export function endTurn() {
     if (i < 0 || i === o.length - 1) { s.board.round = (s.board.round || 0) + 1; advanceTo(s, o[0]); }
     else advanceTo(s, o[i + 1]);
   });
+  turnStarted();
 }
+// Al empezar un turno: fuego (Ardiendo) y el peligro de la casilla (hielo, lava), con tiradas que confirma el máster
+function turnStarted() { const id = store.get().board && store.get().board.turn; if (id) import("./peligros.js").then(m => m.onTurnStarted(id)); }
 export function stopCombat() {
   import("./experiencia.js").then(m => m.postCombatXP());
   store.commit("board", s => { s.tokens.forEach(t => { t.init = null; t.eco = null; t.conds = (t.conds || []).filter(c => !["esquivando", "destrabado"].includes(c.id)); }); s.board.combat = null; s.board.turn = null; s.board.round = 0; s.board.from = null; s.board.starts = {}; s.board.seq = (s.board.seq || 0) + 1; });
@@ -79,7 +89,13 @@ export function stopCombat() {
 }
 
 /* ---------- Economía de acciones del turno ---------- */
-export function speedOf(s, t) { const c = charOf(s, t); return +(c ? c.speed : t.speed) || 9; }
+export function speedOf(s, t) {
+  const c = charOf(s, t), ex = (t.conds || []).find(x => x.id === "agotamiento");
+  let v = +(c ? c.speed : t.speed) || 9;
+  if (ex) v -= 1.5 * (+ex.lvl || 1); // Cansancio (SRD 2024): −1,5 m por nivel
+  if (has(t, "ralentizado")) v -= 3;
+  return Math.max(0, v);
+}
 /** Lo gastado en el turno actual (si el turno ha cambiado, empieza de cero). */
 export function eco(s, t) {
   const b = s.board || {}, e = t.eco || {};
@@ -161,7 +177,8 @@ export function cover(s, a, b) {
 
 /* ---------- Ventaja y desventaja según las reglas ---------- */
 const has = (t, id) => (t.conds || []).some(c => c.id === id && !expired(t, c));
-const expired = (t, c) => c.seq != null && store.get().board && ((store.get().board.starts || {})[t.id] || 0) > c.seq;
+// Un estado con «until» (efectos de maestría) dura hasta que empieza el turno de esa otra figura
+const expired = (t, c) => c.seq != null && store.get().board && ((store.get().board.starts || {})[c.until || t.id] || 0) > c.seq;
 export function modifiers(s, a, b, rng) {
   const adv = [], dis = [], d = dist(a, b), close = d <= 1;
   if (has(a, "invisible")) adv.push("eres invisible");
@@ -170,6 +187,8 @@ export function modifiers(s, a, b, rng) {
   if (has(a, "apresado")) dis.push("estás apresado");
   if (has(a, "derribado")) dis.push("estás derribado");
   if (has(a, "asustado")) dis.push("estás asustado");
+  if (has(a, "debilitado")) dis.push("Debilitar (maestría): su próximo ataque");
+  if (vexOn(s, a, b)) adv.push("Molestar (maestría)");
   for (const [id, why] of [["cegado", "el objetivo está cegado"], ["apresado", "el objetivo está apresado"], ["aturdido", "el objetivo está aturdido"], ["paralizado", "el objetivo está paralizado"], ["petrificado", "el objetivo está petrificado"], ["inconsciente", "el objetivo está inconsciente"]]) if (has(b, id)) adv.push(why);
   if (has(b, "derribado")) (close ? adv : dis).push(close ? "objetivo derribado a 1,5 m" : "objetivo derribado a distancia");
   if (has(b, "invisible")) dis.push("el objetivo es invisible");
@@ -179,4 +198,4 @@ export function modifiers(s, a, b, rng) {
   const autoCrit = close && (has(b, "paralizado") || has(b, "inconsciente"));
   return { adv, dis, net: adv.length && !dis.length ? 1 : dis.length && !adv.length ? -1 : 0, autoCrit };
 }
-export { has as hasCond };
+export { has as hasCond, alive };

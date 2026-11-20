@@ -226,6 +226,8 @@ export function addToBoard(m, n = 1) {
       if (c < 0 || r < 0 || c >= b.cols || r >= b.rows || busy.has(c + "," + r) || isWallT((b.terrain || {})[c + "," + r])) continue;
       busy.add(c + "," + r); out.push([c, r]);
     }
-    out.forEach(([c, r], i) => { const t = monsterToken(m, c, r); if (n > 1) t.name = `${m.n} ${i + 1}`; s.tokens.push(t); });
+    // Numeradas tras las que ya hubiera con el mismo nombre (Lobo 3, Lobo 4…)
+    const had = s.tokens.filter(t => t.kind !== "pc" && String(t.name).replace(/\s+\d+(\s*\(.*\))?$/, "") === m.n).length;
+    out.forEach(([c, r], i) => { const t = monsterToken(m, c, r); if (n > 1 || had) t.name = `${m.n} ${had + i + 1}`; s.tokens.push(t); });
   });
 }

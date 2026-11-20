@@ -1,6 +1,6 @@
 // Visión y niebla de guerra. El grupo comparte lo que ve: una casilla es visible si algún personaje en pie
 // tiene línea de visión hasta ella (los muros y las puertas cerradas la tapan) y además está iluminada o dentro de su visión en la oscuridad.
-import { TERRAIN, doorBlocksSight } from "../data/mapas.js";
+import { TERRAIN, PROPS, doorBlocksSight } from "../data/mapas.js";
 
 // Radio de luz de cada fuente, en casillas de 1,5 m (luz brillante + tenue)
 export const LIGHTS = { antorcha: 8, hoguera: 8, velas: 3 };
@@ -32,7 +32,7 @@ export function computeVision(grid, tokens, characters) {
   const dark = !!DARK_AMBIENT[grid.ambient];
   const lit = new Set();
   if (dark) for (const p of grid.props || []) {
-    const R = LIGHTS[p.k]; if (!R) continue;
+    const R = LIGHTS[p.k] || (PROPS[p.k] || {}).light; if (!R) continue;
     for (let r = p.r - R; r <= p.r + R; r++) for (let c = p.c - R; c <= p.c + R; c++)
       if (inside(c, r) && Math.max(Math.abs(c - p.c), Math.abs(r - p.r)) <= R && los(p, { c, r })) lit.add(c + "," + r);
   }

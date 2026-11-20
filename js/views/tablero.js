@@ -3,9 +3,9 @@
 import { getImage } from "../core/images.js";
 import { esc } from "../core/ui.js";
 import { estado } from "../data/estados.js";
-import { TERRAIN, TERRAIN_CATS, PROPS, PROP_CATS, isDoor, isWallT, propVisible } from "../data/mapas.js";
+import { TERRAIN, TERRAIN_CATS, PROPS, PROP_CATS, REGIONS, inRegion, isDoor, isWallT, propVisible } from "../data/mapas.js";
 import { terrainURL } from "./texturas.js";
-import { generateDungeon } from "../core/generador.js";
+import { generateDungeon, generateRegion } from "../core/generador.js";
 import { pathTo, moveHint } from "../core/movimiento.js";
 import { RES_TEXT, RES_COLOR } from "../core/golpes.js";
 export { TERRAIN, PROPS };
@@ -48,7 +48,16 @@ export function createBoard(host, opts) {
   const hist = { undo: [], redo: [] };
 
   const size = () => { const g = opts.model().grid; return [g.cols * T + 8, g.rows * T + 8]; };
-  const fit = () => { const [w, h] = size(); vb = [0, 0, w, h]; setVB(); };
+  // En el editor, el mapa encaja debajo de la barra de herramientas y arriba del todo (no centrado con un hueco encima)
+  const fit = () => {
+    const [w, h] = size(), r = svg.getBoundingClientRect();
+    if (opts.edit && r.width > 0 && r.height > 0) {
+      const bar = (host.querySelector(".mtools") || { offsetHeight: 48 }).offsetHeight + 18;
+      const k = Math.min(r.width / w, (r.height - bar - 8) / h);
+      if (k > 0) { const W2 = r.width / k, H2 = r.height / k; vb = [-(W2 - w) / 2, -bar / k, W2, H2]; setVB(); return; }
+    }
+    vb = [0, 0, w, h]; setVB();
+  };
   const setVB = () => svg.setAttribute("viewBox", vb.map(v => v.toFixed(1)).join(" "));
   const pt = e => { const r = svg.getBoundingClientRect(), k = Math.max(vb[2] / r.width, vb[3] / r.height); const ox = (r.width * k - vb[2]) / 2, oy = (r.height * k - vb[3]) / 2; return [vb[0] + (e.clientX - r.left) * k - ox, vb[1] + (e.clientY - r.top) * k - oy, k]; };
   const inside = h => { const g = opts.model().grid; return h.c >= 0 && h.r >= 0 && h.c < g.cols && h.r < g.rows; };
@@ -67,23 +76,28 @@ export function createBoard(host, opts) {
     const t = host.querySelector(".mapeditor"); if (!t) return;
     const g = opts.model().grid, tc = Object.entries(TERRAIN).filter(([, v]) => v.cat === E.tcat);
     const sw = (k, v, attr, on) => `<button class="tsw" data-${attr}="${k}" aria-pressed="${on}" title="${esc(v.n)}${v.dif ? " · terreno difícil" : ""}${v.hz ? " · " + esc(v.hz) : ""}"><i style="background-image:url(${terrainURL(k)})"></i><span>${esc(v.n)}</span></button>`;
-    const terrainPicker = (attr, cur, cats) => `<div class="tabs">${Object.entries(TERRAIN_CATS).filter(([k]) => cats.includes(k)).map(([k, n]) => `<button data-tcat="${k}" aria-pressed="${E.tcat === k}">${n}</button>`).join("")}</div>
-      <div class="pal">${Object.entries(TERRAIN).filter(([, v]) => v.cat === (cats.includes(E.tcat) ? E.tcat : cats[0])).map(([k, v]) => sw(k, v, attr, cur === k)).join("")}</div>`;
+    // Paquete de región de la escena: su pestaña «Región» enseña sus piezas (sin región, todas las de los paquetes)
+    const reg = g.region || "", regName = reg && REGIONS[reg] ? `${REGIONS[reg].i} ${REGIONS[reg].n.split(":")[0]}` : "Regiones";
+    const regOk = v => reg ? inRegion(v, reg) : !!(v.reg && v.reg.length);
+    const terrainPicker = (attr, cur, cats) => { const tc = cats.includes(E.tcat) ? E.tcat : cats[0];
+      return `<div class="tabs">${Object.entries(TERRAIN_CATS).filter(([k]) => cats.includes(k)).map(([k, n]) => `<button data-tcat="${k}" aria-pressed="${tc === k}">${k === "region" ? regName : n}</button>`).join("")}</div>
+      <div class="pal">${Object.entries(TERRAIN).filter(([, v]) => !v.void || tc === "muro").filter(([, v]) => tc === "region" ? regOk(v) : v.cat === tc).map(([k, v]) => sw(k, v, attr, cur === k)).join("")}</div>`; };
     let pal = "";
-    if (E.tool === "paint" || E.tool === "rect") pal = terrainPicker("brush", E.brush, ["interior", "exterior", "peligro", "muro"]) + (E.tool === "paint" ? `<div class="sizes">Tamaño ${[1, 2, 3, 5].map(n => `<button data-size="${n}" aria-pressed="${E.size === n}">${n}×${n}</button>`).join("")}</div>` : `<p class="hint">Arrastra para rellenar un rectángulo.</p>`);
+    if (E.tool === "paint" || E.tool === "rect") pal = terrainPicker("brush", E.brush, ["region", "interior", "exterior", "peligro", "muro"]) + (E.tool === "paint" ? `<div class="sizes">Tamaño ${[1, 2, 3, 5].map(n => `<button data-size="${n}" aria-pressed="${E.size === n}">${n}×${n}</button>`).join("")}</div>` : `<p class="hint">Arrastra para rellenar un rectángulo.</p>`);
     if (E.tool === "room") pal = `<p class="hint">Arrastra para trazar una habitación. Suelo:</p><div class="pal">${Object.entries(TERRAIN).filter(([, v]) => !v.wall && !v.liquid && v.cat !== "peligro").map(([k, v]) => sw(k, v, "floor", E.floor === k)).join("")}</div><p class="hint">Muros:</p><div class="pal">${Object.entries(TERRAIN).filter(([, v]) => v.wall && !v.void).map(([k, v]) => sw(k, v, "wallt", E.wall === k)).join("")}</div>`;
     if (E.tool === "wall") pal = `<p class="hint">Arrastra para levantar un muro recto.</p><div class="pal">${Object.entries(TERRAIN).filter(([, v]) => v.wall).map(([k, v]) => sw(k, v, "wallt", E.wall === k)).join("")}</div>`;
-    if (E.tool === "prop") pal = `<div class="tabs">${Object.entries(PROP_CATS).map(([k, n]) => `<button data-pcat="${k}" aria-pressed="${E.pcat === k}">${n}</button>`).join("")}</div>
-      <div class="pal props">${Object.entries(PROPS).filter(([, v]) => v.cat === E.pcat).map(([k, v]) => `<button class="psw" data-prop="${k}" aria-pressed="${E.prop === k}" title="${esc(v.n)}${v.block ? " · no se puede atravesar" : ""}${v.cover ? " · da cobertura" : ""}${v.hidden ? " · oculto a los jugadores" : ""}"><b>${v.i}</b><span>${esc(v.n)}</span></button>`).join("")}</div>
-      <p class="hint">${E.pcat === "puerta" ? "Toca un muro para abrir el hueco y poner la puerta." : E.pcat === "tesoro" || E.pcat === "peligro" ? "Colócalo y tócalo con ✋ para escribir su contenido o su efecto." : "Toca una casilla para colocarlo. Con ✋ lo seleccionas, lo mueves y lo giras."}</p>`;
+    if (E.tool === "prop") pal = `<div class="tabs">${Object.entries(PROP_CATS).map(([k, n]) => `<button data-pcat="${k}" aria-pressed="${E.pcat === k}">${k === "region" ? regName : n}</button>`).join("")}</div>
+      <div class="pal props">${Object.entries(PROPS).filter(([, v]) => E.pcat === "region" ? (reg ? inRegion(v, reg) : v.cat === "region") : v.cat === E.pcat).map(([k, v]) => `<button class="psw" data-prop="${k}" aria-pressed="${E.prop === k}" title="${esc(v.n)}${v.block ? " · no se puede atravesar" : ""}${v.cover ? ` · cobertura ${v.cover === "3q" ? "de tres cuartos" : "media"}` : ""}${v.light ? " · ilumina" : ""}${v.haz === "fall" ? " · caída" : v.haz === "fire" ? " · quema" : ""}${v.srd ? " · trampa del SRD" : ""}${v.hidden ? " · oculto a los jugadores" : ""}${v.note ? " · " + esc(v.note) : ""}"><b>${v.i}</b><span>${esc(v.n)}</span></button>`).join("")}</div>
+      <p class="hint">${E.pcat === "puerta" ? "Toca un muro para abrir el hueco y poner la puerta." : E.pcat === "tesoro" || E.pcat === "peligro" ? "Colócalo y tócalo con ✋ para ver o cambiar su contenido o su efecto." : E.pcat === "region" && !reg ? "Elige la región de la escena en ⚙ Mapa para ver solo sus piezas." : "Toca una casilla para colocarlo. Con ✋ lo seleccionas, lo mueves y lo giras."}</p>`;
     if (E.tool === "erase") pal = `<div class="sizes">Tamaño ${[1, 2, 3].map(n => `<button data-size="${n}" aria-pressed="${E.size === n}">${n}×${n}</button>`).join("")}</div><p class="hint">Quita fichas y objetos; si no hay, el terreno.</p>`;
-    if (E.tool === "foe") pal = `<p class="hint">Toca una casilla para poner un enemigo y edítalo en el panel.</p>`;
-    if (E.tool === "move") pal = `<p class="hint">Arrastra fichas y objetos. Toca un objeto para editarlo.</p>`;
-    t.innerHTML = `<div class="mtools">${TOOLS.map(([k, ic, n]) => `<button data-tool="${k}" aria-pressed="${E.tool === k}" title="${n}"><b>${ic}</b><span>${n.split(" ")[0]}</span></button>`).join("")}
+    // Mover y Enemigo no tienen paleta: su ayuda va en el título del botón, para no ocupar una segunda barra sobre el mapa
+    t.innerHTML = `<div class="mtools">${TOOLS.map(([k, ic, n]) => `<button data-tool="${k}" aria-pressed="${E.tool === k}" title="${n}${k === "move" ? ": arrastra fichas y objetos; toca un objeto para editarlo" : k === "foe" ? ": toca una casilla para poner un enemigo y edítalo en el panel" : ""}"><b>${ic}</b><span>${n.split(" ")[0]}</span></button>`).join("")}
         <span class="sep"></span><button data-act="undo" ${hist.undo.length ? "" : "disabled"} title="Deshacer (Ctrl+Z)"><b>↶</b><span>Deshacer</span></button><button data-act="redo" ${hist.redo.length ? "" : "disabled"} title="Rehacer (Ctrl+Y)"><b>↷</b><span>Rehacer</span></button>
         <button data-act="more" aria-pressed="${!!E.more}" title="Tamaño del mapa y generar mazmorra"><b>⚙</b><span>Mapa</span></button></div>
-      ${E.more ? `<div class="mpal"><div class="row">Tamaño <label>ancho <input type="number" min="6" max="60" id="mcols" value="${g.cols}"></label><label>alto <input type="number" min="6" max="60" id="mrows" value="${g.rows}"></label><button class="btn small" data-act="resize">Aplicar</button></div>
-        <div class="row"><button class="btn small gold" data-act="gen">🎲 Generar mazmorra</button><button class="btn small" data-act="gencave">🕳 Generar cueva</button><button class="btn small" data-act="fill">Rellenar todo con el pincel</button></div>
+      ${E.more ? `<div class="mpal"><div class="row">Región <select data-region aria-label="Región de la escena"><option value="">Sin región</option>${Object.entries(REGIONS).map(([k, v]) => `<option value="${k}" ${reg === k ? "selected" : ""}>${v.i} ${v.n}</option>`).join("")}</select>${!reg && opts.suggestRegion && opts.suggestRegion() ? `<button class="btn small" data-region-sugg="${opts.suggestRegion()}">Usar la del lugar: ${REGIONS[opts.suggestRegion()].n.split(":")[0]}</button>` : ""}</div>
+        <div class="row">Peligros <label title="Regla de campaña: el SRD no trae la lava">daño de la lava <input id="mlava" value="${esc(g.lavaDmg || "")}" placeholder="p. ej. 6d10" style="width:72px"></label><label title="SRD «Caídas»: 1d6 por cada 3 m">altura del abismo (m) <input type="number" id="mfall" min="1" max="120" value="${g.fallH || 3}"></label></div>
+        <div class="row">Tamaño <label>ancho <input type="number" min="6" max="60" id="mcols" value="${g.cols}"></label><label>alto <input type="number" min="6" max="60" id="mrows" value="${g.rows}"></label><button class="btn small" data-act="resize">Aplicar</button></div>
+        <div class="row"><button class="btn small gold" data-act="gen">🎲 Generar mazmorra</button><button class="btn small" data-act="gencave">🕳 Generar cueva</button>${reg ? `<button class="btn small gold" data-act="genreg">${REGIONS[reg].i} Generar ${REGIONS[reg].n.split(":")[0].toLowerCase()}</button>` : ""}<button class="btn small" data-act="fill">Rellenar todo con el pincel</button></div>
         <p class="hint">Generar sustituye el mapa actual (se puede deshacer).</p></div>` : ""}
       <div class="mpal">${pal}</div>`;
     t.querySelectorAll("[data-tool]").forEach(b => b.onclick = () => { E.tool = b.dataset.tool; if (E.tool !== "move") selectProp(null); tools(); });
@@ -94,6 +108,11 @@ export function createBoard(host, opts) {
     t.querySelectorAll("[data-pcat]").forEach(b => b.onclick = () => { E.pcat = b.dataset.pcat; const f = Object.entries(PROPS).find(([, v]) => v.cat === E.pcat); if (f) E.prop = f[0]; tools(); });
     t.querySelectorAll("[data-prop]").forEach(b => b.onclick = () => { E.prop = b.dataset.prop; tools(); });
     t.querySelectorAll("[data-size]").forEach(b => b.onclick = () => { E.size = +b.dataset.size; tools(); });
+    const setRegion = k => { edit(mm => { mm.grid.region = k; if (k && REGIONS[k]) { mm.grid.ambient = REGIONS[k].light; mm.grid.sound = REGIONS[k].sound; } }); if (k) { E.tcat = "region"; E.pcat = "region"; } tools(); render(); };
+    const rs = t.querySelector("[data-region]"); if (rs) rs.onchange = () => setRegion(rs.value);
+    const rg = t.querySelector("[data-region-sugg]"); if (rg) rg.onclick = () => setRegion(rg.dataset.regionSugg);
+    const lv = t.querySelector("#mlava"); if (lv) lv.onchange = () => edit(mm => { mm.grid.lavaDmg = lv.value.trim().replace(/\s+/g, ""); });
+    const fh = t.querySelector("#mfall"); if (fh) fh.onchange = () => edit(mm => { mm.grid.fallH = Math.max(1, Math.min(120, +fh.value || 3)); });
     t.querySelectorAll("[data-act]").forEach(b => b.onclick = () => {
       const a = b.dataset.act;
       if (a === "undo") undo(); else if (a === "redo") redo(); else if (a === "more") { E.more = !E.more; tools(); }
@@ -101,6 +120,7 @@ export function createBoard(host, opts) {
         edit(mm => { mm.grid.cols = c; mm.grid.rows = r; mm.grid.props = (mm.grid.props || []).filter(p => p.c < c && p.r < r); for (const k of Object.keys(mm.grid.terrain || {})) { const [x, y] = k.split(",").map(Number); if (x >= c || y >= r) delete mm.grid.terrain[k]; }
           for (let y = 0; y < r; y++) for (let x = 0; x < c; x++) if (!mm.grid.terrain[key(x, y)]) mm.grid.terrain[key(x, y)] = E.brush; mm.tokens.forEach(k => { k.c = Math.min(k.c, c - 1); k.r = Math.min(k.r, r - 1); }); }); fit(); }
       else if (a === "gen" || a === "gencave") edit(mm => { const d = generateDungeon(mm.grid.cols, mm.grid.rows, { cave: a === "gencave", floor: E.floor, wall: a === "gencave" ? "muroroca" : E.wall }); mm.grid.terrain = d.terrain; mm.grid.props = d.props; if (d.start) mm.grid.start = d.start; mm.tokens.splice(0, mm.tokens.length, ...mm.tokens.filter(k => d.terrain[key(k.c, k.r)] && !isWallT(d.terrain[key(k.c, k.r)]))); if (opts.onStart && d.start) opts.onStart(d.start); })
+      else if (a === "genreg") edit(mm => { const d = generateRegion(mm.grid.cols, mm.grid.rows, mm.grid.region); mm.grid.terrain = d.terrain; mm.grid.props = d.props; if (d.start) mm.grid.start = d.start; mm.tokens.splice(0, mm.tokens.length, ...mm.tokens.filter(k => d.terrain[key(k.c, k.r)] && !isWallT(d.terrain[key(k.c, k.r)]))); if (opts.onStart && d.start) opts.onStart(d.start); })
       else if (a === "fill") edit(mm => { mm.grid.terrain = {}; for (let y = 0; y < mm.grid.rows; y++) for (let x = 0; x < mm.grid.cols; x++) mm.grid.terrain[key(x, y)] = E.brush; });
     });
   }
@@ -162,7 +182,7 @@ export function createBoard(host, opts) {
         <circle r="${rad + 3}" class="halo"/>
         ${(k.conds || []).map((cd, i) => { const e = estado(cd.id); return e ? `<circle r="${rad + 5 + i * 3.5}" fill="none" stroke="${e.c}" stroke-width="3"/>` : ""; }).join("")}
         <circle r="${rad}" fill="${dk.color || "#777"}" stroke="${ring}" stroke-width="3"/>
-        ${img ? `<image href="${img}" x="${-rad}" y="${-rad}" width="${rad * 2}" height="${rad * 2}" clip-path="url(#cp-${k.id})" preserveAspectRatio="xMidYMid slice"/>` : `<text class="ini" y="5">${esc((dk.name || "?").replace(/\s*\(.*?\)/g, "").split(/\s+/).map(w => w.replace(/[^\p{L}]/gu, "")[0]).filter(Boolean).slice(0, 2).join("").toUpperCase() || "?")}</text>`}
+        ${img ? `<image href="${img}" x="${-rad}" y="${-rad}" width="${rad * 2}" height="${rad * 2}" clip-path="url(#cp-${k.id})" preserveAspectRatio="xMidYMid slice"/>` : `<text class="ini" y="5">${esc((dk.name || "?").replace(/\s*\(.*?\)/g, "").split(/\s+/).map(w => w.replace(/[^\p{L}\p{N}]/gu, "")[0]).filter(Boolean).slice(0, 2).join("").toUpperCase() || "?")}</text>`}
         ${hp ? `<rect x="${-rad}" y="${rad + 3}" width="${rad * 2}" height="6" rx="2" class="hpbg"/><rect x="${-rad}" y="${rad + 3}" width="${rad * 2 * pct}" height="6" rx="2" class="hpfg ${pct <= .25 ? "low" : pct <= .5 ? "mid" : ""}"/>` : ""}
         ${dk.isTurn ? `<circle r="${rad + 7}" class="turn"/>` : ""}
       </g>`;
@@ -368,7 +388,7 @@ export function createBoard(host, opts) {
         mm.grid.props = mm.grid.props.filter(p => !(p.c === h.c && p.r === h.r && isDoor(p)));
         if (isWallT(here)) { const n = [[0, -1], [1, 0], [0, 1], [-1, 0]].map(([a, b]) => mm.grid.terrain[key(h.c + a, h.r + b)]).find(x => x && !isWallT(x)); mm.grid.terrain[key(h.c, h.r)] = n || "piedra"; }
       } else if (isWallT(here) && !v.wall) return;
-      mm.grid.props.push({ id, c: h.c, r: h.r, k: E.prop, rot: 0, hidden: !!v.hidden, ...(v.loot ? { loot: "" } : {}), ...(v.trap ? { trap: { dc: 13, save: "des", dmg: "2d10", type: "perforante", detect: 13 } } : {}) });
+      mm.grid.props.push({ id, c: h.c, r: h.r, k: E.prop, rot: 0, hidden: !!v.hidden, ...(v.loot ? { loot: "" } : {}), ...(v.trap ? { trap: v.srd ? { srd: v.srd } : { dc: 13, save: "des", dmg: "2d10", type: "perforante", detect: 13 } } : {}), ...(v.haz === "fall" ? { h: v.h || 3 } : {}) });
     });
     if (v.loot || v.trap || v.cat === "marca") selectProp(id);
   }

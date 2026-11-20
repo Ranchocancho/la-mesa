@@ -1,5 +1,7 @@
 // La mesa táctica dentro de la Partida: tablero, columna de iniciativa y mini-ficha (HUD) plegable.
 import { combatEvents } from "../core/golpes.js";
+// Iniciales para la tira de iniciativa: sin paréntesis y con el número de los repetidos («Goblin 2 (en la maleza)» → «G2»)
+const initials = n => (String(n || "?").replace(/\s*\(.*?\)/g, "").split(/\s+/).map(w => w.replace(/[^\p{L}\p{N}]/gu, "")[0]).filter(Boolean).slice(0, 2).join("").toUpperCase() || "?");
 import { kitHTML, bindKit } from "./accionesnpc.js";
 import { loadKits, kitOf, gate as kitGate } from "../core/criaturas.js";
 import { store } from "../core/store.js";
@@ -16,6 +18,7 @@ import { PROPS } from "../data/mapas.js";
 import { reachMap, pathTo, moveHint } from "../core/movimiento.js";
 import { propEditorHTML, bindPropEditor } from "./propeditor.js";
 import { triggerTrap, announceLoot } from "../core/hechizos.js";
+import { hazardAt, onEnter, douse } from "../core/peligros.js";
 import { EFECTOS } from "../data/efectos.js";
 import { computeVision, explored } from "../core/vision.js";
 import { renderRolls, visibleRolls } from "./tiradas.js";
@@ -74,7 +77,7 @@ export function mountTactical(host, opts = {}) {
     // En combate, cada uno mueve su figura solo en su turno; el máster, siempre
     canMove: t => isDM(S()) || (!!t.owner && t.owner === me() && (phase(S()) !== "live" || S().board.turn === t.id)),
     mutate: (label, fn) => {
-      let warn = null; const oas = [], traps = [];
+      let warn = null; const oas = [], traps = [], hzs = [];
       store.commit(label === "token" ? "token" : "board", s => {
         const before = new Map(s.tokens.map(t => [t.id, { c: t.c, r: t.r }]));
         fn({ grid: s.board, tokens: s.tokens });
@@ -108,10 +111,18 @@ export function mountTactical(host, opts = {}) {
           else if (x && !x.dash && e.dashAuto) { e.dash = false; e.act = false; e.dashAuto = false; }
           t.eco = e;
         }
+        // Peligros del terreno (caídas, hielo, fuego, lava): al entrar; en combate, solo la primera vez en el turno
+        if (!opts.edit) for (const t of s.tokens) { const o = before.get(t.id); if (!o || (o.c === t.c && o.r === t.r)) continue;
+          const hz = hazardAt(s, t.c, t.r); if (!hz) continue;
+          const was = hazardAt(s, o.c, o.r);
+          if (phase(s) === "live") { t.eco = t.eco || {}; const m = t.eco.hz && t.eco.hz.q === s.board.seq ? t.eco.hz : { q: s.board.seq, k: [] }; if (m.k.includes(hz.key)) continue; t.eco.hz = { q: m.q, k: [...m.k, hz.key] }; }
+          else if (was && was.key === hz.key) continue;
+          hzs.push({ t: t.id, hz }); }
       });
       if (warn) toast(warn);
       oas.forEach(o => offerOA(o.by, o.target));
       traps.forEach(tr => triggerTrap(tr.p, [tr.t]));
+      if (hzs.length) onEnter(hzs);
     },
     onProp: p => { selPropId = p.id; hudOpen = true; drawHud(); },
     // Hasta dónde puede llegar la ficha que tiene el turno (la suya o, para el máster, cualquiera)
@@ -267,7 +278,7 @@ export function mountTactical(host, opts = {}) {
       const fx = (flashes.get(t.id) && flashes.get(t.id).until > Date.now()) ? " fx-" + flashes.get(t.id).k : "";
       const now = ph === "live" && k === 0;
       return `<span class="tbchip ${t.kind}${now ? " now" : ""}${h && h.cur <= 0 ? " down" : ""}${t.owner && t.owner === me() ? " mine" : ""}${fx}" data-tsel="${t.id}" title="${esc(nm)}${h ? ` · ${exact ? `${h.cur}/${h.max} PG` : healthWord(h.cur, h.max)}` : ""}">
-        <i class="tbav" style="background:${(c || t).color || "#777"}">${esc((nm || "?").split(/\s+/).map(w => w[0]).slice(0, 2).join("").toUpperCase())}${t.init != null && ph === "live" ? `<sup>${t.init}</sup>` : ""}</i>
+        <i class="tbav" style="background:${(c || t).color || "#777"}">${esc(initials(nm))}${t.init != null && ph === "live" ? `<sup>${t.init}</sup>` : ""}</i>
         ${now ? `<em>${esc(nm)}</em>` : ""}
         ${h ? `<span class="ihb ${shown <= 0.25 ? "low" : shown <= 0.5 ? "mid" : ""}"><i style="width:${Math.round(shown * 100)}%"></i></span>` : ""}
         <span class="tbconds">${(t.conds || []).slice(0, 4).map(cd => { const e = estado(cd.id); return e ? `<i style="background:${e.c}"></i>` : ""; }).join("")}</span></span>`;
@@ -386,6 +397,7 @@ export function mountTactical(host, opts = {}) {
       else if (nm !== "Atacar" && nm !== "Magia") spend(tid, "act");
       drawHud();
     });
+    $$("[data-douse]", R).forEach(b => b.onclick = () => { if (mineOk(b.dataset.douse)) douse(b.dataset.douse).then(drawHud); });
     $$("[data-rule]", R).forEach(b => b.onclick = () => { ruleOpen = ruleOpen === b.dataset.rule ? null : b.dataset.rule; drawHud(); });
     const et = $("#endturn", R); if (et) et.onclick = endTurn;
     const dt = $("#dmtarget", R); if (dt) dt.onchange = () => { dmTarget = dt.value || null; };
@@ -532,6 +544,7 @@ function turnCard(s, t) {
   }
   return `<div class="hudcard turncard compact"><div class="tch"><b>${esc(nameOf(s, t).split(" ")[0])}</b><small>ronda ${s.board.round}</small><span class="ecos">${chip("act", "⚡ Acción", e.act)}${chip("bonus", "✦ Adic.", e.bonus)}${chip("react", "↺ Reac.", !!e.react)}</span><button class="btn gold small" id="endturn">Terminar ▶</button></div>
     <div class="movebar thin ${e.mov > max ? "over" : ""}"><i style="width:${pct}%"></i><em>🦶 ${e.mov.toLocaleString("es-ES")} / ${max.toLocaleString("es-ES")} m${e.dash ? " · corriendo" : ""}</em></div>
+    ${(t.conds || []).some(c => c.id === "ardiendo") ? `<button class="btn small red" data-douse="${t.id}" title="SRD «Fuego»: con una acción apagas el fuego rodando por el suelo y quedas derribado" ${e.act ? "disabled" : ""}>🔥 Apagarse (acción)</button>` : ""}
     <details class="accd" ${accOpen ? "open" : ""}><summary>Otras acciones</summary><div class="accs">${ACCIONES.map(([n, d]) => `<button class="btn small" data-acc="${t.id}|${n}" title="${esc(d)}" ${e.act && n !== "Atacar" && n !== "Magia" ? "disabled" : ""}>${n}</button>`).join("")}</div></details>
     ${rule ? `<div class="rulebox"><b>${esc(ruleOpen)}</b> <small>[${esc(rule.tipo || "regla")}]</small>${rule.txt.split("\n").slice(0, 3).map(p => `<p>${esc(p)}</p>`).join("")}<button class="btn small" data-rule="${esc(ruleOpen)}">Cerrar</button></div>` : ""}</div>`;
 }

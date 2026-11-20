@@ -5,7 +5,8 @@ import { visibleLive, lastClosed, pastSessions, sessionName, nextNumber, startSe
 import { presence } from "../core/presence.js";
 import { getImage } from "../core/images.js";
 import { exampleMap } from "../data/worldmap.js";
-import { $, $$, esc, avatar, toast } from "../core/ui.js";
+import { $, $$, esc, avatar, toast, pickFile } from "../core/ui.js";
+import { exportBackup, readBackup, restoreBackup, lastBackup } from "../core/copia.js";
 
 let el = null, editing = null;
 
@@ -54,6 +55,10 @@ function draw() {
           <div class="row"><input id="invite" readonly class="btn" style="flex:1;min-width:0;text-align:left;font-size:13px" aria-label="Enlace de invitación"><button class="btn gold small" id="copyinv">Copiar enlace</button></div>` : ""}
         ${dm && store.mode() === "local" ? `<p class="note" style="margin-top:16px">Modo demostración: abre esta página en otra pestaña y entra como un jugador para ver la sincronización.</p>
           <div class="row" style="margin-top:12px"><button class="btn small danger" id="reset">Restablecer el mundo de ejemplo</button></div>` : ""}
+        ${dm ? `<h2 class="sec" style="margin-top:20px">Copia de seguridad</h2>
+          <p class="note" style="margin:0 0 8px">Descarga todo el mundo en un archivo (lugares, lore, fichas, escenas, crónica e imágenes). Guárdalo en tu ordenador o en la nube. ${backupAge()}</p>
+          <div class="row"><button class="btn gold small" id="bkdown">⬇ Descargar copia</button><button class="btn small" id="bkup">⬆ Restaurar una copia</button></div>
+          <div id="bkbox"></div>` : ""}
       </section>
     </div>
     <section style="margin-top:24px"><h2 class="sec">Sesiones anteriores</h2>
@@ -89,8 +94,37 @@ function draw() {
       catch (e) { inv.select(); toast("Selecciona el enlace y cópialo"); }
     };
   }
+  on("bkdown", async () => {
+    const b = $("#bkdown", el); b.disabled = true;
+    try { const r = await exportBackup(t => { b.textContent = "⬇ " + t; }); toast(`Copia descargada (${(r.size / 1048576).toLocaleString("es-ES", { maximumFractionDigits: 1 })} MB, ${r.images} imágenes)${r.missing ? ` · ${r.missing} imágenes no se encontraron` : ""}`); }
+    catch (e) { console.error(e); toast("No se pudo hacer la copia."); }
+    draw();
+  });
+  on("bkup", async () => {
+    const f = await pickFile(".json,application/json"); if (!f) return;
+    const box = $("#bkbox", el);
+    try {
+      const { data, summary: m } = await readBackup(f);
+      box.innerHTML = `<div class="bkconfirm"><p><b>${esc(m.name)}</b> · copia del ${esc(new Date(m.at).toLocaleString("es-ES"))}<br>${m.places} lugares · ${m.lore} entradas de lore · ${m.characters} fichas · ${m.scenes} escenas · ${m.sessions} sesiones · ${m.images} imágenes</p>
+        <p class="warn">Sustituye todo el contenido de «${esc(store.get().campaign.name)}» por el de la copia. Los miembros y másteres se quedan como están; las fichas de jugadores que no estén en este mundo quedan sin dueño. Descarga antes una copia de lo actual si dudas.</p>
+        <div class="row"><button class="btn small danger" id="bkok">Restaurar ahora</button><button class="btn small" id="bkno">Cancelar</button></div></div>`;
+      $("#bkno", box).onclick = () => { box.innerHTML = ""; };
+      $("#bkok", box).onclick = async () => {
+        const ok = $("#bkok", box); ok.disabled = true;
+        try { await restoreBackup(data, t => { ok.textContent = t; }); toast("Copia restaurada"); }
+        catch (e) { console.error(e); toast("No se pudo restaurar la copia."); }
+        draw();
+      };
+    } catch (e) { box.innerHTML = `<p class="warn">${esc(e.message)}</p>`; }
+  });
   const rs = $("#reset");
   if (rs) rs.onclick = () => { if (rs.dataset.sure) { store.reset(); toast("Mundo de ejemplo restablecido"); } else { rs.dataset.sure = "1"; rs.textContent = "Pulsa otra vez para confirmar"; } };
+}
+
+function backupAge() {
+  const t = lastBackup(); if (!t) return "Aún no has descargado ninguna copia desde este navegador.";
+  const d = Math.floor((Date.now() - t) / 86400000);
+  return d < 1 ? "Última copia: hoy." : d === 1 ? "Última copia: ayer." : `Última copia: hace ${d} días.${d > 14 ? " Conviene hacer otra." : ""}`;
 }
 
 function drawParty() {

@@ -531,3 +531,63 @@ Las cuatro escenas de ejemplo antiguas (con «enemigos» genéricos sin habilida
 En **Preparar escenas**, el máster tiene **🔄 Renovar escenas de ejemplo**: quita las cuatro antiguas solo si siguen sin tocar (mismo nombre y sin criaturas del SRD) y añade las nuevas. Las escenas propias no se tocan.
 
 Arreglos: los humanoides «Medianos o Pequeños» del SRD (mago, veterano…) salían como Pequeños; las criaturas añadidas ahora llevan sus PX según la tabla oficial por VD; iniciales y placas de nombre sin paréntesis.
+
+## Hito 32 · Arreglos de la auditoría
+
+- **Datos de criaturas**: cuatro perfiles del SRD traían pegado el de las criaturas siguientes de su página (el Jefe goblin tenía 9 ataques ajenos; también Grimlock, Hombre tigre y Noble): ahora cada uno solo tiene lo suyo. El **daño condicional** («más 1d4 si la tirada tenía ventaja», goblins) se suma solo cuando se ataca con ventaja, y el **daño alternativo** («o 2d4 si el enjambre está maltrecho») aparece como nota para el máster en vez de sumarse.
+- **Criaturas ocultas**: los jugadores ya no ven su nombre en el panel «Ahora» cuando les toca («El máster está resolviendo un turno»).
+- **Criaturas repetidas numeradas** al cargar una escena o añadirlas («Goblin 1 (en la maleza)», «Goblin 2…», «Lobo 3»), también en la tira de iniciativa («G2») y en las placas.
+- **Trampas fuera de combate**: cuando salta una, el panel «Ahora» del máster lo avisa con las salvaciones y un botón «Resolver»; el jugador afectado ve que el máster lo está aplicando.
+
+## Hito 33 · Dificultad de los encuentros
+- Presupuesto de PX por nivel del SRD 5.2.1 (baja, moderada, alta) sumado para el grupo; la escena muestra los PX de sus criaturas (todas las plantas) y la dificultad: trivial, baja, moderada, alta o por encima de alta.
+- En la mesa, el máster ve una etiqueta «⚖️ Dificultad · PX» con el detalle al pasar por encima.
+- Escenas de ejemplo equilibradas para 4 PJ de nivel 5 (más enanos en la taberna, más gules en el cementerio, lobos terribles, osgos y un ogro en el bosque).
+- «Renovar escenas de ejemplo» también cambia las de ejemplo de la versión anterior por las equilibradas, si solo tienen criaturas del SRD.
+
+## Hito 34 · Creación de personaje guiada (SRD 5.2.1)
+- «✨ Crear personaje paso a paso» en El grupo (la ficha en blanco sigue disponible).
+- Pasos: clase → origen (trasfondo, especie y sus elecciones: ancestro, linaje, legado, tamaño, aptitud mágica; la dote de Versátil del humano) → características (conjunto estándar propuesto por clase, coste en puntos de 27 o 4d6 sin el menor) con los aumentos del trasfondo (+2/+1 o +1/+1/+1, máximo 20) → habilidades (trasfondo, clase, Sentidos agudos, Diestro, Habilidoso, Pericia del pícaro, sin repetir) → rasgos y dotes (Orden divina, Orden primigenia, invocación de brujo sin requisitos, estilo de combate, maestría con armas) → conjuros (trucos y conjuros de nivel 1 según la tabla de la clase, libro de 6 del mago, Iniciado en la magia, los de la especie y los rasgos) → equipo A/B(/C) de clase y trasfondo e idiomas → detalles → resumen.
+- La ficha sale calculada: PG (dado máximo + CON, +1 enano), CA según la armadura del equipo (Defensa sin armadura del bárbaro y el monje, escudo, estilo Defensa), velocidad y visión en la oscuridad de la especie, salvaciones, habilidades, iniciativa con Alerta, armas con ataque y daño (sutil, a distancia, competencia, Tiro con arco, maestría), espacios de conjuro, rasgos de nivel 1 con su texto, inventario con el contenido de los paquetes, monedas e idiomas.
+- Tablas nuevas del SRD: armas (p. 98) y armaduras (p. 99) en js/data/equipo.js; clases, trasfondos, especies, dotes de origen e idiomas en js/data/creacion.js.
+- La iniciativa suma el bonificador de Alerta.
+
+## Hito 35 · Copia de seguridad del mundo
+- En Inicio, el máster tiene «⬇ Descargar copia»: un .json con todo el mundo (lugares, regiones, lore, fichas, escenas, sesiones, crónica, tiradas, mesa) y las imágenes que usa (mapas, retratos, ilustraciones). Recuerda cuándo se hizo la última.
+- «⬆ Restaurar una copia» enseña qué trae (nombre, fecha, lugares, lore, fichas, escenas, imágenes) y pide confirmación. Sustituye el contenido del mundo abierto pero conserva miembros, másteres y la partida en curso; las fichas de jugadores que no estén en ese mundo quedan sin dueño para asignarlas.
+- En la nube, los cambios grandes se guardan en lotes de 450 escrituras (Firestore no admite más de 500 por lote).
+
+## Hito 36 · Inspiración heroica y maestría con armas
+- Inspiración heroica (SRD 5.2.1): el máster la da o la quita con ✨ en la ficha y en «Personajes en la mesa»; los humanos la recuperan con el descanso largo (Ingenioso). El jugador ve el estado en su ficha.
+- Gastarla: «✨ Repetir» aparece en el registro, en tu tirada, justo después de tirar (ataque ya confirmado, prueba, salvación, iniciativa o daño sin aplicar). Repite el d20 (con ventaja o desventaja, solo el más bajo de los dos) o el dado de daño más bajo, y vale el nuevo resultado aunque sea peor.
+- Maestría con armas: las armas con «Maestría: X» en las notas (el asistente de creación lo pone solo; a mano también vale) la usan en combate:
+  - Debilitar (al acertar) y Molestar (al causar daño): automáticas; caducan según el SRD.
+  - Derribar (salvación de CON), Empujar 3 m en línea recta, Ralentizar (−3 m, sin acumular), Hender (segundo ataque a 1,5 m, sin modificador al daño, una vez por turno) y Rozar (daño igual al modificador al fallar): botón en la tirada. El máster lo aplica al momento; si lo pide un jugador, al máster le llega la petición para aceptarla.
+  - Mellar: se recuerda en la tirada.
+- Los estados con duración «hasta el principio de tu siguiente turno» se quitan solos al empezar ese turno.
+
+## Hito 37 · Todo dentro de las reglas de Firestore actuales
+- Un jugador no puede cambiar una tirada ya publicada (solo crearla o borrarla): «✨ Repetir» publica la tirada repetida y quita la anterior; las maestrías del jugador no marcan su tirada (se deduce de lo que ya hay).
+- Molestar se guarda como estado en la ficha de la mesa del atacante (las reglas solo dejan al jugador cambiar posición, iniciativa, estados, efectos y acciones).
+- En la nube, los cambios seguidos del mismo instante salen en un solo envío: una tirada que se publica y se completa a la vez (por ejemplo, un conjuro con salvación lanzado por un jugador) llega como una sola creación.
+- No hay que tocar firestore.rules.
+
+## Hito 38 · Editor de mapas más limpio
+- La barra del editor de mapas cabe en una sola línea (en el móvil se desliza de lado); Mover y Enemigo ya no abren una segunda barra con la ayuda (va en el título del botón).
+- El mapa se encaja justo debajo de la barra, sin hueco arriba.
+- En el móvil la cabecera ocupa dos líneas: nombre y usuario arriba, secciones deslizables debajo.
+
+## Hito 39 · Paquetes de región y peligros del terreno
+
+- **9 paquetes de región** (Enano, Élfico, Orco, Ciudad, Cementerio, Montaña, Pantano, Volcán, Costa): 49 suelos y 98 objetos en total, con pestaña propia en Pincel y Objetos. Cada pieza indica cobertura, luz, caída o fuego.
+- **Región de la escena** en ⚙ Mapa (o al crear la escena). Se hereda del Lore: cada región del mundo tiene su «Paquete de mapas» y la escena lo sugiere según su lugar. Fija luz y sonido.
+- **Generadores por región**: «Generar <región>» crea un mapa con sus piezas y deja una nota oculta para el máster.
+- **Peligros que se aplican solos** al entrar en la casilla (SRD 5.2.1):
+  - Abismo y pozos: caída de 1d6 por cada 3 m (máx. 20d6) y derribado.
+  - Hielo: salvación de Destreza CD 10 o derribado.
+  - Brasas y hogueras: estado Ardiendo (1d4 de fuego al empezar el turno; «Apagarse» gasta la acción y deja derribado).
+  - Lava: el daño lo fija el máster (**regla de campaña**, el SRD no la trae).
+  - Un puente anula el peligro.
+- **Las 8 trampas del SRD** (aguja, dardos, estatua, pozo con pinchos, pozo, red, roca rodante, techo que se derrumba) con CD y daño según el nivel del grupo.
+- «Agotamiento» pasa a llamarse **Cansancio** (texto 2024); resta 1,5 m de velocidad por nivel.
+- 3D: piezas nuevas modeladas; el agua, la lava y el abismo vuelven a verse (el marco de la mesa los tapaba).

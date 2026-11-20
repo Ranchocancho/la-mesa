@@ -6,6 +6,7 @@ import { getImage, putImage, readImageFile } from "../core/images.js";
 import { ABILITIES, AB_SHORT, SKILLS, CLASSES, classInfo, xpFor, canLevelUp, levelGranted, mod, sign, prof, skillBonus, saveBonus, passive, carried, capacity, levelNotes, newCharacter } from "../data/dnd.js";
 import { $, $$, esc, toast, debounce, pickFile } from "../core/ui.js";
 import { darkvisionOf } from "../core/vision.js";
+import { openCreate } from "./crear.js";
 import { publish } from "../core/dados.js";
 import { srdNow, findSpell } from "../core/srd.js";
 import { spellCard } from "./reglas.js";
@@ -43,10 +44,12 @@ function drawGroup(state) {
     <h1 class="title">El grupo</h1>
     <p class="lead">Todas las fichas están a la vista. Cada jugador edita la suya; el máster puede editarlas todas.</p>
     <div class="party-grid">${list.map(c => card(state, c)).join("") || `<p class="empty">Todavía no hay personajes.</p>`}</div>
-    ${canCreate ? `<div class="row" style="margin-top:18px"><button class="btn gold" id="newpj">+ Nuevo personaje</button></div>` : ""}
+    ${canCreate ? `<div class="row" style="margin-top:18px"><button class="btn gold" id="newwizbtn">✨ Crear personaje paso a paso</button><button class="btn" id="newpj">+ Ficha en blanco</button></div>` : ""}
   </div>`;
   $$("[data-open]", el).forEach(b => b.onclick = () => { openId = b.dataset.open; tab = "car"; leveling = null; draw(); window.scrollTo(0, 0); });
   const n = $("#newpj", el);
+  const nw = $("#newwizbtn", el);
+  if (nw) nw.onclick = () => openCreate({ owner: dm ? null : me.id, color: me.color || "#8a9a4a", done: c => { openId = c.id; tab = "car"; draw(); window.scrollTo(0, 0); } });
   if (n) n.onclick = () => {
     const c = newCharacter({ owner: dm ? null : me.id, name: dm ? "Nuevo personaje" : `Personaje de ${me.name.split(" ")[0]}`, color: me.color || "#8a9a4a" });
     store.commit("char", s => s.characters.push(c));
@@ -99,6 +102,8 @@ function drawSheet(state, c) {
         <datalist id="classes">${Object.keys(CLASSES).map(k => `<option value="${k}">`).join("")}</datalist>
         <div class="xprow">
           <span class="lvl">Nivel <b>${c.level}</b></span>
+          ${dm ? `<button class="inspchip ${c.inspiration ? "on" : ""}" id="insptog" title="Inspiración heroica: gástala para volver a tirar un dado justo después de lanzarlo (el máster la concede; los humanos la obtienen con cada descanso largo)">✨ Inspiración${c.inspiration ? "" : ": no"}</button>`
+            : `<span class="inspchip ${c.inspiration ? "on" : ""}" title="Inspiración heroica: gástala desde el registro de tiradas con «✨ Repetir» justo después de tirar">✨ Inspiración${c.inspiration ? "" : ": no"}</span>`}
           <div class="xpbar" title="${c.xp} PX"><i style="width:${xpPct}%"></i></div>
           <span class="xptext">${c.xp} ${nextXP ? `/ ${nextXP} PX` : "PX"}</span>
           ${dm ? `<span class="addxp"><input type="number" id="xpadd" placeholder="PX" aria-label="Experiencia a sumar"><button class="btn small" id="xpgo">Sumar</button></span>` : ""}
@@ -116,7 +121,7 @@ function drawSheet(state, c) {
         ${ed ? `<div class="hpquick"><input type="number" id="hpd" min="0" placeholder="0" aria-label="Cantidad"><button class="btn small danger" id="dmg">Daño</button><button class="btn small" id="heal">Curar</button></div>` : ""}</div>
       ${stat("Velocidad", `<input type="number" step="1.5" data-n="speed" value="${c.speed}"><em>m</em>`)}
       ${stat("Visión oscuridad", `<input type="number" step="9" data-n="darkvision" value="${darkvisionOf(c)}"><em>m</em>`)}
-      ${stat("Iniciativa", `<b>${sign(mod(c.abilities.des))}</b>`)}
+      ${stat("Iniciativa", `<b>${sign(mod(c.abilities.des) + (+c.initBonus || 0))}</b>${c.initBonus ? `<em title="Alerta">+comp.</em>` : ""}`)}
       ${stat("Competencia", `<b>${sign(pb)}</b>`)}
       ${stat("Percepción pasiva", `<b>${passive(c, "percepcion", "sab")}</b>`)}
       ${stat("Dados de golpe", `<b>${c.level - (c.hdUsed || 0)}</b><em>/ ${c.level}d${classInfo(c.cls).hd}</em>`)}
@@ -125,6 +130,7 @@ function drawSheet(state, c) {
     <section class="tabbody">${({ car: tabCar, com: tabCom, inv: c2 => tabInv(c2, ed, dm), con: tabCon, ras: tabRas, cua: c2 => `<h2 class="sec">📓 Cuaderno</h2><p class="note" style="margin:0 0 8px">Tus notas de la partida: nombres, pistas, promesas. Marca con ⭐ los descubrimientos y comparte con 📣 lo que quieras que quede en la crónica.</p>${journalHTML(c2, { edit: ed })}`, tras: tabTras })[tab](c)}</section>
   </div>`;
   bind(state, c, ed);
+  { const it = $("#insptog", el); if (it) it.onclick = () => import("../core/inspiracion.js").then(m => m.setInspiration(c.id, !c.inspiration)); }
   { const hz = $(".hzhost", el); if (hz) import("./subirnivel.js").then(m => { if (hz.isConnected) hz.innerHTML = m.horizonHTML(c, 3); }); }
   { const tb = $(".tabbody", el); if (tb) { bindTreasures(tb, c, draw); bindJournal(tb, c, draw); } const ta = $("#tesadd", el); if (ta) ta.onclick = () => giveTreasure([c.id], { kind: "recuerdo", name: "Objeto especial" }); }
   portraits();

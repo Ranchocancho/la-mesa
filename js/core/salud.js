@@ -37,7 +37,7 @@ export function savePlan(s, t, ab, coverBonus = 0) {
   if (ab === "des" && hasC(t, "apresado")) { adv--; why.push("desventaja: apresado"); }
   if (ab === "des" && hasC(t, "esquivando")) { adv++; why.push("ventaja: esquivando"); }
   if (ab === "des" && coverBonus) { bonus += coverBonus; why.push(`+${coverBonus} por cobertura`); }
-  const ex = condLvl(t, "agotamiento"); if (ex) { bonus -= 2 * ex; why.push(`−${2 * ex} por agotamiento`); }
+  const ex = condLvl(t, "agotamiento"); if (ex) { bonus -= 2 * ex; why.push(`−${2 * ex} por cansancio`); }
   if (hasC(t, "bendecido")) { extra += "+1d4"; why.push("+1d4 Bendición"); }
   if (hasC(t, "perdicion")) { extra += "-1d4"; why.push("−1d4 Perdición"); }
   return { bonus, adv: Math.max(-1, Math.min(1, adv)), extra, autoFail, why };
@@ -158,12 +158,13 @@ export function shortRest(charId, dice) {
     const x = (st.rolls || []).find(y => y.id === r.id); if (x) { x.note = `+${amt} PG`; x.status = "ok"; }
   });
 }
-/** Descanso largo: todos los PG, todos los dados de golpe y espacios de conjuro; −1 agotamiento. */
+/** Descanso largo: todos los PG, todos los dados de golpe y espacios de conjuro; −1 cansancio. */
 export function longRest(charId) {
   store.commit("char", s => {
     const c = s.characters.find(x => x.id === charId); if (!c) return;
     if (c.death && c.death.dead) return;
     c.hp.cur = c.hp.max; c.hp.temp = 0; c.hdUsed = 0; c.death = null;
+    if (/^Humano/i.test(c.species || "")) c.inspiration = true; // Ingenioso
     if (c.spells && c.spells.slots) Object.values(c.spells.slots).forEach(sl => { sl.used = 0; });
     const t = s.tokens.find(x => x.kind === "pc" && x.char === c.id);
     if (t) {
@@ -171,6 +172,7 @@ export function longRest(charId) {
       const ex = (t.conds || []).find(x => x.id === "agotamiento"); if (ex) { ex.lvl = (+ex.lvl || 1) - 1; if (ex.lvl <= 0) delCond(t, "agotamiento"); }
     }
   });
-  toast("Descanso largo: PG, dados de golpe y espacios de conjuro recuperados.");
+  const c0 = store.get().characters.find(x => x.id === charId);
+  toast("Descanso largo: PG, dados de golpe y espacios de conjuro recuperados." + (c0 && /^Humano/i.test(c0.species || "") ? " ✨ Ingenioso: inspiración heroica." : ""));
 }
 export { hasC as hasCondition, addCond, delCond };

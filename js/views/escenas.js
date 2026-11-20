@@ -6,9 +6,13 @@ import { blankScene, exampleScenes } from "../data/escenas.js";
 import { loadScene } from "../core/mesa.js";
 import { createBoard, TERRAIN } from "./tablero.js";
 import { propEditorHTML, bindPropEditor } from "./propeditor.js";
-import { generateDungeon } from "../core/generador.js";
+import { generateDungeon, generateRegion } from "../core/generador.js";
 import { openCreaturePicker } from "./criaturas.js";
-import { isWallT } from "../data/mapas.js";
+import { difficulty, difficultyHTML, partyOf } from "../core/encuentro.js";
+// Todas las criaturas de la escena, en todas sus plantas
+const sceneFoes = x => [...(x.tokens || []), ...((x.floors || []).flatMap(f => f.tokens || []))].filter(t => t.kind === "foe");
+import { isWallT, REGIONS } from "../data/mapas.js";
+import { regionPackOf } from "../core/regiones.js";
 import { tokenEditor, bindTokenEditor } from "./mesa.js";
 import { $, $$, esc, toast } from "../core/ui.js";
 import { floorsOf, floorIdx, swapFloor, addFloor, renameFloor, removeFloor } from "../core/plantas.js";
@@ -43,7 +47,7 @@ function draw() {
         <h2 class="sec" style="margin:0">Nueva escena</h2>
         <label class="field">Nombre<input id="nsname" required placeholder="Asalto al almacén"></label>
         <label class="field">Lugar<select id="nsplace"><option value="">Biblioteca (sin lugar)</option>${s.world.places.map(p => `<option value="${p.id}">${esc(p.name)}</option>`).join("")}</select></label>
-        <label class="field">Suelo inicial<select id="nsfill"><option value="gen:dungeon">🎲 Mazmorra generada</option><option value="gen:cave">🕳 Cueva generada</option><option value="vacio">Vacío (para dibujar salas)</option>${Object.entries(TERRAIN).filter(([, v]) => !v.wall).map(([k, v]) => `<option value="${k}">${v.n}</option>`).join("")}</select></label>
+        <label class="field">Suelo inicial<select id="nsfill"><option value="gen:dungeon">🎲 Mazmorra generada</option><option value="gen:cave">🕳 Cueva generada</option>${Object.entries(REGIONS).map(([k, v]) => `<option value="reg:${k}">${v.i} ${esc(v.n)} (generado)</option>`).join("")}<option value="vacio">Vacío (para dibujar salas)</option>${Object.entries(TERRAIN).filter(([, v]) => !v.wall).map(([k, v]) => `<option value="${k}">${v.n}</option>`).join("")}</select></label>
         <button class="btn gold small">Crear</button>
       </form>
     </aside>
@@ -53,28 +57,38 @@ function draw() {
       <div class="panel" style="margin-top:16px"><h2 class="sec">Escenas de ejemplo</h2>
         <p style="margin:0 0 10px">La torre del hechicero (3 plantas, trampas ocultas y un cofre), pelea con enanos en la taberna de la Jarra Rota, el cementerio de la colina con no muertos y una emboscada goblin en el bosque. Todas con criaturas del SRD y sus acciones reales.</p>
         <button class="btn gold small" id="renew">🔄 Renovar escenas de ejemplo</button>
-        <p class="note" style="margin:8px 0 0">Quita las cuatro antiguas (taberna, camino, cripta y puente, con sus «enemigos» genéricos) si siguen sin tocar, y añade las nuevas a la biblioteca. Tus escenas no se tocan.</p></div></div></div>`}</section>
+        <p class="note" style="margin:8px 0 0">Quita las cuatro antiguas (taberna, camino, cripta y puente, con sus «enemigos» genéricos) si siguen sin tocar, añade las nuevas y actualiza las de ejemplo a su versión equilibrada. Tus escenas no se tocan.</p></div></div></div>`}</section>
     <aside class="scenes-props" ${openId ? "" : "hidden"}></aside>`;
   $$("[data-open]", el).forEach(b => b.onclick = () => { openId = b.dataset.open; sel = null; placing = false; board = null; draw(); });
   const rn = $("#renew", el);
   if (rn) rn.onclick = () => {
     if (!rn.dataset.sure) { rn.dataset.sure = 1; rn.textContent = "¿Seguro? Pulsa otra vez"; return; }
     const OLD = ["Pelea en la taberna", "Emboscada en el camino", "La cripta bajo el campanario", "Emboscada en el puente"], fresh = exampleScenes();
-    let gone = 0, added = 0;
+    let gone = 0, added = 0, upd = 0;
     store.commit("board", st => {
       // Solo las antiguas de ejemplo: mismo nombre y criaturas sin perfil del SRD (las genéricas de antes)
       const before = st.scenes.length;
       st.scenes = st.scenes.filter(x => !(OLD.includes(x.name) && (x.tokens || []).every(t => !t.srd)));
       gone = before - st.scenes.length;
-      fresh.forEach(sc => { if (!st.scenes.some(x => x.name === sc.name)) { st.scenes.push(sc); added++; } });
+      fresh.forEach(sc => {
+        const i = st.scenes.findIndex(x => x.name === sc.name);
+        if (i < 0) { st.scenes.push(sc); added++; return; }
+        // Versión anterior de una escena de ejemplo (todas sus criaturas del SRD): se cambia por la equilibrada, con el mismo id
+        const x = st.scenes[i];
+        if ((x.ex || 1) < sc.ex && (x.tokens || []).every(t => t.srd || t.kind === "pc")) { st.scenes[i] = Object.assign(sc, { id: x.id }); upd++; }
+      });
     });
-    toast(`Escenas de ejemplo: ${gone} antiguas quitadas, ${added} nuevas en la biblioteca.`);
+    toast(`Escenas de ejemplo: ${gone} antiguas quitadas, ${added} nuevas, ${upd} actualizadas.`);
   };
   $("#newsc", el).onsubmit = e => {
     e.preventDefault();
-    const fill = $("#nsfill", el).value, gen = fill.startsWith("gen:");
-    const sc = blankScene($("#nsname", el).value.trim() || "Nueva escena", $("#nsplace", el).value || null, gen ? 26 : 16, gen ? 18 : 11, gen ? "vacio" : fill);
-    if (gen) { const d = generateDungeon(sc.cols, sc.rows, { cave: fill === "gen:cave" }); sc.terrain = d.terrain; sc.props = d.props; sc.start = d.start; sc.ambient = "interior"; }
+    const fill = $("#nsfill", el).value, reg = fill.startsWith("reg:") ? fill.slice(4) : "", gen = fill.startsWith("gen:") || !!reg, place = $("#nsplace", el).value || null;
+    const sc = blankScene($("#nsname", el).value.trim() || "Nueva escena", place, gen ? 26 : 16, gen ? 18 : 11, gen ? "vacio" : fill);
+    // La región del lugar decide las piezas del editor (y su luz y sonido)
+    const pack = reg || (place ? regionPackOf(store.get(), place) : "");
+    if (pack && REGIONS[pack]) Object.assign(sc, { region: pack, ambient: REGIONS[pack].light, sound: REGIONS[pack].sound });
+    if (reg) { const d = generateRegion(sc.cols, sc.rows, reg); sc.terrain = d.terrain; sc.props = d.props; sc.start = d.start; }
+    else if (gen) { const d = generateDungeon(sc.cols, sc.rows, { cave: fill === "gen:cave" }); sc.terrain = d.terrain; sc.props = d.props; sc.start = d.start; sc.ambient = "interior"; }
     store.commit("board", st => st.scenes.push(sc));
     openId = sc.id; board = null; draw();
   };
@@ -100,6 +114,7 @@ function draw() {
       onSelectProp: id => { selProp = id; if (id) sel = null; side(); },
       onStart: st => store.commit("board", z => { z.scenes.find(y => y.id === openId).start = st; }),
       onCell: h => { if (placing) { placing = false; store.commit("board", st => { st.scenes.find(y => y.id === openId).start = h; }); } },
+      suggestRegion: () => scene() && scene().place ? regionPackOf(store.get(), scene().place) : "",
       marker: () => scene() && scene().start
     });
     side();
@@ -123,6 +138,7 @@ function side() {
       <div class="row" style="margin-top:10px"><button class="btn gold small" id="scload">Cargar en la mesa</button><button class="btn small" id="scdup">Duplicar</button><button class="btn small danger" id="scdel">Eliminar</button></div>
     </div>
     <div class="panel" style="margin-top:12px"><h2 class="sec">Criaturas</h2>
+      ${difficultyHTML(difficulty(store.get(), sceneFoes(sc), partyOf(store.get(), [])))}
       <button class="btn gold" id="monpick">👹 Añadir criaturas…</button>
       <p class="note" style="margin:6px 0 0">Busca por nombre o tipo, ajusta su nivel y despliégalas junto al punto de inicio.</p></div>
     ${pr ? `<div class="panel" style="margin-top:12px">${propEditorHTML(pr)}</div>` : ""}

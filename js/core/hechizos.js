@@ -11,6 +11,7 @@ import { currentUser } from "./session.js";
 import { attack } from "./combate.js";
 import { rangeOf, inRange, cover, spend, dist, canActNow } from "./turnos.js";
 import { toast } from "./ui.js";
+import { springTrap } from "./peligros.js";
 
 const clean = t => String(t || "").replace(/\s*\d+\s+Documento de referencia del sistema 5\.2\.1\s*/g, " ").replace(/([a-záéíóúñ])-\s+([a-záéíóúñ])/gi, "$1$2").replace(/\s+/g, " ");
 const SHAPES = { esfera: "Esfera", cono: "Cono", cubo: "Cubo", "línea": "Línea", cilindro: "Cilindro", "emanación": "Emanación" };
@@ -200,17 +201,7 @@ export function applySpell(rollId, per = {}) {
  * Una trampa se dispara sobre quien la pisa: se revela, se tira el daño y cada víctima hace su salvación
  * (mitad si la supera). El máster lo aplica desde la tabla de tiradas, como un conjuro.
  */
-export function triggerTrap(propId, tokenIds) {
-  const s = store.get(), p = ((s.board && s.board.props) || []).find(x => x.id === propId); if (!p) return null;
-  const tr = p.trap || { dc: 13, save: "des", dmg: "2d10", type: "perforante" }, v = { trampa: "Trampa", trampaoculta: "Trampa oculta", pinchos: "Pinchos", foso: "Foso" }[p.k] || "Trampa";
-  const victims = tokenIds.map(id => s.tokens.find(t => t.id === id)).filter(Boolean);
-  store.commit("board", st => { const x = (st.board.props || []).find(y => y.id === propId); if (x) { x.hidden = false; x.sprung = true; } });
-  const names = victims.map(t => (charOf(s, t) || t).name).join(", ");
-  const r = publish({ kind: "spell", label: `¡${p.label || v}! ${names} · salvación de ${({ fue: "Fuerza", des: "Destreza", con: "Constitución", int: "Inteligencia", sab: "Sabiduría", car: "Carisma" })[tr.save] || "Destreza"} CD ${tr.dc}`, expr: tr.dmg || "1d6", dtype: tr.type || "", by: null });
-  const saves = victims.map(t => quickSave(store.get(), t, tr.save || "des", +tr.dc || 13));
-  store.commit("roll", st => { const x = st.rolls.find(y => y.id === r.id); if (x) Object.assign(x, { saves, half: tr.half !== false, dc: +tr.dc || 13, sv: tr.save, conds: tr.cond ? [tr.cond] : [], dtype: tr.type || null, spell: p.label || v, status: "pending", targets: victims.map(t => t.id), trap: true }); });
-  return r;
-}
+export function triggerTrap(propId, tokenIds) { return springTrap(propId, tokenIds); }
 /** Anuncia en la mesa lo que hay en un cofre, un sarcófago o un montón de oro. */
 export function announceLoot(propId) {
   const s = store.get(), p = ((s.board && s.board.props) || []).find(x => x.id === propId); if (!p) return;

@@ -40,7 +40,7 @@ const PROP3D = {
   caja: ["dungeon/crates_stacked", 1], cofre: ["dungeon/chest", 1.1], columna: ["dungeon/pillar_decorated", 1], cama: ["dungeon/bed_decorated", 1],
   calavera: ["dungeon/rubble_large", 0.45], tonel: ["dungeon/keg", 1], baul: ["dungeon/trunk_large_A", 1.2], escaleras: ["dungeon/stairs", 0.8],
   velas: ["dungeon/candle_triple", 1.6], antorcha: ["dungeon/torch_mounted", 1.6, "wall"], estandarte: ["dungeon/banner_red", 1, "wall"], puerta: ["dungeon/wall_doorway", 1, "door"],
-  puertallave: ["dungeon/wall_doorway", 1, "door"], puertasecreta: ["dungeon/wall_doorway", 1, "door"], rastrillo: ["dungeon/wall_doorway", 1, "door"],
+  puertallave: ["dungeon/wall_doorway", 1, "door"], puertasecreta: ["dungeon/wall_doorway", 1, "door"], rastrillo: ["dungeon/wall_doorway", 1, "door"], puertarunas: ["dungeon/wall_doorway", 1, "door"],
   estanteria: ["dungeon/shelf_large", 1], cofre: ["dungeon/chest", 1.1]
 };
 // Texturas de terreno como materiales 3D (con relieve sacado de la propia imagen); una por tipo
@@ -348,9 +348,11 @@ export function createBoard3D(host, opts) {
     // Mesa de madera y marco del tablero
     const wood = woodTex(); wood.repeat.set(3, 3);
     const table = new THREE.Mesh(new THREE.BoxGeometry(W + CELL * 8, 2.5, H + CELL * 8), new THREE.MeshStandardMaterial({ map: wood, roughness: 0.7 }));
-    table.position.y = -1.6; table.receiveShadow = true; grp.add(table);
-    const frameM = new THREE.Mesh(new THREE.BoxGeometry(W + 1.6, 0.6, H + 1.6), new THREE.MeshStandardMaterial({ color: 0x2b1d12, roughness: 0.6 }));
-    frameM.position.y = -0.35; frameM.receiveShadow = true; grp.add(frameM);
+    // La mesa queda por debajo del lecho del agua y del fondo del abismo (si no, los tapaba)
+    table.position.y = -3.6; table.receiveShadow = true; grp.add(table);
+    const frameMat = new THREE.MeshStandardMaterial({ color: 0x2b1d12, roughness: 0.6 });
+    [[W + 1.6, 0.8, 0, -(H + 0.8) / 2], [W + 1.6, 0.8, 0, (H + 0.8) / 2], [0.8, H, -(W + 0.8) / 2, 0], [0.8, H, (W + 0.8) / 2, 0]].forEach(([w, d, x, z]) => {
+      const f = new THREE.Mesh(new THREE.BoxGeometry(w, 3.3, d), frameMat); f.position.set(x, -1.7, z); f.receiveShadow = true; grp.add(f); });
     // Suelos: un trozo continuo por tipo de terreno, con su textura y relieve
     const cells = {};
     for (let r = 0; r < g.rows; r++) for (let c = 0; c < g.cols; c++) {
@@ -429,7 +431,7 @@ export function createBoard3D(host, opts) {
           // Hoja de madera: cerrada tapa el hueco; abierta, girada contra el marco
           const lh = wh < 1 ? 1.9 : 3.1;
           const leaf = p.k === "rastrillo" ? (() => { const bars = new THREE.Group(), iron = new THREE.MeshStandardMaterial({ color: 0x2e2c2a, metalness: 0.7, roughness: 0.45 }); for (let i = 0; i < 6; i++) { const b = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, lh, 6), iron); b.position.set(-0.95 + i * 0.38, 0, 0); bars.add(b); } [-0.3, 0.3].forEach(y => { const b = new THREE.Mesh(new THREE.BoxGeometry(2.1, 0.08, 0.08), iron); b.position.set(0, y * lh, 0); bars.add(b); }); return bars; })()
-            : new THREE.Mesh(new THREE.BoxGeometry(2.2, lh, 0.22), p.k === "puertasecreta" ? terrainMat("muro") : new THREE.MeshStandardMaterial({ map: woodLeaf(), roughness: 0.8, ...(p.k === "puertallave" ? { color: 0xc8b0a0 } : {}) }));
+            : new THREE.Mesh(new THREE.BoxGeometry(2.2, lh, 0.22), p.k === "puertasecreta" ? terrainMat("muro") : p.k === "puertarunas" ? terrainMat("murorunas") : new THREE.MeshStandardMaterial({ map: woodLeaf(), roughness: 0.8, ...(p.k === "puertallave" ? { color: 0xc8b0a0 } : {}) }));
           const hinge = new THREE.Group(); hinge.position.set(-1.1, 0, 0); leaf.position.set(1.1, (wh < 1 ? 1.9 : 3.1) / 2, 0); hinge.add(leaf);
           hinge.rotation.y = p.open ? -Math.PI / 2 * 0.92 : 0;
           obj.add(hinge);

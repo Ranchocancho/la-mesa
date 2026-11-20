@@ -16,6 +16,7 @@ import { AMBIENTES } from "../core/sonido.js";
 const LUCES = { dia: "☀️ Día", interior: "🕯 Interior", noche: "🌙 Noche" };
 import { floorName, floorsOf } from "../core/plantas.js";
 import { $, $$, esc, toast } from "../core/ui.js";
+import { difficulty, partyOf, HINT } from "../core/encuentro.js";
 import { hereOf, setHere, contextOf, sessionCast, markChange, changesOf, changeText, fieldsOf, badges, VITAL, STANCE, touch } from "../core/contexto.js";
 import { placePath, placeOf, LORE, timeline, tellTimeline } from "../core/lore.js";
 const openCard = id => import("./fichalore.js").then(m => m.openLoreCard(id));
@@ -150,7 +151,9 @@ function toolsBlock(state) {
   const b = state.board;
   if (!b) return `<div class="dmquick"><span class="dmq-s">Sin mesa táctica · cárgala en 🎭 Roleplay</span><button class="qb" data-askroll title="Pedir una tirada a los jugadores">🎲</button><button class="qb" data-lsearch title="Buscar en el lore (tecla /)">🔎</button></div>`;
   const q = (id, ic, tip, on, extra = "") => `<button class="qb" ${id.startsWith("data-") ? id : `id="${id}"`} title="${tip}" ${on != null ? `aria-pressed="${!!on}"` : ""} ${extra}>${ic}</button>`;
+  const dd = difficulty(state, [...state.tokens, ...((b.floors || []).flatMap(f => f.tokens || []))], partyOf(state));
   return `<div class="dmquick">
+    <span class="diffchip k-${dd.k}" title="${esc(`${HINT[dd.k]} Baja ${dd.low} · Moderada ${dd.mod} · Alta ${dd.high} PX (${dd.n} personajes)`)}">⚖️ ${dd.label}<small>${dd.xp.toLocaleString("es-ES")} PX</small></span>
     ${tactical(state) ? "" : `<button class="btn small gold" data-show='{"type":"tactical"}'>Mostrar la mesa</button>`}
     ${q("qtedit", "✏️", tacEdit ? "Terminar de editar la mesa" : "Editar la mesa (los jugadores siguen viéndola)", tacEdit)}
     ${q("qtmon", "👹", "Añadir criaturas")}
@@ -248,7 +251,7 @@ function tacticalBlock(state) {
       </div>
       <h3 class="sub" style="margin:14px 0 6px">Personajes en la mesa</h3>
       <div class="pclist">${state.characters.map(c => { const on = state.tokens.some(t => t.kind === "pc" && t.char === c.id), live = c.owner && presence.online(c.owner);
-        return `<label class="pcrow${on ? " on" : ""}"><input type="checkbox" data-pc="${c.id}" ${on ? "checked" : ""}><span class="dot${live ? " live" : ""}" title="${live ? "Conectado" : "Desconectado"}"></span><span>${esc(c.name)}</span><small>${live ? "conectado" : "fuera"}</small></label>`; }).join("") || `<p class="empty">No hay personajes.</p>`}</div>` : `<p class="empty" style="margin:0 0 8px">No hay ninguna escena en la mesa.</p>`}
+        return `<label class="pcrow${on ? " on" : ""}"><input type="checkbox" data-pc="${c.id}" ${on ? "checked" : ""}><span class="dot${live ? " live" : ""}" title="${live ? "Conectado" : "Desconectado"}"></span><span>${esc(c.name)}</span><small>${live ? "conectado" : "fuera"}</small><button class="insp ${c.inspiration ? "on" : ""}" data-insp="${c.id}" title="${c.inspiration ? "Tiene inspiración heroica (toca para quitarla)" : "Dar inspiración heroica"}" aria-label="Inspiración heroica de ${esc(c.name)}">✨</button></label>`; }).join("") || `<p class="empty">No hay personajes.</p>`}</div>` : `<p class="empty" style="margin:0 0 8px">No hay ninguna escena en la mesa.</p>`}
     <div class="showplaces" style="margin-top:10px">${groups.map(([k, n, sc]) => `<details data-k="${k}"><summary><span>${esc(n)}</span><small>${sc.length}</small></summary>
       <div class="scenelist">${sc.map(x => `<div class="scenerow"><span>${esc(x.name)}</span><small>${x.tokens.length} fichas</small><button class="btn small gold" data-load="${x.id}">Cargar</button></div>`).join("")}</div></details>`).join("")}</div>
     <div class="row" style="margin-top:10px"><button class="btn small" id="tblank">Mesa vacía</button><a class="btn small" href="#escenas">Preparar escenas</a></div>
@@ -317,6 +320,7 @@ function bind(state) {
   on("chg2recap", () => { const r = $("#crecap", el); if (!r) return; const t = changesOf(liveSession(store.get())).map(changeText).join("\n"); if (!r.value.includes(t)) r.value = (r.value.trim() + "\n\nCambios en el mundo:\n" + t).trim(); });
   on("nobackdrop", () => setBackdrop(null));
   $$("[data-pc]", el).forEach(b => b.onchange = () => b.checked ? addPC(b.dataset.pc) : removePC(b.dataset.pc));
+  $$(".pcrow [data-insp]", el).forEach(b => b.onclick = e => { e.preventDefault(); e.stopPropagation(); const c = store.get().characters.find(x => x.id === b.dataset.insp); if (c) import("../core/inspiracion.js").then(m => m.setInspiration(c.id, !c.inspiration)); });
   on("tmon", () => import("./reglas.js").then(m => m.openCreaturePicker({ title: "Añadir criaturas a la mesa", onAdd: (x, n) => m.addToBoard(x, n) })));
   on("tclear", () => { const b = $("#tclear", el); if (!b.dataset.sure) { b.dataset.sure = 1; b.textContent = "Pulsa otra vez"; return; } tacEdit = false; clearBoard(); });
   on("tsave", () => {

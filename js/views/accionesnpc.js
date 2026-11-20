@@ -113,7 +113,7 @@ export function bindKit(host, redraw, getAdv) {
     if (!u.ok) return toast(`${R.sp || a.n}: no le quedan usos (${u.txt}).`);
     let r = null, fx = null;
     if (isAtk) {
-      const w = { name: A2.n + (R.ref ? ` (${a.n})` : ""), atk: A2.atk, expr: (A2.dmg || []).map(d => d.e).join("+") || "0", type: [...new Set((A2.dmg || []).map(d => d.t))].join(" y "), rng: rangeFrom(A2), rider: A2.rider, cond: A2.cond, txt: A2.txt };
+      const w = { name: A2.n + (R.ref ? ` (${a.n})` : ""), atk: A2.atk, expr: (A2.dmg || []).map(d => d.e).join("+") || "0", type: [...new Set((A2.dmg || []).map(d => d.t))].join(" y "), rng: rangeFrom(A2), rider: A2.rider, cond: A2.cond, txt: A2.txt, ifAdv: A2.ifAdv || null, alt: A2.alt || null, ifs: A2.ifs || null };
       if (!targets.length) return toast("Toca al objetivo en la mesa.");
       r = attack(tok, targets[0], w, adv, null, { free: true });
     } else if (R.sp || a.type === "cast1") {

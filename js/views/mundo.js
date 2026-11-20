@@ -6,6 +6,7 @@ import { exampleMap } from "../data/worldmap.js";
 import { MAP_ICONS, ICON_CATS, iconURL, PIN_SIZES, PIN_TINTS, pinDefaults } from "../data/simbolos.js";
 import { $, $$, esc, toast, debounce, pickFile } from "../core/ui.js";
 import { regionsOf, regionById, seeRegion, bboxOf, regionAt, toLocal, toGlobal, centroid, placesIn, addRegion, editRegion, deleteRegion, REG_COLORS } from "../core/regiones.js";
+import { REGIONS } from "../data/mapas.js";
 
 const KINDS = ["Región", "Ciudad", "Pueblo", "Distrito", "Localización", "Mazmorra", "Punto de interés"];
 const PIN = (fill) => `<svg viewBox="0 0 30 38" aria-hidden="true"><path d="M15 1C7.3 1 1 7 1 14.6 1 25 15 37 15 37s14-12 14-22.4C29 7 22.7 1 15 1z" fill="${fill}" stroke="#2b1d10" stroke-width="2"/><circle cx="15" cy="14" r="5" fill="#2b1d10"/></svg>`;
@@ -309,6 +310,8 @@ function drawRegionPanel(state, r) {
       <div class="regcolors">${REG_COLORS.map(c => `<button data-rcol="${c}" style="background:${c}" aria-pressed="${r.color === c}" title="Color"></button>`).join("")}</div>
       <label class="switch"><input type="checkbox" id="r-vis" ${r.visible ? "checked" : ""}> Visible para los jugadores</label>
       <div class="row"><button class="btn gold" id="r-show">Mostrar esta región a todos</button></div>
+      <label class="field">Paquete de mapas<select id="r-pack"><option value="">Ninguno</option>${Object.entries(REGIONS).map(([k, v]) => `<option value="${k}" ${r.pack === k ? "selected" : ""}>${v.i} ${v.n}</option>`).join("")}</select></label>
+      <p class="note" style="margin:-6px 0 0">Las escenas de lugares de esta región usan estas piezas en el editor de mapas.</p>
       <label class="field">Descripción para los jugadores<textarea id="r-sum" rows="3">${esc(r.summary || "")}</textarea></label>
       <div class="secretbox"><label class="field"><span><span class="tag secret">SOLO MÁSTER</span> Notas secretas</span><textarea id="r-sec" rows="3">${esc(r.secret || "")}</textarea></label></div>
       <p class="note" style="margin:0">${r.map ? "Esta región tiene su propio mapa detallado." : "Sin mapa propio: se ve el mapa global acercado. Puedes subir un mapa más detallado con el botón de arriba."} Los lugares que añadas aquí dentro solo aparecen en la región.</p>
@@ -318,6 +321,7 @@ function drawRegionPanel(state, r) {
     $("#r-name", side).oninput = e => save("name", e.target.value);
     $("#r-sum", side).oninput = e => save("summary", e.target.value);
     $("#r-sec", side).oninput = e => save("secret", e.target.value);
+    $("#r-pack", side).onchange = e => editRegion(r.id, x => { x.pack = e.target.value; });
     $("#r-vis", side).onchange = e => editRegion(r.id, x => { x.visible = e.target.checked; });
     $$("[data-rcol]", side).forEach(b => b.onclick = () => editRegion(r.id, x => { x.color = b.dataset.rcol; }));
     $("#r-show", side).onclick = () => editRegion(r.id, (x, st) => { x.visible = true; st.presentation = { type: "region", region: r.id }; }, "present");

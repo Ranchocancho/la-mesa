@@ -28,7 +28,8 @@ export function kitAttacks(kit) {
   return (kit.act || []).filter(a => a.type === "atk").map(a => ({
     name: a.n, atk: a.atk, expr: (a.dmg || []).map(d => d.e).join("+") || "0",
     type: [...new Set((a.dmg || []).map(d => d.t))].join(" y "),
-    rng: a.range ? `${a.range} m` : `${a.reach || "1,5"} m`, note: a.note || null, rider: a.rider || null, cond: a.cond || null, txt: a.txt, srd: true
+    rng: a.range ? `${a.range} m` : `${a.reach || "1,5"} m`, note: a.note || null, rider: a.rider || null, cond: a.cond || null, txt: a.txt, srd: true,
+    ifAdv: a.ifAdv || null, alt: a.alt || null, ifs: a.ifs || null
   }));
 }
 

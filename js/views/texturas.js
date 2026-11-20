@@ -92,6 +92,34 @@ const DRAW = {
   muromadera: (g, R) => { planks(g, R, 6, "#5e3f26", true); grain(g, R, 0.05); },
   muroroca: (g, R) => { g.fillStyle = "#3e3934"; g.fillRect(0, 0, SIZE, SIZE); blotches(g, R, "rgb(25,22,20)", 24, 15, 50, 0.6); blotches(g, R, "rgb(95,88,80)", 16, 10, 35, 0.4); cracks(g, R, 10, "rgba(15,13,11,.7)", 2, 6); grain(g, R, 0.12); },
   seto: (g, R) => { g.fillStyle = "#24401a"; g.fillRect(0, 0, SIZE, SIZE); for (let i = 0; i < 380; i++) { const x = R() * SIZE, y = R() * SIZE, r = 4 + R() * 7; wrap((X, Y) => { g.fillStyle = ["#2e5222", "#3c6a2a", "#1c3412", "#4a7a32"][Math.floor(R() * 4)]; g.beginPath(); g.ellipse(X, Y, r, r * 0.6, R() * 3, 0, 7); g.fill(); }, x, y, r); } },
+  // Paquetes de región
+  runas: (g, R) => { stones(g, R, { rows: 2, cols: 2, base: "#7a756c", var: 0.1, mortar: "#2e2a26", jitter: 0.04, gap: 6, round: 2, offset: 0 }); g.strokeStyle = "rgba(210,170,90,.55)"; g.lineWidth = 2.2;
+    for (let i = 0; i < 4; i++) { const x = 64 + (i % 2) * 128, y = 64 + Math.floor(i / 2) * 128; g.beginPath(); g.moveTo(x - 14, y - 18); g.lineTo(x + 14, y - 18); g.moveTo(x, y - 18); g.lineTo(x, y + 18); g.moveTo(x - 12, y); g.lineTo(x + 12, y + 14); g.stroke(); } grain(g, R, 0.05); },
+  railes: (g, R) => { DRAW.cueva(g, R); for (let y = 8; y < SIZE; y += 32) { g.fillStyle = "#4a3422"; g.fillRect(40, y, 176, 12); } g.fillStyle = "#8a8a90"; g.fillRect(64, 0, 9, SIZE); g.fillRect(183, 0, 9, SIZE); g.fillStyle = "rgba(255,255,255,.25)"; g.fillRect(64, 0, 2, SIZE); g.fillRect(183, 0, 2, SIZE); },
+  hojarasca: (g, R) => { g.fillStyle = "#5e4a26"; g.fillRect(0, 0, SIZE, SIZE); for (let i = 0; i < 420; i++) { const x = R() * SIZE, y = R() * SIZE, a = R() * 6, c = ["#a8662a", "#c48a34", "#7a4a1e", "#8a7a2a", "#b0502a"][Math.floor(R() * 5)];
+    wrap((X, Y) => { g.fillStyle = c; g.beginPath(); g.ellipse(X, Y, 6, 3, a, 0, 7); g.fill(); }, x, y, 8); } grain(g, R, 0.05); },
+  musgo: (g, R) => { g.fillStyle = "#3a6a2a"; g.fillRect(0, 0, SIZE, SIZE); blotches(g, R, "rgb(70,120,50)", 30, 10, 30, 0.5); blotches(g, R, "rgb(30,60,25)", 20, 8, 25, 0.5); pebbles(g, R, 300, 1, 2.5, ["#5a9a3a", "#2e5a22", "#6aa848"]); grain(g, R, 0.05); },
+  raices: (g, R) => { DRAW.tierra(g, R); g.lineCap = "round"; for (let i = 0; i < 9; i++) { let x = R() * SIZE, y = R() * SIZE, w = 9 + R() * 6; g.strokeStyle = "#4a321c"; for (let k = 0; k < 7; k++) { const nx = x + (R() - 0.5) * 70, ny = y + (R() - 0.5) * 70;
+    wrap((X, Y) => { g.lineWidth = w; g.beginPath(); g.moveTo(X, Y); g.lineTo(X + nx - x, Y + ny - y); g.stroke(); }, x, y, 80); x = nx; y = ny; w *= 0.8; } } grain(g, R, 0.05); },
+  plataforma: (g, R) => { planks(g, R, 6, "#b49a6e"); g.strokeStyle = "rgba(60,100,40,.5)"; g.lineWidth = 2; for (let i = 0; i < 6; i++) { g.beginPath(); const x = R() * SIZE; g.moveTo(x, 0); g.bezierCurveTo(x + 20, 80, x - 20, 170, x + 10, SIZE); g.stroke(); } grain(g, R, 0.04); },
+  pisoteada: (g, R) => { DRAW.tierra(g, R); g.fillStyle = "rgba(40,30,20,.25)"; g.fillRect(0, 0, SIZE, SIZE); for (let i = 0; i < 40; i++) { const x = R() * SIZE, y = R() * SIZE; wrap((X, Y) => { g.fillStyle = "rgba(30,22,14,.45)"; g.beginPath(); g.ellipse(X, Y, 5, 9, R(), 0, 7); g.fill(); }, x, y, 12); } },
+  paja: (g, R) => { g.fillStyle = "#a88a46"; g.fillRect(0, 0, SIZE, SIZE); strokes(g, R, 2200, 16, ["#c8a85a", "#8a6e30", "#d8c070", "#7a5e28"], 1.3, 3); grain(g, R, 0.05); },
+  removida: (g, R) => { DRAW.barro(g, R); pebbles(g, R, 90, 2, 6, ["#5a4630", "#3e3020", "#6e5638"]); grain(g, R, 0.06); },
+  rocanevada: (g, R) => { DRAW.muroroca(g, R); blotches(g, R, "rgb(240,245,250)", 18, 10, 35, 0.75); grain(g, R, 0.03); },
+  juncos: (g, R) => { DRAW.barro(g, R); strokes(g, R, 900, 22, ["#6a7a3a", "#4a5a22", "#8a8a4a", "#3a4a1a"], 2, 0.5); },
+  pasarela: (g, R) => { DRAW.agua(g, R); planks(g, R, 4, "#6e5236", true); grain(g, R, 0.04); },
+  volcanica: (g, R) => { g.fillStyle = "#2a2624"; g.fillRect(0, 0, SIZE, SIZE); blotches(g, R, "rgb(15,13,12)", 22, 15, 45, 0.6); blotches(g, R, "rgb(70,62,58)", 14, 8, 25, 0.35); cracks(g, R, 8, "rgba(10,8,8,.8)", 2, 6); grain(g, R, 0.08); },
+  ceniza: (g, R) => { g.fillStyle = "#5a5652"; g.fillRect(0, 0, SIZE, SIZE); blotches(g, R, "rgb(120,115,110)", 20, 15, 45, 0.4); blotches(g, R, "rgb(40,38,36)", 12, 8, 25, 0.4); grain(g, R, 0.1); },
+  muelle: (g, R) => { planks(g, R, 5, "#6e5638", true); g.fillStyle = "#3a2a1a"; for (const x of [10, SIZE - 10]) for (let y = 20; y < SIZE; y += 64) { g.beginPath(); g.arc(x, y, 7, 0, 7); g.fill(); } grain(g, R, 0.05); },
+  cubierta: (g, R) => { planks(g, R, 8, "#86643c"); g.fillStyle = "rgba(20,12,6,.6)"; for (let y = 0; y < SIZE; y += 32) for (let x = 16; x < SIZE; x += 64) { g.beginPath(); g.arc(x, y + 16, 1.8, 0, 7); g.fill(); } },
+  brasas: (g, R) => { g.fillStyle = "#1e0e08"; g.fillRect(0, 0, SIZE, SIZE); pebbles(g, R, 120, 3, 9, ["#2e1a10", "#3a2012", "#1a0c06"]); g.shadowColor = "#ff8a20"; g.shadowBlur = 10; pebbles(g, R, 60, 2, 5, ["#ff6a1a", "#ffa030", "#e04010"]); g.shadowBlur = 0; },
+  brea: (g, R) => { g.fillStyle = "#120a06"; g.fillRect(0, 0, SIZE, SIZE); blotches(g, R, "rgb(40,24,12)", 18, 15, 40, 0.6); g.shadowColor = "#ff7a20"; g.shadowBlur = 12; cracks(g, R, 10, "#ff6a1a", 2, 5); g.shadowBlur = 0; },
+  hielofino: (g, R) => { DRAW.agua(g, R); g.fillStyle = "rgba(220,240,250,.55)"; g.fillRect(0, 0, SIZE, SIZE); cracks(g, R, 16, "rgba(255,255,255,.9)", 1.2, 7); },
+  murorunas: (g, R) => { stones(g, R, { rows: 4, cols: 2, base: "#56524c", var: 0.08, mortar: "#1c1916", jitter: 0.02, gap: 5, round: 1 }); g.strokeStyle = "rgba(210,170,90,.45)"; g.lineWidth = 2; for (let i = 0; i < 4; i++) { const y = 32 + i * 64, x = 64 + (i % 2) * 128; g.beginPath(); g.moveTo(x - 10, y - 12); g.lineTo(x, y + 12); g.lineTo(x + 10, y - 12); g.stroke(); } grain(g, R, 0.06); },
+  veta: (g, R) => { DRAW.muroroca(g, R); g.shadowColor = "#9ad0ff"; g.shadowBlur = 6; cracks(g, R, 6, "rgba(150,200,255,.75)", 2.2, 5); cracks(g, R, 4, "rgba(230,190,90,.8)", 2, 4); g.shadowBlur = 0; },
+  empalizada: (g, R) => { g.fillStyle = "#2a1c10"; g.fillRect(0, 0, SIZE, SIZE); for (let x = 0; x < SIZE; x += 32) { g.fillStyle = hex("#5e4228", (R() - 0.5) * 0.12); g.beginPath(); g.arc(x + 16, 128, 14, 0, 7); g.fill(); g.strokeStyle = "rgba(30,18,8,.6)"; g.lineWidth = 1.5; g.beginPath(); g.arc(x + 16, 128, 9, 0, 7); g.stroke(); } blotches(g, R, "rgb(70,50,30)", 10, 10, 30, 0.3); },
+  muralla: (g, R) => { stones(g, R, { rows: 5, cols: 3, base: "#6e685e", var: 0.12, mortar: "#26221e", jitter: 0.08, gap: 4, round: 2 }); g.fillStyle = "rgba(0,0,0,.35)"; for (let x = 0; x < SIZE; x += 64) g.fillRect(x, 0, 32, 18); grain(g, R, 0.06); },
+  murocaido: (g, R) => { DRAW.muro(g, R); pebbles(g, R, 40, 4, 12, ["#5a554e", "#46423c", "#6a655d"]); blotches(g, R, "rgb(60,90,40)", 8, 8, 22, 0.35); },
   vacio: g => { g.fillStyle = "#0a0908"; g.fillRect(0, 0, SIZE, SIZE); }
 };
 

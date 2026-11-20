@@ -31,6 +31,14 @@ export const toLocal = (r, x, y) => { const b = bboxOf(r); return { x: (x - b.x0
 export const toGlobal = (r, x, y) => { const b = bboxOf(r); return { x: b.x0 + x * b.w, y: b.y0 + y * b.h }; };
 export const centroid = r => ({ x: r.pts.reduce((a, p) => a + p.x, 0) / r.pts.length, y: r.pts.reduce((a, p) => a + p.y, 0) / r.pts.length });
 /** Lugares de una región (incluidos los de detalle, que solo se ven dentro). */
+/** Paquete de mapas (data/mapas.js REGIONS) de la región donde está un lugar (subiendo por los lugares que lo contienen). */
+export function regionPackOf(s, placeId) {
+  let p = s.world.places.find(x => x.id === placeId), n = 0;
+  while (p && p.parent && n++ < 10) p = s.world.places.find(x => x.id === p.parent);
+  if (!p) return "";
+  const r = regionsOf(s).find(x => x.id === p.region) || regionsOf(s).find(x => inside(x, p.x, p.y));
+  return (r && r.pack) || "";
+}
 export const placesIn = (s, r) => s.world.places.filter(p => !p.parent && (p.region === r.id || (!p.region && inside(r, p.x, p.y))));
 
 export function addRegion(pts) {

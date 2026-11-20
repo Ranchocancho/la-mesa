@@ -62,7 +62,7 @@ export function renderSheet(el) {
     ${s.board && s.presentation && s.presentation.type === "tactical" ? "" : `<details class="fsec" data-k="rest" ${restOpen ? "open" : ""}><summary>Descansos</summary>
       <div class="frest"><div><b>Descanso corto</b> <small>1 hora · gasta dados de golpe (d${classInfo(c.cls).hd} + CON)</small>
         <div class="row"><input type="number" id="hdn" min="1" max="${c.level - (c.hdUsed || 0)}" value="${Math.min(hdN, Math.max(1, c.level - (c.hdUsed || 0)))}" aria-label="Dados de golpe"><span class="note">de ${c.level - (c.hdUsed || 0)} que te quedan</span><button class="btn small" id="srest" ${live ? "disabled title='No en combate'" : ""}>Descansar</button></div></div>
-        <div><b>Descanso largo</b> <small>8 horas · todo: PG, dados de golpe, espacios; −1 agotamiento</small><div class="row"><button class="btn small" id="lrest" ${live ? "disabled title='No en combate'" : ""}>Descansar</button></div></div></div>
+        <div><b>Descanso largo</b> <small>8 horas · todo: PG, dados de golpe, espacios; −1 cansancio</small><div class="row"><button class="btn small" id="lrest" ${live ? "disabled title='No en combate'" : ""}>Descansar</button></div></div></div>
     </details>`}`;
   bind(el, s, c, tok);
   const p = $(".fport", el); if (c.portrait) getImage(c.portrait).then(u => { if (u) { p.style.backgroundImage = `url('${u}')`; p.textContent = ""; } });
@@ -82,6 +82,7 @@ function turnBlock(s, c, tok) {
     <div class="fdo"><small class="fstep">${myTurn ? "Atacar: elige el arma y toca al enemigo en la mesa" : "Tus ataques (en tu turno)"}</small>
       <div class="fweap">${atks.map((w, i) => `<button class="fw ${A && A.kind === "atk" && A.i === i ? "armed" : ""}" data-arm="${i}" ${myTurn && !e.act ? "" : "disabled"}><b>${esc(w.name)}</b><span>${sign(w.atk)} · ${esc(w.expr)}</span><small>${w.rng.ranged ? `${w.rng.n}/${w.rng.l} m` : `${w.rng.l} m`}</small></button>`).join("") || `<p class="empty">Sin ataques.</p>`}</div>
       ${A && A.kind === "atk" ? `<div class="farmed">🎯 Ahora toca al enemigo en la mesa <button class="btn small" data-disarm>Cancelar</button></div>` : ""}
+      ${tok && (tok.conds || []).some(c => c.id === "ardiendo") ? `<button class="btn small red" data-fdouse title="SRD «Fuego»: con una acción apagas el fuego rodando por el suelo y quedas derribado" ${e.act ? "disabled" : ""}>🔥 Apagarse (acción)</button>` : ""}
       ${myTurn ? `<details class="faccs" ${accOpen ? "open" : ""}><summary>Otras acciones</summary><div class="accs">${ACCIONES.filter(([n]) => n !== "Atacar" && n !== "Magia").map(([n, d]) => `<button class="btn small" data-facc="${esc(n)}" title="${esc(d)}" ${e.act ? "disabled" : ""}>${n}</button>`).join("")}</div></details>` : ""}
     </div></section>`;
 }
@@ -135,6 +136,7 @@ function bind(el, s, c, tok) {
   on("fend", () => { arm(null); endTurn(); });
   $$("[data-feco]", el).forEach(b => b.onclick = () => tok && toggle(tok.id, b.dataset.feco));
   $$(".faccs", el).forEach(d => d.ontoggle = () => { accOpen = d.open; });
+  { const fd = $("[data-fdouse]", el); if (fd) fd.onclick = () => import("../core/peligros.js").then(m => m.douse(tok.id)).then(() => renderSheet(el)); }
   $$("[data-facc]", el).forEach(b => b.onclick = () => {
     const nm = b.dataset.facc, tid = tok.id;
     if (nm === "Correr") spend(tid, "dash");

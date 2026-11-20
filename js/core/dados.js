@@ -65,7 +65,7 @@ export function publish(r) {
   const e = {
     id: uid("tir"), at: Date.now(), who: me ? me.id : null, whoName: me ? me.name : "", label: r.label || r.expr, expr: r.expr,
     kind: r.kind || "free", char: r.char || null, dc: r.dc ?? null, seq: s.board && s.board.combat === "live" ? s.board.seq || 0 : null, adv: r.adv || 0, crit: !!r.crit, tok: r.by || null, target: r.target || null, link: r.link || null,
-    dice: out.dice, total: out.total, nat: out.nat, secret: !!r.secret, status: "pending", dmg: r.dmg || null, dtype: r.dtype || null, ac: r.ac ?? null, why: r.why || null, cov: r.cov || null, auto: r.auto || null, skin: r.skin || mySkin(), throw: r.throw || null
+    dice: out.dice, total: out.total, nat: out.nat, secret: !!r.secret, status: "pending", dmg: r.dmg || null, dtype: r.dtype || null, ac: r.ac ?? null, why: r.why || null, cov: r.cov || null, auto: r.auto || null, skin: r.skin || mySkin(), throw: r.throw || null, mas: r.mas || null, wname: r.wname || null, cleaveOf: r.cleaveOf || null
   };
   if (e.kind === "attack" && r.ac != null) e.result = out.nat === 20 ? "crit" : out.nat === 1 ? "miss" : out.total >= r.ac ? (r.auto ? "crit" : "hit") : "miss";
   if (r.dc != null && (e.kind === "check" || e.kind === "save")) e.result = out.total >= r.dc ? "save" : "fail";

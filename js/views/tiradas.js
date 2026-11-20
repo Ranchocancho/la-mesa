@@ -3,6 +3,8 @@ import { store } from "../core/store.js";
 import { isDM, currentUser } from "../core/session.js";
 import { publish, RESULT, mySkin, setMySkin, diceAnim, setDiceAnim } from "../core/dados.js";
 import { decide, damageFor, nameOf, attack, attacksOf, oaOpen, answerOA } from "../core/combate.js";
+import { canInspire, useInspiration } from "../core/inspiracion.js";
+import { masteryChoice, useMastery, applyMastery, cleaveTargets, MASTERY } from "../core/maestria.js";
 import { applySpell } from "../core/hechizos.js";
 import { spend } from "../core/turnos.js";
 import { $, $$, esc } from "../core/ui.js";
@@ -35,10 +37,10 @@ function rollInfo(s, r) {
   return parts.join("") || `<p class="empty">Sin reglas especiales.</p>`;
 }
 
-let adv = 0, secret = false, editing = null, pool = {};
+let adv = 0, secret = false, editing = null, pool = {}, cleavePick = null;
 const SKIN_NAMES = { rubi: "Rubí", zafiro: "Zafiro", esmeralda: "Esmeralda", amatista: "Amatista", obsidiana: "Obsidiana", oro: "Oro", hueso: "Hueso", madera: "Madera" };
 const poolExpr = mod => { const p = Object.entries(pool).filter(([, n]) => n).map(([d, n]) => `${n}d${d}`).join("+"); return (p || "") + (mod ? (mod > 0 ? "+" : "") + mod : ""); };
-const KIND = { attack: "Ataque", damage: "Daño", check: "Prueba", save: "Salvación", init: "Iniciativa", free: "Tirada", spell: "Conjuro", cast: "Conjuro", heal: "Curación", death: "Contra muerte", oa: "Reacción", loot: "Tesoro", xp: "Experiencia" };
+const KIND = { attack: "Ataque", damage: "Daño", check: "Prueba", save: "Salvación", init: "Iniciativa", free: "Tirada", spell: "Conjuro", cast: "Conjuro", heal: "Curación", death: "Contra muerte", oa: "Reacción", loot: "Tesoro", xp: "Experiencia", mastery: "Maestría" };
 const HOW = { full: "Completo", half: "Mitad", none: "Nada", double: "Doble" };
 let spellPer = {};
 
@@ -96,6 +98,10 @@ export function renderRolls(el, o) {
     applySpell(id, per); delete spellPer[id];
   });
   $$("[data-oa]", el).forEach(b => b.onclick = () => answerOA(b.dataset.oa, true));
+  $$("[data-insp]", el).forEach(b => b.onclick = () => useInspiration(b.dataset.insp));
+  $$("[data-mas]", el).forEach(b => b.onclick = () => { const id = b.dataset.mas, r = (store.get().rolls || []).find(x => x.id === id); if (r && r.mas && r.mas.n === "Hender") { cleavePick = cleavePick === id ? null : id; renderRolls(el); } else useMastery(id); });
+  $$("[data-cleave]", el).forEach(b => b.onclick = () => { const [id, tid] = b.dataset.cleave.split("|"); cleavePick = null; if (tid) useMastery(id, { target: tid }); else renderRolls(el); });
+  $$("[data-masok]", el).forEach(b => b.onclick = () => { const [req, atk] = b.dataset.masok.split("|"); applyMastery(atk, req); });
   $$("[data-xpok]", el).forEach(b => b.onclick = () => { const v = $(`[data-xpv="${b.dataset.xpok}"]`, el); import("../core/experiencia.js").then(m => m.grantXP(b.dataset.xpok, v ? Math.max(0, +v.value || 0) : null)); });
   $$("[data-oano]", el).forEach(b => b.onclick = () => answerOA(b.dataset.oano, false));
   $$("[data-row]", el).forEach(b => b.querySelector(".r1").onclick = e => { if (e.target.closest("button,input,select")) return; const id = b.dataset.row; openInfo.has(id) ? openInfo.delete(id) : openInfo.add(id); renderRolls(el); });
@@ -121,7 +127,7 @@ function spellTable(s, r, dm) {
 }
 
 /* ---------- Una línea por acción (estilo registro de combate): quién → a quién · qué · resultado ---------- */
-const ICON = { xp: "⭐", loot: "💰", attack: "⚔", damage: "🩸", save: "🛡", check: "🎯", init: "⏱", spell: "✨", cast: "✨", heal: "✚", death: "💀", oa: "⚠", free: "🎲" };
+const ICON = { xp: "⭐", loot: "💰", attack: "⚔", damage: "🩸", save: "🛡", check: "🎯", init: "⏱", spell: "✨", cast: "✨", heal: "✚", death: "💀", oa: "⚠", free: "🎲", mastery: "⚔" };
 const first = n => String(n || "").split(" ")[0];
 function who(s, id) { const t = s.tokens.find(x => x.id === id); return t ? first(nameOf(s, t)) : ""; }
 // Quién tira (la figura, o la persona si es una tirada libre) y su color
@@ -143,6 +149,7 @@ function what(s, r) {
     case "init": return r.inits ? `iniciativa de ${r.inits.length} criaturas` : "iniciativa";
     case "death": return "salvación contra muerte";
     case "oa": return `puede atacar de oportunidad a <b>${esc(t)}</b>`;
+    case "mastery": return `pide <em>${esc((r.mas || {}).n || "maestría")}</em> contra <b>${esc(t)}</b>${r.status === "ok" ? " ✓" : ""}`;
     case "save": case "check": return esc(r.label.replace(/ de [A-ZÁÉÍÓÚ][\wáéíóúñ-]+( [A-ZÁÉÍÓÚ][\wáéíóúñ-]+)*$/, "").replace(/^Salvación de /, "salvación de ").replace(/^Prueba de /, "prueba de "));
     case "loot": case "xp": return `<b>${esc(r.label)}</b>`;
     default: return `tirada libre <em>${esc(r.expr || r.label)}</em>`;
@@ -199,18 +206,26 @@ function rowHTML(s, r, dm, me, hasDamage, dmgRow) {
   if (r.inits) out.push(r.inits.map(x => `<span class="rqans">${esc(x.name.split(" ")[0])} <b>${x.total}</b></span>`).join(" "));
   if (r.kind === "death" && r.note) out.push(`<small>${esc(r.note)}</small>`);
   if (r.status === "void") out.push(`<span class="pill void">Anulada</span>`); else if (r.status === "mod") out.push(`<span class="pill mod" title="${esc(r.note || "")}">✎ cambiada</span>`);
+  if (r.mas && r.kind === "attack") out.push(`<span class="pill mas" title="${esc(MASTERY[r.mas.n] || "")}">⚔ ${esc(r.mas.n)}${r.masUsed ? " ✓" : ""}</span>`);
+  if (r.cleaveOf) out.push(`<span class="pill mas" title="${esc(MASTERY.Hender)}">⚔ Hender</span>`);
+  if (r.insp) out.push(`<span class="pill insp" title="Inspiración heroica">✨ ${r.insp.from} → ${r.insp.to}</span>`);
   if (offTurn) out.push(`<span class="pill off" title="Tirada libre durante el turno de otro">fuera de turno</span>`);
   const dmgActs = dm && dmgRow && dmgRow.status === "pending" ? (() => { const tr = damageTraits(s.tokens.find(x => x.id === dmgRow.target), dmgRow.dtype); return `<button class="ib gold" data-dec="${dmgRow.id}|${tr && tr.k === "resiste" ? "half" : tr && tr.k === "vulnerable" ? "double" : "ok"}" title="Aplicar el daño${tr ? " (" + tr.k + ")" : ""}">✓ Aplicar${tr ? " " + (tr.k === "resiste" ? "½" : tr.k === "vulnerable" ? "×2" : "0") : ""}</button><button class="ib" data-dec="${dmgRow.id}|half" title="Mitad">½</button><button class="ib" data-edit="${dmgRow.id}" title="Cambiar">✎</button><button class="ib danger" data-dec="${dmgRow.id}|void" title="Anular">✕</button>`; })() : "";
   const acts = [
     dm && pend && r.kind === "attack" ? `<button class="ib gold" data-dec="${r.id}|ok" title="Confirmar">✓ Vale</button><button class="ib" data-dec="${r.id}|flip" title="${r.result === "miss" ? "Que impacte" : "Que falle"}">⇄</button>` : "",
     dm && pend && r.kind === "damage" ? `<button class="ib gold" data-dec="${r.id}|ok" title="Aplicar">✓ Aplicar</button><button class="ib" data-dec="${r.id}|half" title="Mitad">½</button>` : "",
     canDmg ? `<button class="ib red" data-dmg="${r.id}" title="Tirar daño">🩸 Tirar daño${r.result === "crit" ? " ×2" : ""}</button>` : "",
-    dmgActs
+    dmgActs,
+    canInspire(s, r) ? `<button class="ib insp" data-insp="${r.id}" title="Gastar tu inspiración heroica: vuelve a tirar ${r.kind === "damage" ? "el dado más bajo" : "el d20"} y usa el nuevo resultado">✨ Repetir</button>` : "",
+    (() => { const mc = masteryChoice(s, r); return mc && (dm || r.who === me.id) ? `<button class="ib gold" data-mas="${r.id}" title="${esc(MASTERY[mc.n])}">⚔ ${esc(mc.label)}</button>` : ""; })(),
+    r.kind === "mastery" && dm && r.status === "pending" ? `<button class="ib gold" data-masok="${r.id}|${r.link}" title="${esc(MASTERY[(r.mas || {}).n] || "")}">✓ Aplicar</button><button class="ib danger" data-dec="${r.id}|void" title="Rechazar">✕</button>` : ""
   ].join("");
+  const cleaveRow = cleavePick === r.id ? (() => { const L = cleaveTargets(s, r); return `<div class="r2"><small>Hender: elige la segunda criatura (a 1,5 m de ${esc(who(s, r.target))} y a tu alcance)</small><span class="ra2">${L.map(t => `<button class="ib" data-cleave="${r.id}|${t.id}">${esc(who(s, t.id))}</button>`).join("") || `<small>No hay ninguna.</small>`}<button class="ib" data-cleave="${r.id}|">✕</button></span></div>`; })() : "";
   return `<div class="roll ${r.status} k-${r.kind} ${open ? "open" : ""}${pend && dm && (r.kind === "attack" || r.kind === "damage") || (dmgRow && dmgRow.status === "pending" && dm) || canDmg ? " todo" : ""}" data-row="${r.id}" style="--who:${esc(A.color)}">
     <div class="r1"><i class="ki" title="${KIND[r.kind] || ""}">${ICON[r.kind] || "🎲"}</i><span class="rt">${sys ? "" : `<b class="rwho">${esc(A.name)}</b> `}${what(s, r)}${r.adv ? `<sup class="${r.adv > 0 ? "adv" : "dis"}" title="${r.adv > 0 ? "Ventaja" : "Desventaja"}">${r.adv > 0 ? "▲" : "▼"}</sup>` : ""}${r.secret ? `<sup title="Secreta">🔒</sup>` : ""}</span>
       ${editing === r.id ? `<input type="number" id="rtot" value="${r.total}" aria-label="Nuevo total"><button class="ib gold" id="rtotok">OK</button>` : val}</div>
     ${out.length || acts ? `<div class="r2">${out.join(" ")}${acts ? `<span class="ra2">${acts}</span>` : ""}</div>` : ""}
+    ${cleaveRow}
     ${r.kind === "xp" ? `<div class="r2">${esc(r.note || "")}${dm && r.status === "pending" ? ` <input type="number" class="xpin" data-xpv="${r.id}" value="${r.xp.share}" aria-label="PX por personaje"><button class="ib gold" data-xpok="${r.id}">⭐ Repartir</button>` : ""}</div>` : ""}
     ${r.saves ? spellTable(s, r, dm) : ""}
     ${r.kind === "oa" ? (() => { const open = oaOpen(s, r), ans = (s.rolls || []).find(x => x.link === r.id && x.status !== "void"), mineOA = dm || ((s.tokens.find(t => t.id === r.tok) || {}).owner === me.id);

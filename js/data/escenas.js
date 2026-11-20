@@ -16,7 +16,8 @@ const SRD = {
   "Gárgola": [67, 15, 2, 9, "2", 1], "Diablillo": [21, 13, 3, 6, "1", 0.7], "Mago": [81, 15, 2, 9, "6", 1], "Esqueleto": [13, 14, 3, 9, "1/4", 1],
   "Guerrero veterano": [65, 17, 3, 9, "3", 1], "Berserker": [67, 13, 1, 9, "2", 1], "Pendenciero": [32, 12, 1, 9, "1/2", 1], "Sacerdote": [38, 13, 0, 9, "2", 1],
   "Zombi": [15, 8, -2, 6, "1/4", 1], "Gul": [22, 12, 2, 9, "1", 1], "Ghast": [36, 13, 3, 9, "2", 1], "Tumulario": [82, 14, 4, 9, "3", 1],
-  "Jefe goblin": [21, 17, 2, 9, "1", 0.7], "Guerrero goblin": [10, 15, 2, 9, "1/4", 0.7], "Lobo terrible": [22, 14, 2, 15, "1", 1.6]
+  "Jefe goblin": [21, 17, 2, 9, "1", 0.7], "Guerrero goblin": [10, 15, 2, 9, "1/4", 0.7], "Lobo terrible": [22, 14, 2, 15, "1", 1.6],
+  "Guerrero osgo": [33, 14, 2, 9, "1", 1], "Ogro": [68, 11, -1, 12, "2", 1.6]
 };
 const XP = { "1/4": 50, "1/2": 100, "1": 200, "2": 450, "3": 700, "6": 2300 };
 /** Una criatura del SRD en la escena (name: cómo se llama en la mesa; srd: su perfil). */
@@ -92,7 +93,9 @@ function taberna() {
     mon("Guerrero veterano", 5, 7, { name: "Thorgrim Yunquefirme (enano)" }),
     mon("Berserker", 7, 7, { name: "Brokk Barbarroja (enano)" }),
     mon("Pendenciero", 4, 9, { name: "Durin (enano)" }), mon("Pendenciero", 6, 9, { name: "Grumli (enano)" }),
-    mon("Sacerdote", 3, 8, { name: "Hilda Martillo-Santo (enana)" })
+    mon("Sacerdote", 3, 8, { name: "Hilda Martillo-Santo (enana)" }),
+    mon("Guerrero veterano", 8, 9, { name: "Balin Rompeyunques (enano)" }),
+    mon("Pendenciero", 3, 10, { name: "Nori (enano)" }), mon("Pendenciero", 8, 7, { name: "Ori (enano)" })
   );
   s.start = { c: 11, r: 12 }; s.sound = "taberna"; s.ambient = "interior";
   return s;
@@ -117,7 +120,7 @@ function cementerio() {
   s.tokens.push(
     mon("Zombi", 3, 3), mon("Zombi", 5, 4), mon("Zombi", 14, 11, { hidden: true, name: "Zombi (bajo tierra)" }), mon("Zombi", 17, 11, { hidden: true, name: "Zombi (bajo tierra)" }),
     mon("Esqueleto", 7, 8), mon("Esqueleto", 13, 7), mon("Esqueleto", 12, 4),
-    mon("Gul", 16, 9), mon("Ghast", 16, 4, { hidden: true }), mon("Tumulario", 18, 4, { hidden: true, name: "Tumulario (señor del mausoleo)" })
+    mon("Gul", 16, 9), mon("Gul", 4, 11, { hidden: true, name: "Gul (entre la maleza)" }), mon("Ghast", 16, 4, { hidden: true }), mon("Ghast", 18, 2, { hidden: true }), mon("Tumulario", 18, 4, { hidden: true, name: "Tumulario (señor del mausoleo)" })
   );
   s.start = { c: 11, r: 12 }; s.ambient = "noche"; s.sound = "viento"; s.fog = true;
   return s;
@@ -141,19 +144,32 @@ function bosque() {
     mon("Jefe goblin", 18, 2, { name: "Jefe goblin (en el peñasco)" }),
     mon("Guerrero goblin", 9, 3, { hidden: true, name: "Goblin (en la maleza)" }), mon("Guerrero goblin", 11, 2, { hidden: true, name: "Goblin (en la maleza)" }),
     mon("Guerrero goblin", 11, 11, { hidden: true, name: "Goblin (en la maleza)" }), mon("Guerrero goblin", 13, 12, { hidden: true, name: "Goblin (en la maleza)" }),
-    mon("Lobo terrible", 21, 4, { hidden: true, name: "Huargo (lobo terrible)" }), mon("Lobo terrible", 20, 9, { hidden: true, name: "Huargo (lobo terrible)" })
+    mon("Lobo terrible", 21, 4, { hidden: true, name: "Huargo (lobo terrible)" }), mon("Lobo terrible", 20, 9, { hidden: true, name: "Huargo (lobo terrible)" }),
+    mon("Lobo terrible", 22, 11, { hidden: true, name: "Huargo (lobo terrible)" }), mon("Lobo terrible", 1, 4, { hidden: true, name: "Huargo (lobo terrible)" }),
+    mon("Guerrero osgo", 6, 3, { hidden: true, name: "Osgo (tras los árboles)" }), mon("Guerrero osgo", 7, 12, { hidden: true, name: "Osgo (tras los árboles)" }),
+    mon("Ogro", 13, 5, { hidden: true, name: "Ogro (tras el árbol caído)" })
   );
   s.start = { c: 2, r: 8 }; s.ambient = "dia"; s.sound = "bosque";
   return s;
 }
 
-export const exampleScenes = () => [torre(), taberna(), cementerio(), bosque()];
+/** ex: versión de las escenas de ejemplo (2 = equilibradas para 4 PJ de nivel 5). */
+export const EX_VER = 2;
+export const exampleScenes = () => [torre(), taberna(), cementerio(), bosque()].map(sc => Object.assign(sc, { ex: EX_VER }));
 
+/** Criaturas con el mismo nombre: «Goblin (en la maleza)» ×4 → «Goblin 1 (en la maleza)», «Goblin 2…», para distinguirlas. */
+export function numberDupes(tokens) {
+  const groups = {};
+  const base = n => String(n).replace(/\s*\(.*\)$/, "").trim();
+  tokens.filter(t => t.kind !== "pc").forEach(t => (groups[base(t.name)] = groups[base(t.name)] || []).push(t));
+  Object.values(groups).forEach(g => { if (g.length < 2) return; g.forEach((t, i) => { const m = String(t.name).match(/^(.*?)(\s*\(.*\))?$/); t.name = `${m[1]} ${i + 1}${m[2] || ""}`; }); });
+  return tokens;
+}
 /** Copia una escena preparada a la mesa en directo, colocando al grupo en su punto de inicio. */
 export function sceneToBoard(scene, characters, keepPCs) {
   const floors = cloneFloors(scene, { newIds: true });
-  const board = { scene: scene.id, name: scene.name, cols: scene.cols, rows: scene.rows, terrain: { ...scene.terrain }, props: scene.props.map(p => ({ ...p })), ambient: scene.ambient || "interior", sound: scene.sound || "", turn: null, round: 0, ...(floors ? { floors, floor: scene.floor || 0 } : {}) };
-  const foes = scene.tokens.map(t => ({ ...t, id: id("t"), init: null }));
+  const board = { scene: scene.id, name: scene.name, cols: scene.cols, rows: scene.rows, terrain: { ...scene.terrain }, props: scene.props.map(p => ({ ...p })), ambient: scene.ambient || "interior", sound: scene.sound || "", region: scene.region || "", lavaDmg: scene.lavaDmg || "", fallH: scene.fallH || 3, turn: null, round: 0, ...(floors ? { floors, floor: scene.floor || 0 } : {}) };
+  const foes = numberDupes(scene.tokens.map(t => ({ ...t, id: id("t"), init: null })));
   const spots = ring(scene.start || { c: 1, r: 1 }, scene);
   const pcs = characters.map((ch, i) => {
     const old = keepPCs && keepPCs.find(t => t.char === ch.id);
