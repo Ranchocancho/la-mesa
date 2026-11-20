@@ -17,6 +17,40 @@ service cloud.firestore {
     function editorOf(w) { return signedIn() && (w.owner == request.auth.uid || request.auth.uid in w.get('dms', [])); }
     function isEditor(c) { return editorOf(world(c)); }
 
+    // ---- Fichas: lo que un jugador puede cambiar en la suya ----
+    function changed() { return request.resource.data.diff(resource.data).affectedKeys(); }
+    function playKeys() { return ['hp', 'hdUsed', 'death', 'inspiration', 'spells', 'journal', 'proposals', 'lvlDraft', 'order']; }
+    function slotMax(d, l) { return d.get('spells', {}).get('slots', {}).get(l, {}).get('max', 0); }
+    function slotMaxSame(a, b) {
+      return slotMax(a, '1') == slotMax(b, '1') && slotMax(a, '2') == slotMax(b, '2') && slotMax(a, '3') == slotMax(b, '3')
+        && slotMax(a, '4') == slotMax(b, '4') && slotMax(a, '5') == slotMax(b, '5') && slotMax(a, '6') == slotMax(b, '6')
+        && slotMax(a, '7') == slotMax(b, '7') && slotMax(a, '8') == slotMax(b, '8') && slotMax(a, '9') == slotMax(b, '9');
+    }
+    function spellListSame(a, b) { return a.get('spells', {}).get('list', []) == b.get('spells', {}).get('list', []); }
+    function inspirationOk(a, b) {
+      return b.get('inspiration', false) == a.get('inspiration', false) || b.get('inspiration', false) == false
+        || a.get('species', '').matches('^Humano.*');
+    }
+    function playerPlays() {
+      let a = resource.data;
+      let b = request.resource.data;
+      return changed().hasOnly(playKeys())
+        && b.hp.max == a.hp.max
+        && slotMaxSame(a, b) && spellListSame(a, b)
+        && inspirationOk(a, b);
+    }
+    function abSum(d) { return d.abilities.fue + d.abilities.des + d.abilities.con + d.abilities.int + d.abilities.sab + d.abilities.car; }
+    function playerLevelsUp() {
+      let a = resource.data;
+      let b = request.resource.data;
+      return b.level == a.level + 1 && a.get('lvlGrant', 0) >= b.level
+        && changed().hasOnly(['hp', 'hdUsed', 'death', 'inspiration', 'spells', 'journal', 'proposals', 'lvlDraft', 'order',
+                              'level', 'abilities', 'subclass', 'features', 'levelLog', 'lvlGrant', 'log'])
+        && b.hp.max > a.hp.max && b.hp.max - a.hp.max <= 60
+        && abSum(b) >= abSum(a) && abSum(b) - abSum(a) <= 2
+        && inspirationOk(a, b);
+    }
+
     // Un jugador se añade a sí mismo, sin tocar nada más.
     function joiningSelf() {
       let before = resource.data;
@@ -50,13 +84,21 @@ service cloud.firestore {
         allow read: if isEditor(c) || (isMember(c) && resource.data.revealed == true);
         allow write: if isEditor(c);
       }
-      // Fichas: todo el grupo las ve; cada jugador crea y edita la suya; el administrador y los másteres, todas.
+      // Fichas: todo el grupo las ve. El administrador y los másteres las editan enteras.
+      // El jugador, en la suya, solo puede:
+      //  - lo que se gasta jugando en la Partida: PG (no los máximos), PG temporales, dados de golpe, salvaciones
+      //    contra muerte, espacios de conjuro gastados (no los máximos ni la lista) e inspiración (gastarla; los
+      //    humanos la recuperan en el descanso largo);
+      //  - su cuaderno, sus propuestas de cambio al máster y la subida de nivel guardada a medias;
+      //  - subir de nivel cuando el máster lo ha concedido (un nivel cada vez, como mucho hasta el concedido).
+      // Todo lo demás (monedas, equipo, rasgos, habilidades…) lo propone y lo aplica el máster.
       match /characters/{ch} {
         allow read: if isMember(c);
         allow create: if isEditor(c) || (isMember(c) && request.resource.data.owner == request.auth.uid);
         allow update: if isEditor(c) || (isMember(c) && resource.data.owner == request.auth.uid
-          && request.resource.data.owner == request.auth.uid);
-        allow delete: if isEditor(c) || (isMember(c) && resource.data.owner == request.auth.uid);
+          && request.resource.data.owner == request.auth.uid
+          && (playerPlays() || playerLevelsUp()));
+        allow delete: if isEditor(c);
       }
       // Mesa táctica: escenas preparadas (solo máster), la mesa en directo y las fichas sobre ella.
       match /scenes/{sc} {

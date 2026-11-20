@@ -614,3 +614,24 @@ Todo se lee del perfil de cada criatura (SRD 5.2.1):
 - **Tácticas de manada** y los demás rasgos situacionales quedan a criterio del máster (se leen en el perfil).
 - En el panel PNJ se ven las defensas de cada criatura.
 - El inicio del turno de una criatura (recarga, Regeneración, legendarias) lo aplica siempre el máster, aunque el turno lo pase un jugador (reglas de Firestore).
+
+## Hito 42 · Ficha de personaje nueva, con el visto bueno del máster
+
+- **Distribución**: franja arriba con PG, CA, iniciativa, velocidad, competencia y dados de golpe; columna fija a la izquierda con características, salvaciones, habilidades, sentidos, idiomas y competencias; pestañas justo debajo (Acciones, Conjuros, Inventario, Rasgos, Historia, Cuaderno, Lo que viene). Las pestañas empiezan a 250 px en lugar de 730 (en el móvil, a 300 en lugar de 1.170, con la pestaña Atributos). La ficha recuerda la última pestaña.
+- **Aquí no se tiran dados**: tirar, gastar espacios, curarse o descansar es cosa de la Partida. La subida de nivel toma el valor fijo de PG del SRD.
+- **Solo el máster edita** (✎ Editar → ✓ Hecho); lo que cambia queda en el registro de la ficha.
+- **El jugador propone**: «✎ Proponer un cambio» abre una copia editable, y «Enviar al máster» manda las diferencias con un motivo (p. ej. «Monedas de oro: 34 → 24 · Equipo: + Lanza»). El máster las aprueba o las rechaza con un motivo; el aviso sale en el menú (Personajes con un número) y en la ficha.
+- **Registro (📜)**: cada cambio aprobado, rechazado, hecho por el máster o por subida de nivel, con quién, cuándo y el motivo.
+- **Subida de nivel guiada que se guarda a medias**: cada paso se guarda en la ficha; «💾 Guardar y salir» y, otro día o en otro dispositivo, «⬆ Continuar la subida». Ya no se cierra al tocar fuera.
+- El cuaderno de notas sigue siendo del jugador, sin aprobación.
+- Las reglas de Firestore lo garantizan en el servidor (hito 43).
+
+## Hito 43 · Reglas de Firestore: el jugador ya no puede cambiar su ficha por su cuenta
+
+`firestore.rules` (hay que publicarlas en la consola de Firebase). En su propia ficha, un jugador solo puede escribir:
+- lo que se gasta jugando: PG actuales y temporales (no los máximos), dados de golpe, salvaciones contra muerte, espacios de conjuro gastados (no los máximos ni la lista de conjuros) e inspiración (gastarla; los humanos la recuperan en el descanso largo);
+- su cuaderno, sus propuestas al máster y la subida de nivel guardada a medias;
+- la subida de nivel concedida por el máster: un nivel cada vez y como mucho hasta el concedido, con PG máximos que suben (hasta 60) y características que suben como mucho 2 en total.
+Además, un jugador ya no puede borrar su ficha (solo el máster).
+La app escribe ahora los cambios de un jugador documento a documento: si el servidor rechaza uno de su ficha, avisa («pídeselo al máster con ✎ Proponer un cambio») y no se pierden sus tiradas ni sus movimientos.
+Comprobado simulando las reglas sobre las escrituras reales de la app (gastar espacios, descansos, curación, daño, salvaciones contra muerte, cuaderno, propuestas, subida guardada y subida completa pasan; monedas, equipo, PG máximos, espacios máximos, conjuros, habilidades, darse inspiración o subir dos niveles se rechazan).

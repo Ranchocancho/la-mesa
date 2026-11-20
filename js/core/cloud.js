@@ -252,13 +252,25 @@ function push(state) {
   const allowed = (k, v) => cloud.isEditor || ((k.startsWith("characters/") || k.startsWith("tokens/")) && v && v.owner === me) || (k.startsWith("chronicle/") && v && v.by === me) || (k.startsWith("rolls/") && v && v.who === me) || (k === "board/live" && lastTurn !== JSON.stringify([v.turn, v.round, v.seq]));
   const ref = k => k === "C" ? fb.doc(db, "campaigns", cloud.cid) : fb.doc(db, "campaigns", cloud.cid, ...k.split("/"));
   // Firestore admite 500 escrituras por lote: los cambios grandes (restaurar una copia) se parten en varios
-  const ops = [];
+  const ops = [], keys = [];
   for (const [k, v] of all) {
     const j = JSON.stringify(v);
-    if (last.get(k) !== j && allowed(k, v)) ops.push(b => b.set(ref(k), clean(v), k === "C" ? { merge: true } : {}));
+    if (last.get(k) !== j && allowed(k, v)) { ops.push(b => b.set(ref(k), clean(v), k === "C" ? { merge: true } : {})); keys.push(k); }
   }
-  for (const [k, j] of last) if (!all.has(k) && allowed(k, JSON.parse(j))) ops.push(b => b.delete(ref(k)));
+  for (const [k, j] of last) if (!all.has(k) && allowed(k, JSON.parse(j))) { ops.push(b => b.delete(ref(k))); keys.push(k); }
   last = new Map([...all].map(([k, v]) => [k, JSON.stringify(v)]));
+  // Un jugador escribe pocos documentos: uno a uno, para que si el servidor rechaza un cambio en su ficha
+  // (las reglas solo le dejan lo de la Partida, sus notas, sus propuestas y la subida de nivel) no arrastre el resto.
+  if (!cloud.isEditor) {
+    ops.forEach((op, i) => { const b = fb.writeBatch(db); op(b); b.commit().catch(e => {
+      console.error(e);
+      cloud.error = e.code === "permission-denied" && keys[i].startsWith("characters/")
+        ? "El servidor no ha aceptado ese cambio en tu ficha: pídeselo al máster con «✎ Proponer un cambio»."
+        : "No se pudo guardar el último cambio. Comprueba la conexión.";
+      ping();
+    }); });
+    return;
+  }
   for (let i = 0; i < ops.length; i += 450) {
     const batch = fb.writeBatch(db);
     ops.slice(i, i + 450).forEach(op => op(batch));

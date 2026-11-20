@@ -1,5 +1,6 @@
 // Arranque: modo (nube o demostración), cabecera, navegación y aviso de lo que muestra el máster.
 import { store, useLocal } from "./core/store.js";
+import { pendingCount } from "./core/propuestas.js";
 import { session, currentUser, realUser, isDM, isEditor, viewingAs, ROLE } from "./core/session.js";
 import { visibleLive, sessionName, presentationFor, presentationTitle } from "./core/sesiones.js";
 import { presence } from "./core/presence.js";
@@ -51,7 +52,7 @@ function topbar(state) {
   const players = state.users.filter(u => u.role === "player");
   return `<header class="top">
     <div class="brand"><b>La Mesa</b><span>${esc(state.campaign.name)} · ${live ? `${esc(sessionName(live))} en curso · ${esc(clockShort(clockOf(state)))}` : "sin partida"}${cloudMode ? "" : " · demostración"}</span></div>
-    ${me ? `<nav class="nav" aria-label="Secciones">${ROUTES.filter(x => !x.dmOnly || isDM(state)).map(x => `<a href="#${x.id}" ${x.id === r ? 'aria-current="page"' : ""}>${x.label}${x.id === "partida" && live ? ` <i class="livedot" title="Partida en curso"></i>` : ""}${x.soon ? ` <span class="soon">· hito ${x.soon}</span>` : ""}</a>`).join("")}</nav>
+    ${me ? `<nav class="nav" aria-label="Secciones">${ROUTES.filter(x => !x.dmOnly || isDM(state)).map(x => `<a href="#${x.id}" ${x.id === r ? 'aria-current="page"' : ""}>${x.label}${x.id === "partida" && live ? ` <i class="livedot" title="Partida en curso"></i>` : ""}${x.id === "personajes" && isDM(state) && pendingCount(state) ? ` <i class="pendot" title="Cambios de fichas por revisar">${pendingCount(state)}</i>` : ""}${x.soon ? ` <span class="soon">· hito ${x.soon}</span>` : ""}</a>`).join("")}</nav>
     <span class="sync" title="Conectados ahora"><i></i>${presence.count()} conectado${presence.count() === 1 ? "" : "s"}</span>
     ${isEditor(state) && players.length ? `<label class="viewas">Ver como<select id="viewas" class="btn small"><option value="">${esc(ROLE[real.role])}</option>${players.map(p => `<option value="${p.id}" ${va && va.id === p.id ? "selected" : ""}>${esc(p.name)}</option>`).join("")}</select></label>` : ""}
     <div class="me">${avatar(real)}<div>${esc(real.name)}<small>${esc(ROLE[real.role] || "Jugador")}</small></div>

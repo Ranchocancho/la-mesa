@@ -8,6 +8,7 @@ import { PROG, FEATS } from "../data/progresion.js";
 import { ABILITIES, AB_SHORT, classInfo, mod, sign, prof } from "../data/dnd.js";
 import { srd } from "../core/srd.js";
 import { $, $$, esc, toast } from "../core/ui.js";
+import { logTo } from "../core/propuestas.js";
 
 const AB = Object.fromEntries(ABILITIES);
 // Por las tres primeras letras: así vale el femenino («Maga», «Pícara», «Clériga»…)
@@ -57,12 +58,30 @@ export function openLevelUp(charId) {
   const s = store.get(), c = s.characters.find(x => x.id === charId); if (!c || c.level >= 20) return;
   const P = progOf(c.cls);
   W = { id: charId, step: 0, hp: null, roll: 0, sub: c.subclass || (P && P.sub ? P.sub.n : ""), subOther: "", asi: { mode: "abil", a: "", b: "", feat: "" }, epic: { feat: "", ab: "" }, spells: [], spellQ: "" };
+  // Lo que se dejó a medias (para este mismo nivel) se recupera tal cual
+  const d = c.lvlDraft; if (d && d.L === c.level + 1) { const { L, at, ...rest } = d; Object.assign(W, rest, { id: charId, spellQ: "" }); }
+  lastSaved = JSON.stringify(pickW());
+  const old = document.getElementById("lvlwiz"); if (old) old.remove();
   const ov = document.createElement("div"); ov.className = "reqdlg lvlwiz"; ov.id = "lvlwiz"; document.body.appendChild(ov);
-  ov.addEventListener("click", e => { if (e.target === ov) close(); });
+  // No se cierra al tocar fuera: así no se pierde nada por un toque sin querer
   srd("conjuros").then(() => draw());
   draw();
 }
-const close = () => { const o = document.getElementById("lvlwiz"); if (o) o.remove(); W = null; };
+const close = () => { if (W) persist.now(); const o = document.getElementById("lvlwiz"); if (o) o.remove(); W = null; };
+// Guardar a medias: cada elección se apunta en la ficha (lvlDraft) y se puede seguir otro día, en otro dispositivo
+let lastSaved = "";
+const pickW = () => W && { step: W.step, sub: W.sub, asi: W.asi, epic: W.epic, spells: W.spells };
+const persist = (() => {
+  let t = null;
+  const now = () => {
+    clearTimeout(t); if (!W) return;
+    const s = store.get(), c = s.characters.find(x => x.id === W.id); if (!c) return;
+    const v = pickW(), j = JSON.stringify(v); if (j === lastSaved) return; lastSaved = j;
+    store.commit("char", st => { const x = st.characters.find(y => y.id === W.id); if (x) x.lvlDraft = { L: x.level + 1, at: Date.now(), ...JSON.parse(j) }; });
+  };
+  const f = () => { clearTimeout(t); t = setTimeout(now, 500); };
+  f.now = now; return f;
+})();
 
 function needs(c, I) {
   return { sub: I.items.some(i => i.k === "sub"), asi: I.items.some(i => i.k === "asi"), epic: I.items.some(i => i.k === "epic"), magic: !!classInfo(c.cls).cast && I.P && (I.P.cols.includes("Conjuros preparados")) };
@@ -90,7 +109,7 @@ function draw() {
   const ov = document.getElementById("lvlwiz"); if (!ov || !W) return;
   const s = store.get(), c = s.characters.find(x => x.id === W.id); if (!c) return close();
   const L = c.level + 1, I = levelInfo(c, L), ST = steps(c, I), cur = ST[Math.min(W.step, ST.length - 1)][0];
-  const hd = classInfo(c.cls).hd, con = mod(c.abilities.con), avg = Math.floor(hd / 2) + 1, gain = Math.max(1, (W.roll || avg) + con);
+  const hd = classInfo(c.cls).hd, con = mod(c.abilities.con), avg = Math.floor(hd / 2) + 1, gain = Math.max(1, (avg) + con);
   let body = "";
   if (!I) body = `<p class="note">No tengo la tabla de «${esc(c.cls)}». Sube los puntos de golpe y apunta los rasgos a mano.</p>`;
   else if (cur === "gain") {
@@ -100,8 +119,7 @@ function draw() {
       ${I.items.some(i => i.k === "subf") && !I.srdSub ? `<p class="note">Tu subclase («${esc(c.subclass || "sin elegir")}») no está en el SRD: mira su rasgo de nivel ${L} en el manual y apúntalo en Rasgos.</p>` : ""}</div>
       ${I.changes.length || I.slotCh.length ? `<h4>Cambian tus números</h4><div class="chg">${I.changes.map(([k, a, b]) => `<span>${esc(k)} <s>${esc(a)}</s> → <b>${esc(b)}</b></span>`).join("")}${I.slotCh.map(([l, a, b]) => `<span>Espacios de nivel ${l} <s>${a}</s> → <b>${b}</b></span>`).join("")}</div>` : ""}`;
   } else if (cur === "hp") {
-    body = `<p>Ganas un dado de golpe: <b>d${hd}</b> ${sign(con)} (Constitución). Elige el valor fijo o tira el dado.</p>
-      <div class="row"><button class="btn" data-hp="avg" aria-pressed="${!W.roll}">Valor fijo: ${avg}</button><button class="btn" data-hp="roll" aria-pressed="${!!W.roll}">${W.roll ? `Tirada: ${W.roll}` : `🎲 Tirar d${hd}`}</button></div>
+    body = `<p>Ganas un dado de golpe: <b>d${hd}</b> ${sign(con)} (Constitución). Se toma el valor fijo del SRD (${avg} por nivel): fuera de la Partida no se tiran dados.</p>
       <p class="lead">Ganas <b>${gain} PG</b> · máximo ${c.hp.max} → <b>${c.hp.max + gain}</b></p>`;
   } else if (cur === "sub") {
     const P = I.P;
@@ -145,11 +163,12 @@ function draw() {
       <div class="wide"><small>Rasgos que se añaden a tu ficha</small><b>${esc(newFeatures(c, I, L).map(f => f.name).join(", ") || "—")}</b></div></div>
       ${problems(c, I).length ? `<p class="warn">⚠ ${problems(c, I).map(esc).join(" · ")}</p>` : ""}`;
   }
-  ov.innerHTML = `<div class="modalbox"><header><h3>⬆ Subir a nivel ${L} · ${esc(c.name)}</h3><button class="x" data-close aria-label="Cerrar">✕</button></header>
+  ov.innerHTML = `<div class="modalbox"><header><h3>⬆ Subir a nivel ${L} · ${esc(c.name)}</h3><button class="btn small" data-close title="Se guarda lo que llevas: puedes seguir otro día desde la ficha (Lo que viene)">💾 Guardar y salir</button></header>
     <nav class="wsteps">${ST.map(([k, n], i) => `<button data-step="${i}" class="${i === W.step ? "on" : i < W.step ? "done" : ""}">${i + 1}. ${n}</button>`).join("")}</nav>
     <div class="wbody">${body}</div>
     <footer>${W.step > 0 ? `<button class="btn" data-prev>← Atrás</button>` : ""}<span class="grow"></span>${cur === "sum" ? `<button class="btn gold" data-ok ${problems(c, I).length ? "disabled" : ""}>✓ Confirmar nivel ${L}</button>` : `<button class="btn gold" data-next>Siguiente →</button>`}</footer></div>`;
   bindW(ov, c, I, ST, L, hd, gain);
+  persist();
 }
 const CONJ = () => window.__conj;
 function abilitiesAfter(c, I) {
@@ -188,14 +207,13 @@ function bindW(ov, c, I, ST, L, hd, gain) {
   $$("[data-step]", ov).forEach(b => b.onclick = () => go(+b.dataset.step));
   const nx = $("[data-next]", ov); if (nx) nx.onclick = () => go(W.step + 1);
   const pv = $("[data-prev]", ov); if (pv) pv.onclick = () => go(W.step - 1);
-  $$("[data-hp]", ov).forEach(b => b.onclick = () => { W.roll = b.dataset.hp === "roll" ? 1 + Math.floor(Math.random() * hd) : 0; draw(); });
   $$("input[name=sub]", ov).forEach(r => r.onchange = () => { W.sub = r.value === "__otra" ? ($("#subother", ov).value.trim() || "") : r.value; draw(); });
-  const so = $("#subother", ov); if (so) so.oninput = () => { W.sub = so.value.trim(); const r = $("input[name=sub][value=__otra]", ov); if (r) r.checked = true; };
+  const so = $("#subother", ov); if (so) so.oninput = () => { W.sub = so.value.trim(); const r = $("input[name=sub][value=__otra]", ov); if (r) r.checked = true; persist(); };
   $$("[data-asim]", ov).forEach(b => b.onclick = () => { W.asi = { mode: b.dataset.asim, a: "", b: "", feat: "" }; draw(); });
   $$("[data-ab]", ov).forEach(b => b.onclick = () => { const k = b.dataset.ab, a = W.asi; if (!a.a) a.a = k; else if (!a.b) a.b = k; else { a.a = k; a.b = ""; } draw(); });
   const ac = $("[data-abclear]", ov); if (ac) ac.onclick = () => { W.asi.a = W.asi.b = ""; draw(); };
   $$("input[name=feat]", ov).forEach(r => r.onchange = () => { W.asi.feat = r.value; W.asi.a = ""; draw(); });
-  const fo = $("#featother", ov); if (fo) fo.oninput = () => { W.asi.other = fo.value; };
+  const fo = $("#featother", ov); if (fo) fo.oninput = () => { W.asi.other = fo.value; persist(); };
   $$("[data-featab]", ov).forEach(b => b.onclick = e => { e.preventDefault(); W.asi.a = b.dataset.featab; draw(); });
   $$("input[name=epic]", ov).forEach(r => r.onchange = () => { W.epic = { feat: r.value, ab: "" }; draw(); });
   $$("[data-epab]", ov).forEach(b => b.onclick = e => { e.preventDefault(); W.epic.ab = b.dataset.epab; draw(); });
@@ -218,9 +236,11 @@ function apply(c0, I, L, gain) {
       spells.forEach(nm => { const d = (window.__conj || []).find(x => x.n === nm); c.spells.list.push({ id: "s-" + Math.random().toString(36).slice(2, 8), name: nm, level: d ? d.lvl : 0, prepared: true }); });
     }
     if ((+c.lvlGrant || 0) <= c.level) delete c.lvlGrant;
+    delete c.lvlDraft;
+    logTo(c, s, "nivel", [`Nivel ${L - 1} → ${L}`, `PG máximos +${gain}`, ...(subNew ? [`Subclase: ${subNew}`] : []), ...(fp ? [`Dote: ${fp}`] : []), ...ABILITIES.filter(([k]) => ab[k] !== (+c0.abilities[k] || 10)).map(([k, n]) => `${n}: ${c0.abilities[k]} → ${ab[k]}`), ...(spells.length ? [`Conjuros nuevos: ${spells.join(", ")}`] : []), ...feats.map(f => `Rasgo: ${f.name}`)]);
     c.levelLog = c.levelLog || []; c.levelLog.push({ lvl: L, at: Date.now(), hp: gain, sub: subNew || undefined, feat: fp || undefined, spells: spells.length ? spells : undefined });
   });
-  close(); toast(`⬆ ${c0.name} sube a nivel ${L}`);
+  W = null; lastSaved = ""; const o = document.getElementById("lvlwiz"); if (o) o.remove(); toast(`⬆ ${c0.name} sube a nivel ${L}`);
 }
 
 // Los conjuros del SRD (para elegir los nuevos): se cargan una vez
