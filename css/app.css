@@ -1749,3 +1749,63 @@ button.inspchip{cursor:pointer;font:inherit;font-size:12.5px}
 }
 @media (max-width:700px){.brand{flex:1 1 0}.brand span{max-width:100%}.top .me{gap:6px}}
 .trapsrd{font-size:12.5px;line-height:1.45;color:var(--tenue);background:rgba(0,0,0,.2);border-radius:8px;padding:8px 10px;margin-top:4px}.trapsrd b{color:var(--hueso)}
+
+/* Hito 40 · Reglas y monstruos con índice, glosario y filtros */
+.rside > *{flex-shrink:0}
+.rside .places{flex-shrink:1}
+.rtabs button{white-space:nowrap}
+.quick{display:flex;flex-wrap:wrap;gap:4px}
+.quick button{background:rgba(214,170,78,.08);border:1px solid var(--linea);color:var(--hueso);border-radius:999px;padding:4px 10px;font-size:12.5px;cursor:pointer}
+.quick button:hover{border-color:var(--oro);color:var(--oro)}
+.toc{display:flex;flex-direction:column;gap:2px}
+.toc details{border-radius:8px}
+.toc summary{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:7px 10px;border-radius:8px;cursor:pointer;list-style:none;font-size:14.5px;color:var(--hueso)}
+.toc summary::-webkit-details-marker{display:none}
+.toc summary::after{content:"▸";color:var(--tenue);margin-left:auto;transition:transform .15s}
+.toc details[open] summary::after{transform:rotate(90deg)}
+.toc summary small{color:var(--tenue);font-size:11.5px}
+.toc summary.on{color:var(--oro);background:rgba(214,170,78,.08)}
+.toc details > div{display:flex;flex-direction:column;padding:2px 0 8px 12px;border-left:1px solid var(--linea);margin-left:14px}
+.tocsub{display:flex;justify-content:space-between;gap:8px;background:transparent;border:0;color:var(--tenue);text-align:left;padding:4px 8px;border-radius:6px;font-size:13.5px;cursor:pointer}
+.tocsub small{opacity:.6;font-size:11px}
+.tocsub.l2{padding-left:20px;font-size:12.8px}
+.tocsub:hover{color:var(--hueso);background:rgba(255,255,255,.04)}
+.tocsub.on{color:var(--oro);background:rgba(214,170,78,.12)}
+.tocsub.tocjump{color:var(--oro);font-style:italic}
+.crumbs{flex:1;min-width:0;font-size:13.5px}
+.crumbs b{color:var(--oro);font-weight:normal}
+.crumbs em{font-style:normal;opacity:.7}
+.bookpage .flash{animation:rflash 1.8s ease-out}
+@keyframes rflash{0%,30%{background:rgba(244,201,93,.55)}100%{background:transparent}}
+.azbar{display:flex;flex-wrap:wrap;gap:2px}
+.azbar button{background:transparent;border:1px solid var(--linea);color:var(--tenue);border-radius:5px;min-width:24px;padding:2px 4px;font-size:12px;cursor:pointer}
+.azbar button:hover{color:var(--oro);border-color:var(--oro)}
+.gtag{font-style:italic}
+.rpage .scard.gloss h2 .btag{font-size:13px;vertical-align:middle}
+.gfoot{margin-top:14px}
+.mfilters summary{cursor:pointer;color:var(--oro);font-family:var(--display);font-size:14px;padding:2px 0}
+.mfilters summary em{font-style:normal;font-family:Georgia,serif;font-size:12px;color:var(--hueso);background:rgba(214,170,78,.18);border-radius:999px;padding:1px 8px;margin-left:6px}
+.mgroup{display:block;margin:8px 0 2px}
+.mgroup > b{display:block;font-weight:normal;font-size:11.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--tenue);margin-bottom:4px}
+.msort{gap:4px;font-size:12.5px;color:var(--tenue)}
+.msort button{background:transparent;border:1px solid var(--linea);color:var(--tenue);border-radius:999px;padding:2px 10px;font-size:12px;cursor:pointer}
+.msort button[aria-pressed="true"]{border-color:var(--oro);color:var(--oro)}
+.mfit{margin:0}
+.rback{display:none}
+@media (max-width:760px){
+  .rtabs{padding:0 6px;overflow-x:auto}
+  .rtabs button{padding:10px 9px;font-size:12.5px}
+  .rtabs .srdnote{display:none}
+  .rbody{display:flex;flex-direction:column;overflow:hidden}
+  .rside{max-height:none;border-right:0;display:none;flex:1;min-height:0}
+  .rpage{flex:1;min-height:0}
+  .rbody.showside .rside{display:flex}
+  .rbody.showside .rpage{display:none}
+  .rpage{padding:12px}
+  .rback{display:inline-flex}
+  .rpage > .rback{margin-bottom:10px}
+  .pnav{top:-12px;flex-wrap:wrap}
+}
+/* .side es también la columna lateral general: aquí son chips en fila */
+.cptypes.side{flex-direction:row;overflow:visible;background:none;border:0;padding:0;gap:4px}
+.rpage .pnav{z-index:3}

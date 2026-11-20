@@ -591,3 +591,14 @@ Arreglos: los humanoides «Medianos o Pequeños» del SRD (mago, veterano…) sa
 - **Las 8 trampas del SRD** (aguja, dardos, estatua, pozo con pinchos, pozo, red, roca rodante, techo que se derrumba) con CD y daño según el nivel del grupo.
 - «Agotamiento» pasa a llamarse **Cansancio** (texto 2024); resta 1,5 m de velocidad por nivel.
 - 3D: piezas nuevas modeladas; el agua, la lava y el abismo vuelven a verse (el marco de la mesa los tapaba).
+
+## Hito 40 · Reglas y monstruos más fáciles de consultar
+
+- **Libro con índice desplegable**: cada capítulo tiene sus subsecciones (Cómo jugar › Combate › Cobertura, las 12 clases, Equipo › Armaduras…). Al tocar una se salta a esa página y se resalta el título. Las páginas del índice están comprobadas contra el texto del SRD.
+- **Migas de pan** encima de la página («Cómo jugar › Combate › Cobertura · p. 16») y resultados de búsqueda con su capítulo.
+- **Accesos rápidos**: Estados, Acciones, Cobertura, Descansos, Caídas, Salvación contra muerte, Viajes y Encuentros.
+- **Pestaña Glosario**: las definiciones del SRD como diccionario A–Z, filtrables por Estados, Acciones, Áreas, Peligros y Actitudes. Los «Consulta también» son enlaces, y cada entrada abre su página del libro.
+- **Monstruos por categorías**: rangos de VD, tipo, tamaño, movimiento (vuela, nada, trepa, excava), rasgos (conjuros, legendaria, reacciones, anfibia, resistencia mágica), defensas y origen (Monstruos o Animales). Cada filtro muestra cuántas quedan, y se puede ordenar por nombre o por VD. Las filas llevan iconos.
+- **Para tu grupo** (máster): la dificultad de una criatura con el presupuesto de PX del SRD y cuántas hacen falta para subir de categoría.
+- Perfiles más limpios: la cabecera (salvaciones, habilidades, defensas, sentidos, idiomas, VD) se separa bien aunque el PDF la junte en una línea.
+- **Móvil**: lista o página a pantalla completa con botón «← Lista» / «☰ Índice»; los filtros de tipo ya se ven (antes quedaban ocultos).
