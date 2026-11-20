@@ -7,7 +7,8 @@ import { findSpell } from "./srd.js";
 import { ESTADOS } from "../data/estados.js";
 import { classInfo, prof, mod } from "../data/dnd.js";
 import { AB_KEY, spellDC, spellMod, quickSave, heal, damage, dropConcentration, addCond } from "./salud.js";
-import { currentUser } from "./session.js";
+import { currentUser, isDM } from "./session.js";
+import { damageTraits, withTraits, lrLeft } from "./defensas.js";
 import { attack } from "./combate.js";
 import { rangeOf, inRange, cover, spend, dist, canActNow } from "./turnos.js";
 import { toast } from "./ui.js";
@@ -118,7 +119,7 @@ export function cast(casterId, spellName, slot, targetIds, P = null) {
   }
   if (m.save) {
     const dmgExpr = m.dmg ? scaled(m, m.dmg, slot, cl) : null;
-    const saves = targets.map(t => quickSave(s, t, m.save, dc, m.save === "des" ? (cover(s, a, t).bonus || 0) : 0));
+    const saves = targets.map(t => quickSave(s, t, m.save, dc, m.save === "des" ? (cover(s, a, t).bonus || 0) : 0, { magic: true }));
     const base = { kind: "spell", label: `${lbl} · salvación de ${Object.entries(AB_KEY).find(([, k]) => k === m.save)[0].replace(/^./, x => x.toUpperCase())} CD ${dc}`, by: a.id };
     const r = dmgExpr ? publish({ ...base, expr: dmgExpr, dtype: m.dt }) : logCast(base.label, a, targets, null, true);
     store.commit("roll", st => {
@@ -182,19 +183,45 @@ function logCast(label, a, targets, note, pending = false) {
  * la supera, y los estados a quien falla. per: { [tokenId]: "full" | "half" | "none" | "double" } para cambiarlo a mano
  * (resistencias, vulnerabilidades o lo que se acuerde en la mesa).
  */
-export function applySpell(rollId, per = {}) {
+export function applySpell(rollId, per = {}, defOff = {}) {
   const s = store.get(), r = (s.rolls || []).find(x => x.id === rollId); if (!r || r.applied != null) return;
   const plan = (r.saves || []).map(sv => {
     const how = per[sv.t] || (sv.ok ? (r.half ? "half" : "none") : "full");
-    const amt = r.total == null ? 0 : how === "full" ? r.total : how === "half" ? Math.floor(r.total / 2) : how === "double" ? r.total * 2 : 0;
-    return { t: sv.t, amt, how, fail: !sv.ok };
+    const base = r.total == null ? 0 : how === "full" ? r.total : how === "half" ? Math.floor(r.total / 2) : how === "double" ? r.total * 2 : 0;
+    // Resistencia, vulnerabilidad o inmunidad del objetivo (después de la mitad por salvación), salvo que el máster la quite
+    const tr = !defOff[sv.t] && r.dtype ? damageTraits(s.tokens.find(t => t.id === sv.t), r.dtype) : null;
+    return { t: sv.t, amt: withTraits(base, tr), how, fail: !sv.ok, ...(tr ? { def: tr.k } : {}) };
   });
   store.commit("roll", st => {
     const x = st.rolls.find(y => y.id === rollId); if (!x) return;
     x.applied = plan.reduce((a, p) => a + p.amt, 0); x.status = "ok"; x.plan = plan;
     if (x.conds && x.conds.length) plan.filter(p => p.fail).forEach(p => { const k = st.tokens.find(t => t.id === p.t); if (k) x.conds.forEach(id => addCond(k, id, { src: x.src || null, note: x.spell })); });
   });
-  plan.forEach(p => { if (p.amt) damage(p.t, p.amt); });
+  plan.forEach(p => { if (p.amt) damage(p.t, p.amt, { dtype: r.dtype }); });
+}
+
+/** El máster quita o vuelve a poner la ventaja de Resistencia mágica en una salvación de la tabla. */
+export function toggleMagicRes(rollId, tokId) {
+  if (!isDM(store.get())) return;
+  store.commit("roll", st => {
+    const r = (st.rolls || []).find(x => x.id === rollId), sv = r && (r.saves || []).find(x => x.t === tokId); if (!sv || !sv.mr || r.applied != null) return;
+    sv.mrOff = !sv.mrOff;
+    const [a, b] = sv.dice, adv = sv.mrOff ? sv.advNo : Math.min(1, sv.advNo + 1);
+    const v = adv > 0 ? Math.max(a, b) : adv < 0 ? Math.min(a, b) : a;
+    sv.d20 = v; sv.other = adv ? (v === a ? b : a) : null; sv.total = v + sv.add; sv.ok = !sv.autoFail && sv.total >= sv.dc;
+    sv.why = (sv.why || []).filter(w => w !== "ventaja: Resistencia mágica" && w !== "sin la ventaja de Resistencia mágica").concat(sv.mrOff ? ["sin la ventaja de Resistencia mágica"] : ["ventaja: Resistencia mágica"]);
+  });
+}
+/** Resistencia legendaria: la criatura elige superar una salvación fallada (gasta un uso del día). */
+export function useLegendaryRes(rollId, tokId) {
+  const s = store.get(); if (!isDM(s)) return;
+  const t = s.tokens.find(x => x.id === tokId); if (!t || !lrLeft(t)) return;
+  store.commit("roll", st => {
+    const r = (st.rolls || []).find(x => x.id === rollId), sv = r && (r.saves || []).find(x => x.t === tokId); if (!sv || sv.ok || r.applied != null) return;
+    sv.ok = true; sv.lr = true; sv.why = [...(sv.why || []), "Resistencia legendaria"];
+    const k = st.tokens.find(x => x.id === tokId); if (k) k.lrUsed = (+k.lrUsed || 0) + 1;
+  });
+  toast(`${t.name} usa Resistencia legendaria: supera la salvación (le quedan ${lrLeft(store.get().tokens.find(x => x.id === tokId))}).`);
 }
 
 /**

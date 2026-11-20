@@ -7,13 +7,15 @@ import { findMonster } from "./srd.js";
 import { mod, saveBonus, classInfo, prof } from "../data/dnd.js";
 import { toast } from "./ui.js";
 import { kitOf } from "./criaturas.js";
+import { defensesOf, condImmune } from "./defensas.js";
 
 export const AB_NAME = { fue: "Fuerza", des: "Destreza", con: "Constitución", int: "Inteligencia", sab: "Sabiduría", car: "Carisma" };
 export const AB_KEY = Object.fromEntries(Object.entries(AB_NAME).map(([k, n]) => [n.toLowerCase(), k]));
 
 const hasC = (t, id) => (t.conds || []).some(c => c.id === id);
 const condLvl = (t, id) => { const c = (t.conds || []).find(x => x.id === id); return c ? +(c.lvl || 1) : 0; };
-const addCond = (t, id, extra = {}) => { t.conds = t.conds || []; if (!t.conds.some(c => c.id === id)) t.conds.push({ id, ...extra }); };
+// Las criaturas inmunes a un estado (perfil del SRD) no lo reciben
+const addCond = (t, id, extra = {}) => { if (condImmune(t, id)) { toast(`${t.name} es inmune a ${id === "agotamiento" ? "cansancio" : id}.`); return false; } t.conds = t.conds || []; if (!t.conds.some(c => c.id === id)) t.conds.push({ id, ...extra }); return true; };
 const delCond = (t, id) => { t.conds = (t.conds || []).filter(c => c.id !== id); };
 
 /** Puntuaciones de característica de cualquier ficha (personaje o monstruo del compendio). */
@@ -29,7 +31,7 @@ export function spellMod(c) { const ab = classInfo(c.cls).cast; return ab ? mod(
  * Prepara una tirada de salvación: bonificador, ventaja/desventaja, fallo automático y dados extra (Bendición…),
  * cada cosa con su motivo escrito. coverBonus: +2 / +5 a Destreza por cobertura.
  */
-export function savePlan(s, t, ab, coverBonus = 0) {
+export function savePlan(s, t, ab, coverBonus = 0, opts = {}) {
   const c = charOf(s, t), why = [];
   const kit = !c && kitOf(t);
   let bonus = c ? saveBonus(c, ab) : kit && kit.sv && kit.sv[ab] != null ? kit.sv[ab] : mod(abilitiesOf(s, t)[ab]), adv = 0, extra = "", autoFail = false;
@@ -40,7 +42,10 @@ export function savePlan(s, t, ab, coverBonus = 0) {
   const ex = condLvl(t, "agotamiento"); if (ex) { bonus -= 2 * ex; why.push(`−${2 * ex} por cansancio`); }
   if (hasC(t, "bendecido")) { extra += "+1d4"; why.push("+1d4 Bendición"); }
   if (hasC(t, "perdicion")) { extra += "-1d4"; why.push("−1d4 Perdición"); }
-  return { bonus, adv: Math.max(-1, Math.min(1, adv)), extra, autoFail, why };
+  // Resistencia mágica (SRD): ventaja contra conjuros y otros efectos mágicos. El máster puede quitarla en la tirada.
+  const advNo = Math.max(-1, Math.min(1, adv)), mr = !!opts.magic && !c && !!(defensesOf(t) || {}).mr;
+  if (mr) { adv++; why.push("ventaja: Resistencia mágica"); }
+  return { bonus, adv: Math.max(-1, Math.min(1, adv)), advNo, mr, extra, autoFail, why };
 }
 /** Tira una salvación ya (publicada en la mesa) y dice si la supera. */
 export function rollSave(t, ab, dc, label, opts = {}) {
@@ -52,13 +57,15 @@ export function rollSave(t, ab, dc, label, opts = {}) {
   return { ok, total: r.total, roll: r };
 }
 /** Salvación sin publicarla (para resolver muchas a la vez en una sola entrada, p. ej. Bola de fuego). */
-export function quickSave(s, t, ab, dc, coverBonus = 0) {
-  const p = savePlan(s, t, ab, coverBonus);
+export function quickSave(s, t, ab, dc, coverBonus = 0, opts = {}) {
+  const p = savePlan(s, t, ab, coverBonus, opts);
   const d20 = () => 1 + Math.floor(Math.random() * 20);
   let a = d20(), b = d20(), v = p.adv > 0 ? Math.max(a, b) : p.adv < 0 ? Math.min(a, b) : a;
   let extra = 0; if (p.extra) for (const m of p.extra.matchAll(/([+-])1d4/g)) extra += (m[1] === "-" ? -1 : 1) * (1 + Math.floor(Math.random() * 4));
   const total = v + p.bonus + extra;
-  return { t: t.id, name: (charOf(s, t) || t).name, d20: v, other: p.adv ? (v === a ? b : a) : null, total, dc, ok: !p.autoFail && total >= dc, why: p.why };
+  const out = { t: t.id, name: (charOf(s, t) || t).name, d20: v, other: p.adv ? (v === a ? b : a) : null, total, dc, ok: !p.autoFail && total >= dc, why: p.why };
+  if (p.mr) Object.assign(out, { mr: true, dice: [a, b], add: total - v, advNo: p.advNo, autoFail: p.autoFail });
+  return out;
 }
 
 /**
@@ -66,11 +73,14 @@ export function quickSave(s, t, ab, dc, coverBonus = 0) {
  * iguala sus PG máximos); si ya estaba a 0, cada golpe es un fallo de salvación contra muerte (dos si es crítico).
  * Si se estaba concentrando, tira la salvación de Constitución (CD 10 o la mitad del daño, máx. 30).
  */
-export function damage(tokenId, amt, { crit = false } = {}) {
+export function damage(tokenId, amt, { crit = false, dtype = null } = {}) {
   if (!(amt > 0)) return;
   let conc = null, msg = null;
   store.commit("char", s => {
     const t = s.tokens.find(x => x.id === tokenId); if (!t) return;
+    // Regeneración (troll): el daño de ácido o fuego la corta en su siguiente turno
+    const rg = (defensesOf(t) || {}).regen;
+    if (rg && dtype && rg.stop.some(x => String(dtype).toLowerCase().includes(x))) t.regenOff = true;
     const c = charOf(s, t);
     if (c) {
       const tmp = Math.min(c.hp.temp || 0, amt), rest = amt - tmp; c.hp.temp = (c.hp.temp || 0) - tmp;

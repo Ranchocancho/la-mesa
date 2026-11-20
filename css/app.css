@@ -1809,3 +1809,11 @@ button.inspchip{cursor:pointer;font:inherit;font-size:12.5px}
 /* .side es también la columna lateral general: aquí son chips en fila */
 .cptypes.side{flex-direction:row;overflow:visible;background:none;border:0;padding:0;gap:4px}
 .rpage .pnav{z-index:3}
+/* Hito 41 · Defensas de las criaturas */
+.kdefs{display:flex;flex-wrap:wrap;gap:4px;margin:0 0 6px}
+.kdefs span{font-size:11.5px;border:1px solid var(--linea);border-radius:999px;padding:1px 8px;color:var(--hueso);background:rgba(255,255,255,.03)}
+.chipt{background:transparent;border:1px solid var(--linea);color:var(--tenue);border-radius:999px;padding:1px 8px;font-size:11.5px;cursor:pointer}
+.chipt[aria-pressed="true"]{border-color:var(--oro);color:var(--oro);background:rgba(214,170,78,.1)}
+.chipt[data-lr]{border-color:#c9a14a;color:#f0d68a}
+.roll .spl{flex-wrap:wrap;border-radius:12px;align-items:center}
+.chipt,.spl .trait{white-space:nowrap}

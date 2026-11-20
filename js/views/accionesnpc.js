@@ -9,6 +9,7 @@ import { findSpell } from "../core/srd.js";
 import { armedNow, arm, picked, togglePick, clearPicks } from "../core/apuntar.js";
 import { eco } from "../core/turnos.js";
 import { $$, esc, toast } from "../core/ui.js";
+import { defensesOf, lrLeft } from "../core/defensas.js";
 
 const AB = { fue: "Fue", des: "Des", con: "Con", int: "Int", sab: "Sab", car: "Car" };
 const GROUPS = [["act", "Acciones"], ["bonus", "Acción adicional"], ["react", "Reacciones"], ["leg", "Legendarias"]];
@@ -34,6 +35,15 @@ function needs(R) {
   return { targets: false };
 }
 
+/** Defensas del perfil, para tenerlas a la vista: se aplican solas al daño, a los estados y a las salvaciones. */
+function defensesHTML(t) {
+  const d = defensesOf(t); if (!d) return "";
+  const parts = [d.res.length && `½ resiste ${d.res.join(", ")}`, d.vul.length && `×2 vulnerable a ${d.vul.join(", ")}`, d.inm.length && `0 inmune a ${d.inm.join(", ")}`,
+    d.conds.length && `sin estados: ${d.conds.map(c => c === "agotamiento" ? "cansancio" : c).join(", ")}`,
+    d.regen && `🔁 Regeneración ${d.regen.hp}${d.regen.stop.length ? ` (la corta ${d.regen.stop.join(" o ")})` : ""}${t.regenOff ? " · cortada el próximo turno" : ""}`,
+    d.lr && `👑 Resistencia legendaria ${lrLeft(t)}/${d.lr} hoy`, d.mr && "🔰 Resistencia mágica"].filter(Boolean);
+  return parts.length ? `<p class="kdefs" title="Se aplican solas: el daño con su defensa, los estados a los que es inmune no se ponen, la Regeneración al empezar su turno. La ventaja de Resistencia mágica y la Resistencia legendaria se ven en la tabla de tiradas del conjuro.">${parts.map(x => `<span>${esc(x)}</span>`).join("")}</p>` : "";
+}
 export function kitHTML(s, t, turn) {
   const kit = kitOf(t); if (!kit) return "";
   const live = s.board && s.board.combat === "live", A = armedNow(), armedHere = A && A.kind === "npcact" && A.tok === t.id;
@@ -43,7 +53,7 @@ export function kitHTML(s, t, turn) {
     const tag = a.type === "save" ? `${AB[a.sv]} CD ${a.dc}` : a.type === "atk" ? `${a.atk >= 0 ? "+" : ""}${a.atk}` : a.type === "cast1" ? "conjuro" : "";
     return `<button class="ka ${on ? "armed" : ""} k-${a.type}" data-ka="${t.id}|${g}|${i}" ${!u.ok || why ? "disabled" : ""} title="${esc((why ? why + " · " : "") + (a.txt || "").slice(0, 300))}"><b>${esc(a.n)}</b>${tag ? `<span>${esc(tag)}</span>` : ""}${u.txt ? `<em class="${u.ok ? "" : "off"}">${esc(u.txt)}</em>` : ""}${extra}</button>`;
   };
-  let html = "";
+  let html = defensesHTML(t);
   if (mu) html += `<p class="kmulti" title="${esc(mu.txt)}">⚔ <b>Ataque múltiple</b>: ${N} ataques por acción${e ? ` · lleva <b>${Math.min(e.n || 0, N)}/${N}</b>` : ""}</p>`;
   for (const [g, gn] of GROUPS) {
     const list = (kit[g] || []).map((a, i) => [a, i]).filter(([a]) => a.type !== "multi" && a.type !== "spells" && !(g === "act" && a.type === "atk"));
@@ -66,7 +76,7 @@ export function kitHTML(s, t, turn) {
       <div class="kpicks">${tg.map(x => `<button class="cchip" data-kunpick="${x.id}">${esc(x.name || "")} ✕</button>`).join("")}</div>` : ""}
       <div class="row">${nd.area ? `<button class="btn small" data-karea="${t.id}">◎ Marcar área</button>` : ""}<button class="btn gold small" data-kgo="${t.id}" ${nd.targets && !tg.length ? "disabled" : ""}>${R.a.type === "atk" || R.ref ? "Atacar" : R.sp || R.a.type === "cast1" ? "Lanzar" : "Usar"}</button><button class="btn small" data-kx>Cancelar</button></div></div>`;
   }
-  if (Object.keys(t.used || {}).length || Object.keys(t.spent || {}).length) html += `<button class="btn small krest" data-krest="${t.id}" title="Recupera usos por día y recargas (tras un descanso largo)">↺ Recuperar usos</button>`;
+  if (Object.keys(t.used || {}).length || Object.keys(t.spent || {}).length || t.lrUsed) html += `<button class="btn small krest" data-krest="${t.id}" title="Recupera usos por día y recargas (tras un descanso largo)">↺ Recuperar usos</button>`;
   return html ? `<div class="kit">${html}</div>` : "";
 }
 

@@ -1,4 +1,5 @@
 // La mesa táctica dentro de la Partida: tablero, columna de iniciativa y mini-ficha (HUD) plegable.
+import { condImmune } from "../core/defensas.js";
 import { combatEvents } from "../core/golpes.js";
 // Iniciales para la tira de iniciativa: sin paréntesis y con el número de los repetidos («Goblin 2 (en la maleza)» → «G2»)
 const initials = n => (String(n || "?").replace(/\s*\(.*?\)/g, "").split(/\s+/).map(w => w.replace(/[^\p{L}\p{N}]/gu, "")[0]).filter(Boolean).slice(0, 2).join("").toUpperCase() || "?");
@@ -374,7 +375,7 @@ export function mountTactical(host, opts = {}) {
     bindTokenEditor(R, (id, fn) => store.commit("board", st => { const t = st.tokens.find(x => x.id === id); if (t) fn(t); }));
     const T = (id, fn) => store.commit("token", st => { const t = st.tokens.find(x => x.id === id); if (t) fn(t); });
     $$("[data-addcond]", R).forEach(b => b.onclick = () => { condPick = condPick === b.dataset.addcond ? null : b.dataset.addcond; drawHud(); });
-    $$("[data-cond]", R).forEach(b => b.onclick = () => { const [id, cid] = b.dataset.cond.split("|"); if (!mineOk(id)) return; T(id, t => { t.conds = t.conds || []; const i = t.conds.findIndex(c => c.id === cid); if (i >= 0) t.conds.splice(i, 1); else t.conds.push({ id: cid, lvl: estado(cid).levels ? 1 : undefined }); }); });
+    $$("[data-cond]", R).forEach(b => b.onclick = () => { const [id, cid] = b.dataset.cond.split("|"); if (!mineOk(id)) return; T(id, t => { t.conds = t.conds || []; const i = t.conds.findIndex(c => c.id === cid); if (i >= 0) t.conds.splice(i, 1); else if (condImmune(t, cid)) toast(`${t.name} es inmune a ${estado(cid).n.toLowerCase()} (perfil del SRD).`); else t.conds.push({ id: cid, lvl: estado(cid).levels ? 1 : undefined }); }); });
     $$("[data-condlvl]", R).forEach(b => b.onclick = () => { const [id, cid, d] = b.dataset.condlvl.split("|"); if (!mineOk(id)) return; T(id, t => { const c = (t.conds || []).find(x => x.id === cid); if (c) { c.lvl = Math.max(1, Math.min(6, (c.lvl || 1) + +d)); } }); });
     $$("[data-atk]", R).forEach(b => b.onclick = () => {
       const [aid, i] = b.dataset.atk.split("|"), st = S(), a = st.tokens.find(x => x.id === aid);

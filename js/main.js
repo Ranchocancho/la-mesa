@@ -111,6 +111,14 @@ presence.subscribe(() => {
   const s = $(".sync"); if (s) { const n = presence.count(); s.innerHTML = `<i></i>${n} conectado${n === 1 ? "" : "s"}`; }
   if (mounted && mounted.presence) mounted.presence();
 });
+// Inicio del turno de una criatura (recarga, Regeneración, legendarias): si el turno lo pasó un jugador, lo aplica el máster
+let creatureSeq = null;
+store.subscribe(state => {
+  const b = state.board; if (!b || b.combat !== "live" || !isDM(state) || b.seq === creatureSeq) return;
+  const t = state.tokens.find(x => x.id === b.turn); if (!t || t.kind === "pc") return;
+  creatureSeq = b.seq;
+  if (t.ts !== b.seq) queueMicrotask(() => import("./core/criaturas.js").then(m => store.commit("token", st => { const k = st.tokens.find(x => x.id === t.id); if (k) m.onTurnStart(st, k); })));
+});
 // Cajetilla de dados: cada tirada nueva (que puedas ver) sube desde abajo, estés en la sección que estés
 const rollSeen = new Set(); let rollBoot = false, diceCam = null;
 store.subscribe(state => {

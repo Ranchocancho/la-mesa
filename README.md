@@ -602,3 +602,15 @@ Arreglos: los humanoides «Medianos o Pequeños» del SRD (mago, veterano…) sa
 - **Para tu grupo** (máster): la dificultad de una criatura con el presupuesto de PX del SRD y cuántas hacen falta para subir de categoría.
 - Perfiles más limpios: la cabecera (salvaciones, habilidades, defensas, sentidos, idiomas, VD) se separa bien aunque el PDF la junte en una línea.
 - **Móvil**: lista o página a pantalla completa con botón «← Lista» / «☰ Índice»; los filtros de tipo ya se ven (antes quedaban ocultos).
+
+## Hito 41 · Defensas de las criaturas del SRD, automáticas
+
+Todo se lee del perfil de cada criatura (SRD 5.2.1):
+- **Resistencias, vulnerabilidades e inmunidades al daño**: el botón «✓ Aplicar» ya trae la defensa (½, ×2 o 0) y el resultado. Se puede aplicar el daño completo con otro botón. En conjuros y trampas con salvación, la defensa se aplica después de la mitad por salvación, con un chip por objetivo para quitarla.
+- **Inmunidad a estados**: la criatura no recibe los estados a los que es inmune (zombi y envenenado, acechador y derribado…), ni a mano ni desde ataques o conjuros.
+- **Regeneración** al empezar su turno (troll 15, oni 10…). El ácido o el fuego la cortan el turno siguiente. Un troll a 0 PG sigue en la iniciativa y solo muere si empieza su turno sin regenerarse; el oni no se regenera a 0.
+- **Resistencia legendaria**: en la tabla del conjuro, botón «👑 Superarla (n)» en la salvación fallada, con sus usos por día («↺ Recuperar usos» los devuelve).
+- **Resistencia mágica**: ventaja en las salvaciones contra conjuros, puesta por defecto y que el máster puede quitar o volver a poner con un toque.
+- **Tácticas de manada** y los demás rasgos situacionales quedan a criterio del máster (se leen en el perfil).
+- En el panel PNJ se ven las defensas de cada criatura.
+- El inicio del turno de una criatura (recarga, Regeneración, legendarias) lo aplica siempre el máster, aunque el turno lo pase un jugador (reglas de Firestore).

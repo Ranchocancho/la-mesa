@@ -5,9 +5,10 @@ import { vexOn } from "./maestria.js";
 import { store } from "./store.js";
 import { publish, roll } from "./dados.js";
 import { uid } from "./store.js";
-import { currentUser } from "./session.js";
+import { currentUser, isDM } from "./session.js";
 import { toast } from "./ui.js";
 import { onTurnStart } from "./criaturas.js";
+import { revives } from "./defensas.js";
 import { charOf, hpOf, order } from "./mesa.js";
 import { TERRAIN, PROPS, isDoor, doorBlocksSight } from "../data/mapas.js";
 
@@ -18,7 +19,8 @@ export const metres = cells => (cells * CELL_M).toLocaleString("es-ES") + " m";
 /* ---------- Fases ---------- */
 export const phase = s => (s.board && s.board.combat) || null; // null | "init" | "live"
 export const current = s => s.board && s.board.turn ? s.tokens.find(t => t.id === s.board.turn) : null;
-const alive = (s, t) => { const h = hpOf(s, t); return t.kind === "pc" || !h || h.cur > 0; };
+// Un troll a 0 PG sigue en la iniciativa: si empieza su turno sin regenerarse, muere (Regeneración)
+const alive = (s, t) => { const h = hpOf(s, t); return t.kind === "pc" || !h || h.cur > 0 || revives(t); };
 export const pending = s => s.tokens.filter(t => !t.hidden && (t.init == null || t.init === "") && alive(s, t));
 
 /** 1. Iniciar combate: se borra la iniciativa y los enemigos tiran la suya (en secreto, la ve el máster). */
@@ -68,7 +70,7 @@ function advanceTo(s, t) {
   s.tokens.forEach(k => {
     if (k.conds) k.conds = k.conds.filter(c => !(c.seq != null && (st[c.until || k.id] || 0) > c.seq) && !(c.id === "molestar" && (st[k.id] || 0) > c.vseq && t.id !== k.id));
   });
-  onTurnStart(s, t); // criaturas: recarga (d6) de lo gastado y acciones legendarias de nuevo
+  if (isDM(s)) onTurnStart(s, t); // criaturas: recarga, Regeneración y legendarias (si pasa turno un jugador, lo hace el máster al verlo: main.js)
 }
 /** 3. Terminar el turno: pasa a la siguiente criatura en pie; al dar la vuelta, nueva ronda. */
 export function endTurn() {

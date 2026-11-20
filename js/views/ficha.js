@@ -1,5 +1,6 @@
 // Ficha de bolsillo: la columna fija del jugador (a la derecha, el mismo ancho que el panel del máster).
 // PG, CA, estados, salvaciones contra muerte, salvaciones y pruebas, ataques, conjuros con espacios y descansos.
+import { condImmune } from "../core/defensas.js";
 import { store } from "../core/store.js";
 import { currentUser, isDM } from "../core/session.js";
 import { publish } from "../core/dados.js";
@@ -163,7 +164,7 @@ function bind(el, s, c, tok) {
     if (r !== null) { openSpell = null; arm(null); }
   });
   on("faddcond", () => { condOpen = !condOpen; renderSheet(el); });
-  $$("[data-addc]", el).forEach(b => b.onclick = () => { condOpen = false; store.commit("token", st => { const k = st.tokens.find(x => x.id === tok.id); k.conds = k.conds || []; if (!k.conds.some(c => c.id === b.dataset.addc)) k.conds.push({ id: b.dataset.addc }); }); });
+  $$("[data-addc]", el).forEach(b => b.onclick = () => { condOpen = false; store.commit("token", st => { const k = st.tokens.find(x => x.id === tok.id); k.conds = k.conds || []; if (condImmune(k, b.dataset.addc)) { toast(`${k.name} es inmune a ese estado (perfil del SRD).`); return; } if (!k.conds.some(c => c.id === b.dataset.addc)) k.conds.push({ id: b.dataset.addc }); }); });
   $$("[data-uncond]", el).forEach(b => b.onclick = () => store.commit("token", st => { const k = st.tokens.find(x => x.id === tok.id); k.conds = (k.conds || []).filter(c => c.id !== b.dataset.uncond); }));
   const hd = $("#hdn", el); if (hd) hd.oninput = () => { hdN = +hd.value || 1; };
   on("srest", () => shortRest(c.id, hdN));

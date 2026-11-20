@@ -121,14 +121,14 @@ export function decide(rollId, action) {
     if (action === "flip") { r.result = r.result === "miss" ? "hit" : "miss"; r.status = "mod"; r.note = "El máster cambia el resultado"; return; }
     if (typeof action === "object" && action.total != null) { r.note = `El máster cambia ${r.total} → ${action.total}`; r.total = action.total; r.status = "mod"; if (r.kind === "attack" && r.ac != null) r.result = r.nat === 20 ? "crit" : r.total >= r.ac ? "hit" : "miss"; return; }
     if (r.kind === "damage" && !r.applied) {
-      const amt = action === "half" ? Math.floor(r.total / 2) : action === "double" ? r.total * 2 : r.total;
-      r.applied = amt; r.status = action === "ok" ? "ok" : "mod"; if (action === "half") r.note = "Mitad de daño (resistencia o salvación)"; if (action === "double") r.note = "Daño doble (vulnerabilidad)";
-      apply = { target: r.target, amt, crit: !!r.crit };
+      const amt = action === "half" ? Math.floor(r.total / 2) : action === "double" ? r.total * 2 : action === "none" ? 0 : r.total;
+      r.applied = amt; r.status = action === "ok" ? "ok" : "mod"; if (action === "half") r.note = "Mitad de daño (resistencia o salvación)"; if (action === "double") r.note = "Daño doble (vulnerabilidad)"; if (action === "none") { r.note = "Sin daño (inmunidad)"; r.status = "mod"; }
+      apply = { target: r.target, amt, crit: !!r.crit, dtype: r.dtype };
       return;
     }
     r.status = r.status === "pending" ? "ok" : r.status;
   });
-  if (apply) hurt(apply.target, apply.amt, { crit: apply.crit });
+  if (apply) hurt(apply.target, apply.amt, { crit: apply.crit, dtype: apply.dtype });
   // Maestría: Debilitar al confirmarse el impacto; Molestar al aplicarse el daño
   const st0 = store.get(), r0 = (st0.rolls || []).find(x => x.id === rollId);
   if (r0 && r0.kind === "attack" && r0.mas && !r0.masAuto && r0.status !== "pending" && r0.status !== "void") store.commit("roll", st => onHit(st, st.rolls.find(x => x.id === rollId)));

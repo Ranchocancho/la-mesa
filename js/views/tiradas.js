@@ -5,23 +5,21 @@ import { publish, RESULT, mySkin, setMySkin, diceAnim, setDiceAnim } from "../co
 import { decide, damageFor, nameOf, attack, attacksOf, oaOpen, answerOA } from "../core/combate.js";
 import { canInspire, useInspiration } from "../core/inspiracion.js";
 import { masteryChoice, useMastery, applyMastery, cleaveTargets, MASTERY } from "../core/maestria.js";
-import { applySpell } from "../core/hechizos.js";
+import { applySpell, toggleMagicRes, useLegendaryRes } from "../core/hechizos.js";
 import { spend } from "../core/turnos.js";
 import { $, $$, esc } from "../core/ui.js";
 import { srd, srdNow, findMonster } from "../core/srd.js";
 import { estado, etiqueta } from "../data/estados.js";
+import { damageTraits, suggestedAction, withTraits, lrLeft } from "../core/defensas.js";
 let GLOS = null; srd("glosario").then(g => (GLOS = g));
 const openInfo = new Set();
 
-/** Resistencias, inmunidades y vulnerabilidades del objetivo frente a un tipo de daño (del perfil del manual). */
-export function damageTraits(t, dtype) {
-  const m = t && t.srd && findMonster(t.srd); if (!m || !dtype) return null;
-  const flat = m.txt.replace(/\s+/g, " "), get = k => (flat.match(new RegExp(k + ": ([^.;]*?)(?=;| [A-Z][a-záéíóú]+:|$)")) || [, ""])[1].toLowerCase();
-  const ty = dtype.toLowerCase().split(" ")[0];
-  if (get("Inmunidades").includes(ty)) return { k: "inmune", txt: `${m.n} es inmune al daño ${ty}: no recibe daño.`, glos: "Inmunidad" };
-  if (get("Resistencias").includes(ty)) return { k: "resiste", txt: `${m.n} tiene resistencia al daño ${ty}: recibe la mitad.`, glos: "Resistencia" };
-  if (get("Vulnerabilidades").includes(ty)) return { k: "vulnerable", txt: `${m.n} es vulnerable al daño ${ty}: recibe el doble.`, glos: "Vulnerabilidad" };
-  return null;
+export { damageTraits };
+/** Botones del máster para aplicar daño: el principal ya trae la defensa del objetivo (½, ×2 o 0), y se puede cambiar. */
+function dmgButtons(s, r, short = false) {
+  const tr = damageTraits(s.tokens.find(x => x.id === r.target), r.dtype), act = suggestedAction(tr);
+  const lbl = tr ? (tr.k === "resiste" ? " ½" : tr.k === "vulnerable" ? " ×2" : " 0") : "";
+  return `<button class="ib gold" data-dec="${r.id}|${act}" title="${tr ? esc(tr.txt) : "Aplicar el daño"}">✓ Aplicar${lbl}${tr && r.total != null ? ` (${withTraits(r.total, tr)})` : ""}</button>${act !== "ok" ? `<button class="ib" data-dec="${r.id}|ok" title="Daño completo, sin la defensa">${r.total}</button>` : ""}${act !== "half" ? `<button class="ib" data-dec="${r.id}|half" title="Mitad">½</button>` : ""}${short ? "" : `<button class="ib" data-edit="${r.id}" title="Cambiar">✎</button><button class="ib danger" data-dec="${r.id}|void" title="Anular">✕</button>`}`;
 }
 function rollInfo(s, r) {
   const t = s.tokens.find(x => x.id === r.target), parts = [];
@@ -42,7 +40,7 @@ const SKIN_NAMES = { rubi: "Rubí", zafiro: "Zafiro", esmeralda: "Esmeralda", am
 const poolExpr = mod => { const p = Object.entries(pool).filter(([, n]) => n).map(([d, n]) => `${n}d${d}`).join("+"); return (p || "") + (mod ? (mod > 0 ? "+" : "") + mod : ""); };
 const KIND = { attack: "Ataque", damage: "Daño", check: "Prueba", save: "Salvación", init: "Iniciativa", free: "Tirada", spell: "Conjuro", cast: "Conjuro", heal: "Curación", death: "Contra muerte", oa: "Reacción", loot: "Tesoro", xp: "Experiencia", mastery: "Maestría" };
 const HOW = { full: "Completo", half: "Mitad", none: "Nada", double: "Doble" };
-let spellPer = {};
+let spellPer = {}, spellDefOff = {};
 
 /** Lista de tiradas visibles para este usuario (las secretas, solo el máster y quien tira). */
 export const visibleRolls = s => (s.rolls || []).filter(r => !r.secret || isDM(s) || r.who === (currentUser(s) || {}).id);
@@ -91,12 +89,15 @@ export function renderRolls(el, o) {
   $$("[data-dec]", el).forEach(b => b.onclick = () => { const [id, a] = b.dataset.dec.split("|"); decide(id, a); });
   $$("[data-dmg]", el).forEach(b => b.onclick = () => damageFor(b.dataset.dmg));
   $$("[data-rqmiss]", el).forEach(b => b.onclick = () => import("./peticiones.js").then(m => { const r = (store.get().rolls || []).find(x => x.id === b.dataset.rqmiss); if (r) m.answerMissing(r); }));
-  $$("[data-per]", el).forEach(x => x.onchange = () => { const [id, t] = x.dataset.per.split("|"); spellPer[id] = { ...(spellPer[id] || {}), [t]: x.value }; });
+  $$("[data-per]", el).forEach(x => x.onchange = () => { const [id, t] = x.dataset.per.split("|"); spellPer[id] = { ...(spellPer[id] || {}), [t]: x.value }; renderRolls(el); });
   $$("[data-apply]", el).forEach(b => b.onclick = () => {
     const id = b.dataset.apply, per = {};
     $$(`[data-per^="${id}|"]`, el).forEach(x => { per[x.dataset.per.split("|")[1]] = x.value; });
-    applySpell(id, per); delete spellPer[id];
+    applySpell(id, per, spellDefOff[id] || {}); delete spellPer[id]; delete spellDefOff[id];
   });
+  $$("[data-defs]", el).forEach(b => b.onclick = () => { const [id, t] = b.dataset.defs.split("|"); spellDefOff[id] = { ...(spellDefOff[id] || {}), [t]: !(spellDefOff[id] || {})[t] }; renderRolls(el); });
+  $$("[data-mr]", el).forEach(b => b.onclick = () => { const [id, t] = b.dataset.mr.split("|"); toggleMagicRes(id, t); });
+  $$("[data-lr]", el).forEach(b => b.onclick = () => { const [id, t] = b.dataset.lr.split("|"); useLegendaryRes(id, t); });
   $$("[data-oa]", el).forEach(b => b.onclick = () => answerOA(b.dataset.oa, true));
   $$("[data-insp]", el).forEach(b => b.onclick = () => useInspiration(b.dataset.insp));
   $$("[data-mas]", el).forEach(b => b.onclick = () => { const id = b.dataset.mas, r = (store.get().rolls || []).find(x => x.id === id); if (r && r.mas && r.mas.n === "Hender") { cleavePick = cleavePick === id ? null : id; renderRolls(el); } else useMastery(id); });
@@ -112,15 +113,19 @@ export function renderRolls(el, o) {
 /** Conjuro con salvación: una línea por objetivo (salvación, ✓/✗ y cuánto daño le toca); el máster lo aplica. */
 function spellTable(s, r, dm) {
   const pend = r.status === "pending" && r.applied == null;
+  const base = how => r.total == null ? 0 : how === "full" ? r.total : how === "half" ? Math.floor(r.total / 2) : how === "double" ? r.total * 2 : 0;
   return `<div class="spt">${r.saves.map(sv => {
     const t = s.tokens.find(x => x.id === sv.t), tr = r.dtype && t ? damageTraits(t, r.dtype) : null;
-    const def = (spellPer[r.id] || {})[sv.t] || (sv.auto ? "full" : sv.ok ? (r.half ? "half" : "none") : "full");
-    const sugg = tr && tr.k === "resiste" ? "half" : tr && tr.k === "vulnerable" ? "double" : tr && tr.k === "inmune" ? "none" : null;
-    const done = (r.plan || []).find(p => p.t === sv.t);
+    const how = (spellPer[r.id] || {})[sv.t] || (sv.auto ? "full" : sv.ok ? (r.half ? "half" : "none") : "full");
+    const defOn = tr && !(spellDefOff[r.id] || {})[sv.t];
+    const done = (r.plan || []).find(p => p.t === sv.t), lr = dm && pend && !sv.auto && !sv.ok && t ? lrLeft(t) : 0;
     return `<div class="spl ${sv.auto ? "" : sv.ok ? "ok" : "ko"}"><b>${esc(sv.name)}</b>
       ${sv.auto ? `<small>sin salvación</small>` : `<span class="svd" title="d20: ${sv.d20}${sv.other != null ? " (y " + sv.other + ")" : ""}${(sv.why || []).length ? " · " + esc(sv.why.join(" · ")) : ""}">${sv.total}</span><span>${sv.ok ? "✓" : "✗"}</span>`}
+      ${sv.mr && !done ? (dm && pend ? `<button class="chipt" data-mr="${r.id}|${sv.t}" aria-pressed="${!sv.mrOff}" title="Resistencia mágica: ventaja en salvaciones contra conjuros y efectos mágicos (SRD). Tócalo para quitarla o ponerla.">🔰 ventaja</button>` : `<small class="trait">🔰 ventaja</small>`) : ""}
+      ${sv.lr ? `<small class="trait" title="Resistencia legendaria">👑 la supera</small>` : ""}
+      ${lr ? `<button class="chipt" data-lr="${r.id}|${sv.t}" title="Resistencia legendaria: elige superar la salvación que ha fallado (le quedan ${lr} hoy)">👑 Superarla (${lr})</button>` : ""}
       ${done ? `<em>${done.amt ? "−" + done.amt + " PG" : "sin daño"}${done.fail && r.conds && r.conds.length ? " · " + r.conds.join(", ") : ""}</em>`
-        : dm && pend ? `<select data-per="${r.id}|${sv.t}" aria-label="Daño a ${esc(sv.name)}">${Object.entries(HOW).map(([k, n]) => `<option value="${k}" ${(sugg && !(spellPer[r.id] || {})[sv.t] ? sugg : def) === k ? "selected" : ""}>${n}${r.total != null ? ` (${k === "full" ? r.total : k === "half" ? Math.floor(r.total / 2) : k === "double" ? r.total * 2 : 0})` : ""}</option>`).join("")}</select>${tr ? `<small class="trait">${esc(tr.k)}</small>` : ""}` : ""}</div>`;
+        : dm && pend ? `<select data-per="${r.id}|${sv.t}" aria-label="Daño a ${esc(sv.name)}">${Object.entries(HOW).map(([k, n]) => `<option value="${k}" ${how === k ? "selected" : ""}>${n}${r.total != null ? ` (${base(k)})` : ""}</option>`).join("")}</select>${tr ? `<button class="chipt" data-defs="${r.id}|${sv.t}" aria-pressed="${!!defOn}" title="${esc(tr.txt)} Tócalo para no aplicarlo.">${tr.k === "resiste" ? "½ resiste" : tr.k === "vulnerable" ? "×2 vulnerable" : "0 inmune"}${defOn && r.total != null ? ` → ${withTraits(base(how), tr)}` : ""}</button>` : ""}` : ""}</div>`;
   }).join("")}
   ${r.conds && r.conds.length && !r.applied ? `<small class="note">Quien falle: ${esc(r.conds.join(", "))}.</small>` : ""}
   ${dm && pend ? `<button class="btn small gold" data-apply="${r.id}">✓ Aplicar a todos</button>` : !r.applied && pend ? `<small class="st pend">Pendiente del máster</small>` : ""}</div>`;
@@ -210,10 +215,10 @@ function rowHTML(s, r, dm, me, hasDamage, dmgRow) {
   if (r.cleaveOf) out.push(`<span class="pill mas" title="${esc(MASTERY.Hender)}">⚔ Hender</span>`);
   if (r.insp) out.push(`<span class="pill insp" title="Inspiración heroica">✨ ${r.insp.from} → ${r.insp.to}</span>`);
   if (offTurn) out.push(`<span class="pill off" title="Tirada libre durante el turno de otro">fuera de turno</span>`);
-  const dmgActs = dm && dmgRow && dmgRow.status === "pending" ? (() => { const tr = damageTraits(s.tokens.find(x => x.id === dmgRow.target), dmgRow.dtype); return `<button class="ib gold" data-dec="${dmgRow.id}|${tr && tr.k === "resiste" ? "half" : tr && tr.k === "vulnerable" ? "double" : "ok"}" title="Aplicar el daño${tr ? " (" + tr.k + ")" : ""}">✓ Aplicar${tr ? " " + (tr.k === "resiste" ? "½" : tr.k === "vulnerable" ? "×2" : "0") : ""}</button><button class="ib" data-dec="${dmgRow.id}|half" title="Mitad">½</button><button class="ib" data-edit="${dmgRow.id}" title="Cambiar">✎</button><button class="ib danger" data-dec="${dmgRow.id}|void" title="Anular">✕</button>`; })() : "";
+  const dmgActs = dm && dmgRow && dmgRow.status === "pending" ? dmgButtons(s, dmgRow) : "";
   const acts = [
     dm && pend && r.kind === "attack" ? `<button class="ib gold" data-dec="${r.id}|ok" title="Confirmar">✓ Vale</button><button class="ib" data-dec="${r.id}|flip" title="${r.result === "miss" ? "Que impacte" : "Que falle"}">⇄</button>` : "",
-    dm && pend && r.kind === "damage" ? `<button class="ib gold" data-dec="${r.id}|ok" title="Aplicar">✓ Aplicar</button><button class="ib" data-dec="${r.id}|half" title="Mitad">½</button>` : "",
+    dm && pend && r.kind === "damage" ? dmgButtons(s, r, true) : "",
     canDmg ? `<button class="ib red" data-dmg="${r.id}" title="Tirar daño">🩸 Tirar daño${r.result === "crit" ? " ×2" : ""}</button>` : "",
     dmgActs,
     canInspire(s, r) ? `<button class="ib insp" data-insp="${r.id}" title="Gastar tu inspiración heroica: vuelve a tirar ${r.kind === "damage" ? "el dado más bajo" : "el d20"} y usa el nuevo resultado">✨ Repetir</button>` : "",

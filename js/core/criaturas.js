@@ -3,6 +3,7 @@
 // ataque múltiple, lanzamiento de conjuros, acciones adicionales, reacciones y acciones legendarias.
 // Aquí se decide qué puede hacer una criatura ahora (economía del turno y usos) y se apunta lo gastado.
 import { store, uid } from "./store.js";
+import { defensesOf } from "./defensas.js";
 
 let ACC = null, loading = null;
 export const kitsReady = () => !!ACC;
@@ -51,13 +52,16 @@ export function markUse(tokId, a, sp = null, per = null) {
   });
 }
 /** Descanso de la criatura: recupera usos por día y recargas (lo decide el máster). */
-export const restKit = tokId => store.commit("token", s => { const t = s.tokens.find(x => x.id === tokId); if (t) { t.used = {}; t.spent = {}; t.leg = 0; } });
+export const restKit = tokId => store.commit("token", s => { const t = s.tokens.find(x => x.id === tokId); if (t) { t.used = {}; t.spent = {}; t.leg = 0; t.lrUsed = 0; } });
 
 /**
  * Al empezar el turno de una criatura: tira la recarga de lo gastado (d6) y recupera sus acciones legendarias.
  * Se llama dentro del commit del turno (st es el estado que se está modificando).
  */
 export function onTurnStart(st, t) {
+  // Una sola vez por turno (lo hace el máster: los jugadores no pueden cambiar fichas de criaturas en la nube)
+  const seq = st.board ? st.board.seq : null; if (seq != null && t.ts === seq) return; if (seq != null) t.ts = seq;
+  regenerate(st, t);
   const kit = kitOf(t); if (!kit) return;
   t.leg = 0;
   const all = [...(kit.act || []), ...(kit.bonus || []), ...(kit.react || [])];
@@ -69,6 +73,24 @@ export function onTurnStart(st, t) {
     st.rolls.push({ id: uid("tir"), at: Date.now(), who: null, whoName: "Recarga", kind: "free", label: `Recarga de ${a.n} (${t.name}): ${a.rec}–6`, expr: "1d6",
       dice: [{ d: 6, v: d }], total: d, nat: null, secret: true, status: "ok", note: ok ? "Recargada: puede volver a usarla" : "Aún no se ha recargado", tok: t.id });
   }
+}
+
+/**
+ * Regeneración (SRD): recupera sus PG al empezar el turno. El troll y su extremidad no la usan el turno
+ * siguiente a recibir daño de ácido o fuego, y si empiezan el turno a 0 PG sin regenerarse, mueren.
+ * Las que exigen «al menos 1 punto de golpe» (oni, guardián) no se regeneran a 0.
+ */
+function regenerate(st, t) {
+  const d = defensesOf(t), rg = d && d.regen; if (!rg || t.regenDead) return;
+  const hp = +t.hp || 0, max = +t.maxhp || hp;
+  let note, gain = 0;
+  if (t.regenOff) { delete t.regenOff; note = `No se regenera: recibió daño de ${rg.stop.join(" o ")}`; if (hp <= 0) { t.regenDead = true; note += ". Empieza el turno a 0 PG: muere."; } }
+  else if (rg.needsHp && hp < 1) return;
+  else if (hp >= max) return;
+  else { gain = Math.min(rg.hp, max - hp); t.hp = hp + gain; note = `Recupera ${gain} PG (${t.hp}/${max})`; }
+  st.rolls = st.rolls || [];
+  st.rolls.push({ id: uid("tir"), at: Date.now(), who: null, whoName: "Regeneración", kind: "free", label: `Regeneración de ${t.name}`, expr: "", dice: [], total: gain || null, nat: null,
+    secret: true, status: "ok", note, tok: t.id });
 }
 
 /* ---------- Economía del turno de una criatura ---------- */
