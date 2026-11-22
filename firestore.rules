@@ -19,7 +19,7 @@ service cloud.firestore {
 
     // ---- Fichas: lo que un jugador puede cambiar en la suya ----
     function changed() { return request.resource.data.diff(resource.data).affectedKeys(); }
-    function playKeys() { return ['hp', 'hdUsed', 'death', 'inspiration', 'spells', 'journal', 'proposals', 'lvlDraft', 'order']; }
+    function playKeys() { return ['hp', 'hdUsed', 'death', 'inspiration', 'spells', 'journal', 'proposals', 'lvlDraft', 'order', 'ft']; }
     function slotMax(d, l) { return d.get('spells', {}).get('slots', {}).get(l, {}).get('max', 0); }
     function slotMaxSame(a, b) {
       return slotMax(a, '1') == slotMax(b, '1') && slotMax(a, '2') == slotMax(b, '2') && slotMax(a, '3') == slotMax(b, '3')
@@ -89,7 +89,8 @@ service cloud.firestore {
       //  - lo que se gasta jugando en la Partida: PG (no los máximos), PG temporales, dados de golpe, salvaciones
       //    contra muerte, espacios de conjuro gastados (no los máximos ni la lista) e inspiración (gastarla; los
       //    humanos la recuperan en el descanso largo);
-      //  - su cuaderno, sus propuestas de cambio al máster y la subida de nivel guardada a medias;
+      //  - su cuaderno, sus propuestas de cambio al máster, la subida de nivel guardada a medias
+      //    y lo que elige hacer en el tiempo libre (ft);
       //  - subir de nivel cuando el máster lo ha concedido (un nivel cada vez, como mucho hasta el concedido).
       // Todo lo demás (monedas, equipo, rasgos, habilidades…) lo propone y lo aplica el máster.
       match /characters/{ch} {
@@ -114,7 +115,7 @@ service cloud.firestore {
         allow read: if isMember(c);
         allow create, delete: if isEditor(c);
         allow update: if isEditor(c) || (isMember(c) && resource.data.owner == request.auth.uid
-          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['c', 'r', 'init', 'conds', 'fx', 'eco']));
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['c', 'r', 'init', 'conds', 'fx', 'eco', 'light']));
       }
       // Crónica: todos la leen; cada uno escribe y corrige sus notas; el máster puede corregir todas.
       match /chronicle/{e} {
@@ -145,6 +146,11 @@ service cloud.firestore {
           allow read: if isMember(c);
           allow write: if isMember(c);
         }
+      }
+      // Susurros: lo que el máster cuenta a un solo jugador (tiempo libre, saberes propios). Solo lo leen él y los másteres.
+      match /whispers/{w} {
+        allow read: if isEditor(c) || (isMember(c) && resource.data.to == request.auth.uid);
+        allow write: if isEditor(c);
       }
       match /presence/{u} {
         allow read: if isMember(c);

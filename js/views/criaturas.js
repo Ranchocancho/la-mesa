@@ -12,6 +12,7 @@ const st = { q: "", type: "", vd: "", sel: null, cr: null, n: 1, edit: false };
 const norm = x => String(x || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
 
 /** Abre el selector. onAdd(criatura ya escalada, cantidad). */
+let hideNew = (() => { try { return localStorage.getItem("lamesa:addhid") !== "0"; } catch (e) { return true; } })();
 export async function openCreaturePicker({ onAdd, preselect = null, title = "Añadir criaturas" } = {}) {
   const M = srdNow.monstruos || await srd("monstruos");
   if (preselect) { st.sel = preselect; st.cr = null; }
@@ -39,7 +40,7 @@ export async function openCreaturePicker({ onAdd, preselect = null, title = "Añ
           ${cur.notas ? `<p class="cpnotes">${esc(cur.notas)}</p>` : ""}
           <div class="cplevel"><label>Nivel (VD)<select id="cpcr">${CRS.map(v => `<option ${String(cur.vd) === v ? "selected" : ""} value="${v}">${v}${v === String(base.vd) ? " · original" : ""}</option>`).join("")}</select></label>
             ${cur.scaledFrom ? `<small class="note">Ajustada desde VD ${esc(cur.scaledFrom)}: PG, CA, ataque y daño escalados.</small>` : `<small class="note">Súbela o bájala de nivel para adaptarla al grupo.</small>`}</div>
-          ${onAdd ? `<div class="cpadd"><label>Cuántas<input type="number" id="cpn" min="1" max="20" value="${st.n}"></label><button class="btn gold" id="cpgo">Desplegar ${st.n > 1 ? st.n + " × " : ""}${esc(cur.n)}</button></div>` : ""}
+          ${onAdd ? `<div class="cpadd"><label>Cuántas<input type="number" id="cpn" min="1" max="20" value="${st.n}"></label><button class="btn gold" id="cpgo">Desplegar ${st.n > 1 ? st.n + " × " : ""}${esc(cur.n)}</button><label class="chk" title="No las verán hasta que las muestres (🙈 en su ficha del máster o «Mostrar ocultos» en la barra). Además, los jugadores solo ven lo que sus personajes alcanzan a ver."><input type="checkbox" id="cphid" ${hideNew ? "checked" : ""}> 🙈 Ocultas a los jugadores</label></div>` : ""}
           ${dm ? `<details class="cpedit" ${st.edit ? "open" : ""}><summary>✎ Editar en este mundo</summary>
             <div class="row"><button class="btn small" id="cpimg">${cust.img ? "Cambiar imagen" : "+ Imagen"}</button>${cust.img ? `<button class="btn small" id="cpnoimg">Quitar imagen</button>` : ""}</div>
             <div class="row"><label>CA<input type="number" id="cpca" value="${esc(cust.ca ?? "")}" placeholder="${base.ca}"></label><label>PG<input type="number" id="cppg" value="${esc(cust.pg ?? "")}" placeholder="${M.find(m => m.n === base.n).pg}"></label></div>
@@ -53,7 +54,8 @@ export async function openCreaturePicker({ onAdd, preselect = null, title = "Añ
     $$("[data-cm]", back).forEach(b => b.onclick = () => { st.sel = b.dataset.cm; st.cr = null; draw(); });
     const cr = $("#cpcr", back); if (cr) cr.onchange = () => { st.cr = cr.value; draw(); };
     const n = $("#cpn", back); if (n) n.oninput = () => { st.n = Math.max(1, Math.min(20, +n.value || 1)); const g = $("#cpgo", back); if (g) g.textContent = `Desplegar ${st.n > 1 ? st.n + " × " : ""}${cur.n}`; };
-    const go = $("#cpgo", back); if (go) go.onclick = () => { onAdd(cur, st.n); toast(`${st.n} × ${cur.n} en la mesa${cur.scaledFrom ? ` (VD ${cur.vd})` : ""}`); close(); };
+    { const h = $("#cphid", back); if (h) h.onchange = () => { hideNew = h.checked; try { localStorage.setItem("lamesa:addhid", hideNew ? "1" : "0"); } catch (e) { /* */ } }; }
+    const go = $("#cpgo", back); if (go) go.onclick = () => { onAdd(cur, st.n, hideNew); toast(`${st.n} × ${cur.n} en la mesa${cur.scaledFrom ? ` (VD ${cur.vd})` : ""}${hideNew ? " · ocultas a los jugadores" : ""}`); close(); };
     const ed = $(".cpedit", back); if (ed) ed.ontoggle = () => { st.edit = ed.open; };
     const im = $("#cpimg", back); if (im) im.onclick = async () => { const f = await pickFile(); if (!f) return; try { const r = await readImageFile(f, 1200), key = uid("img"); await putImage(key, r.dataURL); setCustom(base.n, { img: key }); draw(); } catch (e) { toast("No se pudo cargar la imagen."); } };
     const ni = $("#cpnoimg", back); if (ni) ni.onclick = () => { setCustom(base.n, { img: null }); draw(); };

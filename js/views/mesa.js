@@ -5,7 +5,7 @@ import { condImmune } from "../core/defensas.js";
 import { combatEvents } from "../core/golpes.js";
 // Iniciales para la tira de iniciativa: sin paréntesis y con el número de los repetidos («Goblin 2 (en la maleza)» → «G2»)
 const initials = n => (String(n || "?").replace(/\s*\(.*?\)/g, "").split(/\s+/).map(w => w.replace(/[^\p{L}\p{N}]/gu, "")[0]).filter(Boolean).slice(0, 2).join("").toUpperCase() || "?");
-import { kitHTML, bindKit } from "./accionesnpc.js";
+import { kitHTML, bindKit, kitPart, kitArmed, kitDefs, kitRest, multiLine, legLeft, legMax } from "./accionesnpc.js";
 import { loadKits, kitOf, gate as kitGate } from "../core/criaturas.js";
 import { store } from "../core/store.js";
 import { isDM, currentUser } from "../core/session.js";
@@ -23,7 +23,7 @@ import { propEditorHTML, bindPropEditor } from "./propeditor.js";
 import { triggerTrap, announceLoot } from "../core/hechizos.js";
 import { hazardAt, onEnter, douse } from "../core/peligros.js";
 import { EFECTOS } from "../data/efectos.js";
-import { computeVision, explored } from "../core/vision.js";
+import { computeVision, explored, visionOn, tokenSeen, unseenFn, LIGHT_ITEMS } from "../core/vision.js";
 import { renderRolls, visibleRolls } from "./tiradas.js";
 import { attacksOf, attack, acOf, nameOf, damageFor, answerOA, decide } from "../core/combate.js";
 import { canActNow, phase, current, pending, beginCombat, rollInit, startRounds, endTurn, stopCombat, eco, moveBudget, speedOf, spend, toggle, ACCIONES, rangeOf, inRange, cover, modifiers, dist, metres } from "../core/turnos.js";
@@ -147,7 +147,7 @@ export function mountTactical(host, opts = {}) {
     rolls: () => visibleRolls(S()),
     aim: () => aimInfo(),
     rollColor: r => { const t = S().tokens.find(x => x.id === r.tok), c = t && charOf(S(), t); const u = S().users.find(x => x.id === r.who); return (c && c.color) || (u && u.role !== "player" ? "#6a3fb0" : (u && u.color) || "#8a2be2"); },
-    fogState: () => { const s = S(); if (isDM(s) || !s.board.fog) return null; const vis = computeVision(s.board, s.tokens, s.characters); return { vis, exp: explored((s.board.scene || "mesa") + "#" + floorIdx(s.board), vis) }; },
+    fogState: () => { const s = S(); if (isDM(s) || !visionOn(s.board)) return null; const vis = computeVision(s.board, s.tokens, s.characters); return { vis, exp: explored((s.board.scene || "mesa") + "#" + floorIdx(s.board), vis) }; },
     setAmbient: k => store.commit("board", st => { st.board.ambient = k; })
   };
   const use3d = () => want3d && !opts.edit;
@@ -174,6 +174,9 @@ export function mountTactical(host, opts = {}) {
   function aimInfo() {
     const s = S(), a = actorTok(), t = s.tokens.find(x => x.id === (isDM(s) && a && a.kind !== "pc" ? dmTarget || sel : sel));
     if (!a || !t || a.id === t.id) return null;
+    // Al jugador solo se le mide el ataque en su turno; a un aliado, solo la distancia
+    if (!isDM(s) && phase(s) === "live" && s.board.turn !== a.id) return null;
+    if ((t.kind === "pc") === (a.kind === "pc")) return { from: a.id, to: t.id, color: "#9fb3c8", label: metres(dist(a, t)) };
     const list = attacksOf(s, a), w = list[Math.min(atkIdx, list.length - 1)];
     const rng = w ? w.rng : { n: 1.5, l: 1.5 }, st = inRange(rng, a, t), cv = cover(s, a, t);
     const col = cv.level === "total" || st === "out" ? "#c4513f" : st === "long" || cv.level ? "#d6aa4e" : "#7ec850";
@@ -195,7 +198,7 @@ export function mountTactical(host, opts = {}) {
   function drawInit() {
     { const eb = $(".editbadge", host); if (eb) eb.hidden = !(S().board && S().board.editing) || isDM(S()); }
     const s = S(), dm = isDM(s), b = s.board, ph = phase(s), cur = current(s);
-    const vis = t => dm || !t.hidden;
+    const hid = unseenFn(s, dm), vis = t => dm || !hid(t), pv = dm ? unseenFn(s, false) : hid;
     const o = order(s).filter(vis), rest = s.tokens.filter(t => vis(t) && !o.includes(t));
     const name = t => esc((charOf(s, t) || t).name);
     const row = t => {
@@ -206,7 +209,7 @@ export function mountTactical(host, opts = {}) {
       const conds = (t.conds || []).map(cd => { const e = estado(cd.id); return e ? `<i class="cdot" style="background:${e.c}" title="${esc(etiqueta(cd.id, cd.lvl))}">${esc(etiqueta(cd.id, cd.lvl).slice(0, 1))}</i>` : ""; }).join("");
       return `<div class="inirow ${turn ? "turn" : ""} ${h && h.cur <= 0 ? "down" : ""} ${t.kind}${fx} ${mine ? "mine" : ""}" data-sel="${t.id}">
         ${mine && t.init == null && ph ? `<button class="ininum inibtn" data-iroll="${t.id}" title="Tirar iniciativa">🎲</button>` : dm ? `<input type="number" class="ininum" data-init="${t.id}" value="${t.init ?? ""}" placeholder="–" aria-label="Iniciativa de ${name(t)}">` : `<b class="ininum">${showInit ? t.init ?? "–" : "?"}</b>`}
-        <span class="ininame">${name(t)}${t.hidden ? ` <small>(oculto)</small>` : ""}</span><span class="iniconds">${conds}</span>
+        <span class="ininame">${name(t)}${t.hidden ? ` <small title="Oculto: los jugadores no lo ven aunque esté a la vista">🙈 oculto</small>` : dm && t.kind !== "pc" && pv(t) ? ` <small title="Los personajes no lo ven: está fuera de su vista (muros, puertas o falta de luz)">👁‍🗨 no lo ven</small>` : ""}</span><span class="iniconds">${conds}</span>
         ${h ? `<span class="inihp"><span class="ihb ${shown <= 0.25 ? "low" : shown <= 0.5 ? "mid" : ""}"><i style="width:${Math.round(shown * 100)}%"></i></span><small>${exact ? `${h.cur}/${h.max}` : healthWord(h.cur, h.max)}</small></span>` : `<span class="inihp"></span>`}</div>`;
     };
     const missing = pending(s);
@@ -283,7 +286,7 @@ export function mountTactical(host, opts = {}) {
     drawNow();
     if (!ph) { if (lastStrip !== "-") { lastStrip = "-"; tb.innerHTML = `<span class="tbidle">Sin combate · el orden de turno aparecerá aquí</span>`; } return; }
     // Tira de iniciativa pegada al borde superior: orden, retrato, vida y estados de cada uno
-    const all = order(s).filter(t => (dm || !t.hidden) && !(hpOf(s, t) && hpOf(s, t).cur <= 0 && t.kind !== "pc"));
+    const hidU = unseenFn(s, dm), all = order(s).filter(t => (dm || !hidU(t)) && !(hpOf(s, t) && hpOf(s, t).cur <= 0 && t.kind !== "pc"));
     const i = cur ? Math.max(0, all.findIndex(t => t.id === cur.id)) : 0, seq = ph === "live" ? [...all.slice(i), ...all.slice(0, i)] : all;
     const chip = (t, k) => {
       const c = charOf(s, t), h = hpOf(s, t), exact = dm || t.kind === "pc", nm = nameOf(s, t);
@@ -327,7 +330,7 @@ export function mountTactical(host, opts = {}) {
     const s = S(), dm = isDM(s);
     const ae = document.activeElement; if (ae && (hud.contains(ae) || (actHost && actHost.contains(ae))) && /INPUT|TEXTAREA|SELECT/.test(ae.tagName)) return;
     const mineT = s.tokens.find(t => t.kind === "pc" && t.owner && t.owner === me());
-    const target = s.tokens.find(t => t.id === sel && (dm || !t.hidden));
+    const target = s.tokens.find(t => t.id === sel && (dm || !unseenFn(s, dm)(t)));
     // Jugador: el objetivo en pequeño, con sus opciones de ataque desde tu figura
     const tcard = tg => { const h = hpOf(s, tg), exact = tg.kind === "pc", pct = h ? Math.max(0, Math.min(100, h.cur / Math.max(1, h.max) * 100)) : 0;
       return `<div class="hudcard tcard"><div class="tch"><b>🎯 ${esc(nameOf(s, tg))}</b>${h ? `<span class="hw ${pct <= 25 ? "low" : pct <= 50 ? "mid" : ""}">${exact ? `${h.cur}/${h.max} PG` : healthWord(h.cur, h.max)}</span>` : ""}</div>
@@ -365,6 +368,8 @@ export function mountTactical(host, opts = {}) {
       }
       if (html !== actSig) { actSig = html; actHost.innerHTML = html; bindActs(actHost); bindKit(actHost, () => { actSig = ""; drawHud(); }, () => atkAdv);
         $$("[data-narm]", actHost).forEach(b => b.onclick = () => { const [tid, i] = b.dataset.narm.split("|"), A = armedNow(); arm(A && A.kind === "atk" && A.tok === tid && A.i === +i ? null : { kind: "atk", tok: tid, i: +i }); actSig = ""; drawHud(); });
+        $$("details[data-nph]", actHost).forEach(d => d.ontoggle = () => { npcPh[d.dataset.nph] = d.open; });
+        $$("[data-tkhide]", actHost).forEach(b => b.onclick = () => { store.commit("token", st => { const k = st.tokens.find(x => x.id === b.dataset.tkhide); if (k) k.hidden = !k.hidden; }); actSig = ""; drawHud(); });
         $$("[data-ndisarm]", actHost).forEach(b => b.onclick = () => { arm(null); actSig = ""; drawHud(); }); $$("[data-npc]", actHost).forEach(b => b.onclick = () => { npcId = b.dataset.npc; if (board) board.select(npcId); drawHud(); }); }
     }
     $("#hudt", hud).onclick = () => { hudOpen = !hudOpen; drawHud(); };
@@ -528,22 +533,67 @@ function infoCard(s, t, dm, meId) {
     ${t.owner && t.owner === meId && !dm ? `<small class="note" style="border:0;padding:0;margin:4px 0 0">Tus acciones están en la pestaña «Personaje».</small>` : ""}${dm && t.kind !== "pc" ? `<small class="note" style="border:0;padding:0;margin:4px 0 0">Para jugarlo: pestaña «PNJ».</small>` : ""}</div>`;
 }
 /* Ficha de juego de un PNJ/enemigo para el máster (pestaña PNJ): compacta, todo a la vista */
+// Fases abiertas a mano en la tarjeta del PNJ (se reinician cada turno)
+let npcPh = {}, npcPhSeq = null;
+const NOACT_NPC = ["incapacitado", "inconsciente", "aturdido", "paralizado", "petrificado"];
+/** Tarjeta del PNJ o enemigo para el máster. En combate, por fases como la del jugador:
+ *  en su turno, movimiento · acción · adicional · reacción (y legendarias); fuera de su turno, solo reacción y legendarias. */
 function npcCard(s, t, turn, canPick) {
-  const h = hpOf(s, t), A = armedNow(), atks = attacksOf(s, t), e = turn ? eco(s, t) : null;
-  const pct = h ? Math.max(0, Math.min(100, h.cur / Math.max(1, h.max) * 100)) : 0;
-  const chip = (k, n, on) => `<button class="eco ${on ? "used" : ""}" data-eco="${t.id}|${k}">${n}</button>`;
-  return `<div class="npcc ${turn ? "turn" : ""}">
-    <div class="npch"><b>${esc(t.name)}</b><small>${t.kind === "npc" ? "PNJ" : "Enemigo"} · CA ${t.ac ?? "—"} · Vel. ${esc(String(t.speed || 9))} m${t.init != null && t.init !== "" ? ` · Inic. ${t.init}` : ""}</small>${turn ? `<span class="pill hit">su turno</span>` : ""}</div>
+  const h = hpOf(s, t), A = armedNow(), atks = attacksOf(s, t), live = phase(s) === "live", e = live ? eco(s, t) : null;
+  const pct = h ? Math.max(0, Math.min(100, h.cur / Math.max(1, h.max) * 100)) : 0, kit = kitOf(t);
+  const head = `<div class="npch"><b>${esc(t.name)}</b><button class="ib tkhide ${t.hidden ? "on" : ""}" data-tkhide="${t.id}" title="${t.hidden ? "Oculto a los jugadores: pulsa para mostrarlo" : "Visible para los jugadores si sus personajes lo ven: pulsa para ocultarlo"}">${t.hidden ? "🙈 Oculto" : "👁 Visible"}</button><small>${t.kind === "npc" ? "PNJ" : "Enemigo"} · CA ${t.ac ?? "—"} · Vel. ${esc(String(t.speed || 9))} m${t.init != null && t.init !== "" ? ` · Inic. ${t.init}` : ""}</small>${turn ? `<span class="pill hit">su turno</span>` : ""}</div>
     ${h ? `<div class="npchp"><div class="hpbar ${pct <= 25 ? "low" : pct <= 50 ? "mid" : ""}"><i style="width:${pct}%"></i><em>${h.cur}/${h.max} PG</em></div><input type="number" min="0" placeholder="0" data-amt="${t.id}" aria-label="Cantidad"><button class="ib red" data-hurt="${t.id}" title="Daño">−</button><button class="ib" data-heal="${t.id}" title="Curar">+</button></div>` : ""}
-    ${turn ? `<div class="npceco">${chip("act", "⚡ Acción", e.act)}${chip("bonus", "✦ Adic.", e.bonus)}${chip("react", "↺ Reac.", !!e.react)}<em>🦶 ${e.mov.toLocaleString("es-ES")}/${moveBudget(s, t).toLocaleString("es-ES")} m</em><button class="btn gold small" id="endturn">Terminar ▶</button></div>` : ""}
-    ${condBlock(t, true)}
-    ${phase(s) === "live" && !turn ? `<p class="note npcwait">⏳ No es su turno: espera a que le toque (fuera de su turno, solo reacciones).</p>` : ""}
-    <div class="fweap npcw">${atks.map((w, i) => `<button class="fw ${A && A.kind === "atk" && A.tok === t.id && A.i === i ? "armed" : ""}" data-narm="${t.id}|${i}" ${(phase(s) === "live" && !turn) || (kitOf(t) && kitGate(s, t, "act", { attack: true })) ? "disabled" : ""}><b>${esc(w.name)}</b><span>${w.atk >= 0 ? "+" : ""}${w.atk} · ${esc(w.expr)}</span><small>${esc(w.type || "")} · ${w.rng.ranged ? `${w.rng.n}/${w.rng.l} m` : `${w.rng.l} m`}</small></button>`).join("") || `<p class="note" style="margin:0">Sin ataques: añádelos en «Editar».</p>`}</div>
-    ${A && A.kind === "atk" && A.tok === t.id ? `<div class="farmed">🎯 Toca al objetivo en la mesa <span><button class="ib ${atkAdv === 1 ? "gold" : ""}" data-atkadv="1">Ventaja</button><button class="ib ${atkAdv === -1 ? "gold" : ""}" data-atkadv="-1">Desv.</button><button class="ib" data-ndisarm>✕</button></span></div>` : ""}
-    ${kitHTML(s, t, turn)}
-    <div class="npcmore">${canPick && !kitOf(t) && !(phase(s) === "live" && !turn) ? `<details class="castbox"><summary title="Solo dibuja el efecto en la mesa: no tira dados ni aplica daño">✨ Efecto visual (sin reglas)</summary><div class="castlist">${Object.entries(EFECTOS).map(([k, x]) => `<button class="btn small" data-cast="${t.id}|${k}" title="${x.hint || ""}">${x.n}</button>`).join("")}</div></details>` : ""}
-      <details class="tkdetails" ${editOpen ? "open" : ""}><summary>✎ Editar</summary>${tokenEditor(t)}</details></div></div>`;
+    ${condBlock(t, true)}${kitDefs(t)}`;
+  const weapons = why => `<div class="fweap npcw">${atks.map((w, i) => `<button class="fw ${A && A.kind === "atk" && A.tok === t.id && A.i === i ? "armed" : ""}" data-narm="${t.id}|${i}" ${why ? `disabled title="${esc(why)}"` : ""}><b>${esc(w.name)}</b><span>${w.atk >= 0 ? "+" : ""}${w.atk} · ${esc(w.expr)}</span><small>${esc(w.type || "")} · ${w.rng.ranged ? `${w.rng.n}/${w.rng.l} m` : `${w.rng.l} m`}</small></button>`).join("") || `<p class="note" style="margin:0">Sin ataques: añádelos en «Editar».</p>`}</div>
+    ${A && A.kind === "atk" && A.tok === t.id ? `<div class="farmed">🎯 Toca al objetivo en la mesa <span><button class="ib ${atkAdv === 1 ? "gold" : ""}" data-atkadv="1">Ventaja</button><button class="ib ${atkAdv === -1 ? "gold" : ""}" data-atkadv="-1">Desv.</button><button class="ib" data-ndisarm>✕</button></span></div>` : ""}`;
+  const fx = canPick && !kit && !(live && !turn) ? `<details class="castbox"><summary title="Solo dibuja el efecto en la mesa: no tira dados ni aplica daño">✨ Efecto visual (sin reglas)</summary><div class="castlist">${Object.entries(EFECTOS).map(([k, x]) => `<button class="btn small" data-cast="${t.id}|${k}" title="${x.hint || ""}">${x.n}</button>`).join("")}</div></details>` : "";
+  const more = `<div class="npcmore">${kitRest(t)}${fx}<details class="tkdetails" ${editOpen ? "open" : ""}><summary>✎ Editar</summary>${tokenEditor(t)}</details></div>`;
+  // Fuera de combate: todo a la vista
+  if (!live) return `<div class="npcc">${head}${weapons("")}${kitHTML(s, t, false).replace(kitDefs(t), "")}${more}</div>`;
+
+  if (npcPhSeq !== s.board.seq) { npcPhSeq = s.board.seq; npcPh = {}; }
+  const conds = (t.conds || []).map(c => c.id), incapId = conds.find(c => NOACT_NPC.includes(c)), incap = incapId ? (estado(incapId) || { n: incapId }).n.toLowerCase() : "";
+  const tag = (used, txt) => `<em class="phst ${used ? "used" : "ok"}">${used ? "✓ " : "● "}${txt}</em>`;
+  const fix = k => `<button class="phfix" data-eco="${t.id}|${k}" title="Corregir: marcarla como ${(k === "react" ? e.react : e[k]) ? "disponible" : "gastada"}">↺</button>`;
+  const box = (k, icon, title, used, st, body, open) => `<details class="phbox ${used ? "used" : ""} ${open ? "now" : ""}" data-nph="${k}" ${(npcPh[k] ?? open) ? "open" : ""}><summary><span>${icon} ${title}</span>${st}${k === "mov" || k === "leg" ? "" : fix(k)}</summary><div class="phbody">${body}</div></details>`;
+  const ll = legLeft(t), reactPart = kitPart(s, t, turn, "react"), legPart = kitPart(s, t, turn, "leg");
+  const reactBox = open => box("react", "↺", "Reacción", !!e.react || !!incap, tag(!!e.react || !!incap, incap ? "no puede" : e.react ? "gastada esta ronda" : "disponible"),
+    incap ? `<p class="phno">Está ${incap}.</p>` : `<p class="phhint">Ataque de oportunidad: si un personaje sale de su alcance, la mesa lo ofrecerá.</p>${reactPart}`, open);
+  const legBox = open => ll == null ? "" : box("leg", "👑", "Legendarias", ll <= 0, tag(ll <= 0, `${ll}/${legMax(t)} esta ronda`),
+    `<p class="phhint">Al terminar el turno de otra criatura. Se recuperan al empezar su turno.</p>${legPart}`, open);
+
+  if (!turn) {
+    const oaNow = (s.rolls || []).find(r => r.kind === "oa" && r.status === "pending" && r.tok === t.id);
+    return `<div class="npcc">${head}
+      <p class="phwait">⏳ No es su turno.${oaNow ? "" : " Solo puede reaccionar o usar acciones legendarias."}</p>
+      ${oaNow ? `<p class="phnow">⚔ <b>¡Oportunidad!</b> Responde en el aviso o en Tiradas.</p>` : ""}
+      ${reactBox(!!oaNow)}${legBox(ll > 0 && !incap)}
+      ${more}</div>`;
+  }
+  // ---- Su turno ----
+  const max = moveBudget(s, t), left = Math.max(0, max - e.mov), moveStop = incap || conds.find(c => ["agarrado", "apresado"].includes(c));
+  const movBody = moveStop ? `<p class="phno">No puede moverse: está ${esc(moveStop)}.</p>` : `<div class="movebar thin ${e.mov > max ? "over" : ""}"><i style="width:${Math.min(100, e.mov / Math.max(1, max) * 100)}%"></i><em>🦶 ${fm(e.mov)} / ${fm(max)} m${e.dash ? " · corriendo" : ""}</em></div><p class="phhint">Arrastra su figura por la mesa.</p>`;
+  const atkWhy = incap ? `Está ${incap}` : kit ? kitGate(s, t, "act", { attack: true }) : e.act ? "Ya ha usado su acción" : "";
+  const actUsed = !!e.act && !!atkWhy;
+  const actPart = kitPart(s, t, turn, "act");
+  const actBody = incap ? `<p class="phno">Está ${incap}: no puede hacer acciones.</p>` : `${multiLine(s, t, turn)}
+    <small class="phsub">Atacar · elige el ataque y toca al objetivo</small>${weapons(atkWhy)}
+    ${actPart ? `<small class="phsub">Otras acciones del perfil</small>${actPart}` : ""}
+    <details class="faccs"><summary>Acciones comunes: Correr, Esquivar, Destrabarse…</summary><div class="accs">${ACCIONES.filter(([n]) => n !== "Atacar" && n !== "Magia").map(([n, d]) => `<button class="btn small" data-acc="${t.id}|${esc(n)}" title="${esc(d)}" ${e.act ? "disabled" : ""}>${n}</button>`).join("")}</div></details>`;
+  const bonusPart = kitPart(s, t, turn, "bonus");
+  const bonusBody = incap ? `<p class="phno">Está ${incap}.</p>` : bonusPart || `<p class="phno">No tiene nada que use la acción adicional.</p>`;
+  const now = [!moveStop && left > 0 ? "mov" : null, !actUsed ? "act" : null, !e.bonus && bonusPart ? "bonus" : null].filter(Boolean)[0];
+  return `<div class="npcc turn">${head}
+    ${box("mov", "🦶", "Movimiento", !!moveStop || left <= 0, tag(!!moveStop || left <= 0, moveStop ? "0 m" : `quedan ${fm(left)} m`), movBody, !moveStop && left > 0)}
+    ${box("act", "⚡", "Acción", actUsed || !!incap, incap ? tag(true, "no puede") : e.act && !atkWhy ? `<em class="phst ok">● más ataques</em>` : tag(!!e.act, e.act ? "gastada" : "disponible"), actBody, !actUsed && !incap)}
+    ${box("bonus", "✦", "Acción adicional", !!e.bonus || !bonusPart || !!incap, tag(!!e.bonus || !bonusPart || !!incap, e.bonus ? "gastada" : bonusPart ? "disponible" : "nada que usar"), bonusBody, !e.bonus && !!bonusPart && !incap)}
+    ${reactBox(false)}${legBox(false)}
+    ${kitArmed(s, t)}
+    ${!now ? `<p class="phdone">Ha gastado lo que tenía. Termina su turno.</p>` : ""}
+    <button class="btn gold" id="endturn">Terminar el turno de ${esc(t.name.split(" ")[0])} ▶</button>
+    ${more}</div>`;
 }
+const fm = n => (Math.round(n * 10) / 10).toLocaleString("es-ES");
 function turnCard(s, t) {
   const e = eco(s, t), max = moveBudget(s, t), pct = Math.min(100, e.mov / Math.max(1, max) * 100);
   const chip = (k, n, on) => `<button class="eco ${on ? "used" : ""}" data-eco="${t.id}|${k}" title="${on ? "Gastada (pulsa para devolverla)" : "Disponible (pulsa para marcarla)"}">${n}</button>`;
@@ -568,7 +618,7 @@ function atkBlock(s, t, canAct, sel) {
   if (!canAct) return "";
   const list = attacksOf(s, t), dm = isDM(s);
   if (!list.length) return dm && t.kind !== "pc" ? `<p class="note" style="margin:0">Añade sus ataques en «Editar enemigo».</p>` : "";
-  const targets = s.tokens.filter(x => x.id !== t.id && (dm || !x.hidden));
+  const targets = s.tokens.filter(x => x.id !== t.id && (dm || !unseenFn(s, dm)(x)));
   return `<details class="atkbox" open><summary>⚔️ Atacar</summary>
     ${dm && t.kind !== "pc" ? `<label class="field">Objetivo<select id="dmtarget"><option value="">Elige…</option>${targets.map(x => `<option value="${x.id}" ${dmTarget === x.id ? "selected" : ""}>${esc(nameOf(s, x))}</option>`).join("")}</select></label>` : ""}
     ${(() => { const tg = s.tokens.find(x => x.id === (dm && t.kind !== "pc" ? dmTarget || sel : sel)); if (!tg || tg.id === t.id) return `<p class="note" style="margin:0 0 4px">Toca un objetivo en la mesa para ver alcance, cobertura y modificadores.</p>`;
@@ -607,6 +657,7 @@ export function tokenEditor(t) {
     <label class="field">Ataques <small>(uno por línea: nombre | ataque | daño)</small><textarea data-tkatk rows="2" placeholder="Cimitarra | +4 | 1d6+2 cortante">${esc((t.attacks || []).map(a => [a.name, a.atk, a.dmg].join(" | ")).join("\n"))}</textarea></label>
     <div class="tkgrid" style="grid-template-columns:1fr auto"><label class="field">Silueta de la peana<select data-tk="icon"><option value="">Según el nombre</option>${SILUETAS.map(([id, n]) => `<option value="${id}" ${t.icon === id ? "selected" : ""}>${n}</option>`).join("")}</select></label>
       <div class="row" style="align-self:end"><button class="btn small" data-tkimg="${t.id}">${t.img ? "Cambiar ilustración" : "Subir ilustración"}</button>${t.img ? `<button class="btn small" data-tknoimg="${t.id}">Quitar</button>` : ""}</div></div>
+    <label class="field">Lleva luz<select data-tk="light"><option value="">Nada</option>${Object.entries(LIGHT_ITEMS).map(([k, x]) => `<option value="${k}" ${t.light === k ? "selected" : ""} title="${esc(x.src)}">${x.n}</option>`).join("")}</select></label>
     <div class="row"><label class="switch"><input type="checkbox" data-tk="hidden" ${t.hidden ? "checked" : ""}> Oculto a los jugadores</label><input type="color" data-tk="color" value="${t.color || "#7a2a22"}" aria-label="Color"></div>
   </div>`;
 }

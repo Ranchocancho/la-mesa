@@ -1,6 +1,7 @@
 // «Ahora»: qué está pasando en la mesa y quién tiene que hacer qué.
 // Lo lee la barra superior de la mesa (a la izquierda de la iniciativa) para que, aunque
 // os pongáis a hablar, siempre se sepa qué falta por tirar o por resolver.
+import { unseenFn } from "../core/vision.js";
 import { nameOf, oaOpen } from "../core/combate.js";
 import { hpOf, order } from "../core/mesa.js";
 import { phase, current, pending, eco, moveBudget } from "../core/turnos.js";
@@ -13,7 +14,7 @@ const first = n => { const w = String(n || "").replace(/\s*\(.*?\)/g, "").trim()
 
 /** Devuelve { head, text, who, mine, tone, acts: [{k, id, label, gold}], next } */
 export function nowState(s, me, dm) {
-  const ph = phase(s), cur = current(s), N = t => (!dm && t && t.hidden ? "?" : first(nameOf(s, t)));
+  const ph = phase(s), cur = current(s), hid = unseenFn(s, dm), N = t => (!dm && t && hid(t) ? "?" : first(nameOf(s, t)));
   const tok = id => s.tokens.find(t => t.id === id);
   const ownerOf = t => t && t.kind === "pc" ? t.owner : null; // de las criaturas se encarga el máster
   const mineT = s.tokens.find(t => t.kind === "pc" && t.owner === me);
@@ -56,9 +57,9 @@ export function nowState(s, me, dm) {
   const rolls = visibleRolls(s).filter(r => r.status !== "void" && (r.at || 0) >= since).slice(-40);
   const hasDmg = id => rolls.some(x => x.link === id);
   const after = (() => { const o = order(s).filter(t => !(hpOf(s, t) && hpOf(s, t).cur <= 0 && t.kind !== "pc")); const i = o.findIndex(t => t.id === (cur && cur.id)); return o.length > 1 && i >= 0 ? o[(i + 1) % o.length] : null; })();
-  const base = { head: `Ronda ${s.board.round} · turno de ${cur ? N(cur) : "—"}`, next: after && !(after.hidden && !dm) ? N(after) : null, nextMine: !!(after && after.owner === me) };
+  const base = { head: `Ronda ${s.board.round} · turno de ${cur ? N(cur) : "—"}`, next: after && !(hid(after) && !dm) ? N(after) : null, nextMine: !!(after && after.owner === me) };
   // Turno de una criatura oculta: los jugadores no deben saber ni quién es
-  if (!dm && cur && cur.hidden) return { head: `Ronda ${s.board.round}`, next: base.next, nextMine: base.nextMine, who: "Máster", text: `El máster está resolviendo un turno. Espera${base.nextMine ? ": vas tú después" : ""}.`, mine: false, acts: [], tone: "calm" };
+  if (!dm && cur && hid(cur)) return { head: `Ronda ${s.board.round}`, next: base.next, nextMine: base.nextMine, who: "Máster", text: `El máster está resolviendo un turno. Espera${base.nextMine ? ": vas tú después" : ""}.`, mine: false, acts: [], tone: "calm" };
   const task = (who, text, mine, acts = [], tone = "wait") => ({ ...base, who, text, mine, acts, tone });
   // 1. Reacciones: interrumpen el turno en curso hasta que quien puede reaccionar decide (el máster puede decidir por él)
   const oa = rolls.find(r => oaOpen(s, r));

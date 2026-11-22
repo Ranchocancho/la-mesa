@@ -272,7 +272,7 @@ export function monsterCard(m, withAdd) {
     <div class="mstats"><span><b>CA</b> ${m.ca}</span><span><b>PG</b> ${m.pg} (${esc(m.pgd)})</span><span><b>Iniciativa</b> ${esc(m.ini)}</span><span><b>Velocidad</b> ${esc(m.vel)}</span><span><b>VD</b> ${esc(m.vd)}</span></div>
     <div class="mab">${Object.entries(m.ab).map(([k, v]) => `<div><small>${k.toUpperCase()}</small><b>${v}</b><em>${mod(v)}</em></div>`).join("")}</div>
     ${m.atk.length ? `<div class="matk">${m.atk.map(a => `<span>⚔️ <b>${esc(a.name)}</b> ${rich(a.atk)} · ${rich(a.dmg)}</span>`).join("")}</div>` : ""}
-    ${withAdd ? `<div class="row" style="margin:10px 0"><button class="btn gold small" id="addmon">➕ Poner en la mesa</button><input type="number" id="addn" value="1" min="1" max="12" style="width:56px" aria-label="Cuántos"></div>` : ""}
+    ${withAdd ? `<div class="row" style="margin:10px 0"><button class="btn gold small" id="addmon">➕ Poner en la mesa</button><input type="number" id="addn" value="1" min="1" max="12" style="width:56px" aria-label="Cuántos"><label class="chk" title="No las verán hasta que las muestres (🙈 en su ficha o «Mostrar ocultos»). Aunque estén visibles, los jugadores solo ven lo que sus personajes alcanzan a ver."><input type="checkbox" id="addhid" ${addHidden ? "checked" : ""}> 🙈 Ocultas a los jugadores</label></div>` : ""}
     ${(() => { const { head, body } = monsterParts(m.txt); return `<div class="mhead">${head.map(l => `<p>${esc(l.trim()).replace(/(^|\s)([A-ZÁÉÍÓÚÑ][A-Za-záéíóúñ ]{1,30}):/g, "$1<b>$2:</b>")}</p>`).join("")}</div>
     <details open><summary>Rasgos y acciones</summary><div class="stext">${bookHTML(body)}</div></details>`; })()}</div>`;
 }
@@ -338,11 +338,12 @@ function monstruos(body, M) {
   $$("[data-mf]", body).forEach(b => b.onclick = () => { const k = b.dataset.mf; mf[k] = mf[k] === b.dataset.v ? "" : b.dataset.v; redraw(); });
   const mc = $("[data-mclear]", body); if (mc) mc.onclick = () => { mf = { vdr: "", ty: "", sz: "", mv: "", tr: "", df: "", or: "" }; filt.vd = ""; redraw(); };
   $$("[data-sort]", body).forEach(b => b.onclick = () => { sortM = b.dataset.sort; redraw(); });
-  const mp = $("#mpick", body); if (mp) mp.onclick = () => openCreaturePicker({ preselect: cur.n, title: "Criatura", onAdd: canAdd ? (m, n) => addToBoard(m, n) : null });
+  const mp = $("#mpick", body); if (mp) mp.onclick = () => openCreaturePicker({ preselect: cur.n, title: "Criatura", onAdd: canAdd ? (m, n, h) => addToBoard(m, n, { hidden: h }) : null });
   $$("[data-img]", body).forEach(async e => { const u = await getImage(e.dataset.img); if (u) e.style.backgroundImage = `url('${u}')`; });
   $$("[data-m]", body).forEach(b => b.onclick = () => { sel = b.dataset.m; side = false; redraw(); $(".rpage", body).scrollTop = 0; });
   const add = $("#addmon", body);
-  if (add) add.onclick = () => { const n = Math.max(1, +$("#addn", body).value || 1); addToBoard(cur, n); toast(`${n} × ${cur.n} en la mesa`); };
+  { const h = $("#addhid", body); if (h) h.onchange = () => { addHidden = h.checked; try { localStorage.setItem("lamesa:addhid", addHidden ? "1" : "0"); } catch (e) { /* */ } }; }
+  if (add) add.onclick = () => { const n = Math.max(1, +$("#addn", body).value || 1); addToBoard(cur, n, { hidden: addHidden }); toast(`${n} × ${cur.n} en la mesa${addHidden ? " · ocultas a los jugadores" : ""}`); };
 }
 function bindList(body, redraw) {
   const rq = $("#rq", body);
@@ -351,7 +352,8 @@ function bindList(body, redraw) {
 
 /** Coloca n criaturas en casillas libres cerca del centro de la mesa. */
 export { openCreaturePicker };
-export function addToBoard(m, n = 1) {
+let addHidden = (() => { try { return localStorage.getItem("lamesa:addhid") !== "0"; } catch (e) { return true; } })();
+export function addToBoard(m, n = 1, { hidden = false } = {}) {
   store.commit("board", s => {
     const b = s.board; if (!b) return;
     const busy = new Set(s.tokens.map(t => t.c + "," + t.r)), out = [];
@@ -362,6 +364,6 @@ export function addToBoard(m, n = 1) {
     }
     // Numeradas tras las que ya hubiera con el mismo nombre (Lobo 3, Lobo 4…)
     const had = s.tokens.filter(t => t.kind !== "pc" && String(t.name).replace(/\s+\d+(\s*\(.*\))?$/, "") === m.n).length;
-    out.forEach(([c, r], i) => { const t = monsterToken(m, c, r); if (n > 1 || had) t.name = `${m.n} ${had + i + 1}`; s.tokens.push(t); });
+    out.forEach(([c, r], i) => { const t = monsterToken(m, c, r); if (n > 1 || had) t.name = `${m.n} ${had + i + 1}`; if (hidden) t.hidden = true; s.tokens.push(t); });
   });
 }

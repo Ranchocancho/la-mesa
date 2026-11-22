@@ -657,3 +657,27 @@ Comprobado simulando las reglas sobre las escrituras reales de la app (gastar es
 - **Botín del grupo** (Personajes → El grupo): lo encontrado y aún sin repartir. El máster añade monedas y objetos (mágico, sintonización, de dónde sale), reparte las monedas a partes iguales (el resto a quien elija) o da un objeto a alguien. El jugador pulsa «Me lo quedo» (propuesta; aviso si ya tiene 3 objetos sintonizados). Lo que nadie coge se queda en el cofre del grupo.
 - **Cofres en la escena**: el máster pone un cofre y escribe qué hay dentro (monedas, objetos del catálogo o inventados, nota). Al abrirlo, el contenido pasa al botín del grupo y se anuncia en las tiradas. Lo abre el máster desde el objeto, o un jugador con su figura junto al cofre («Abrir el cofre» en su panel); el cliente del máster comprueba que sigue al lado.
 - Sin cambios en las reglas de Firestore: el botín vive en el documento de la campaña (lo escribe el máster) y el jugador solo crea propuestas y peticiones.
+
+## Hito 46 · Ataques de oportunidad claros, PNJ por fases y tiempo libre en la ciudad
+
+- **Fuera de tu turno ya no parece que te toque reaccionar.** La caja «Reacción» solo se destaca cuando la mesa te ofrece de verdad un ataque de oportunidad (un enemigo sale de tu alcance). Si no, verás «No es tu turno. Nada que hacer ahora». Un arma preparada deja de apuntar al acabar tu turno y, al tocar a un aliado, solo se mide la distancia (antes decía «fuera de alcance · cobertura total»).
+- **El máster lleva a los PNJ y enemigos por fases**, igual que el jugador: Movimiento, Acción (ataques, Ataque múltiple, acciones del perfil y acciones comunes), Acción adicional, Reacción y Legendarias, con lo que les queda y por qué algo no se puede. Fuera de su turno, solo Reacción y Legendarias. Al empezar el turno de una criatura, el panel pasa solo a la pestaña 👹 PNJ; tocar un enemigo en la mesa (o en la iniciativa) abre su pestaña.
+- **🕰 Tiempo libre** (Partida → Roleplay, con la sesión en curso). Es una herramienta de mesa, **regla de campaña**: no añade mecánicas.
+  - El máster elige los sitios: taberna y mercado de entrada, los lugares que haya dentro de la ciudad y otros de un toque (biblioteca, torre de magos, catacumbas, templo, gremio…) o inventados. Cada sitio tiene lo que ven los jugadores y 🔒 notas solo para el máster.
+  - Cada jugador elige a dónde va su personaje y escribe qué quiere hacer. Ve a dónde van sus compañeros, pero no sus planes: no tenéis que ir juntos.
+  - El máster ve quién va a cada sitio y qué quiere hacer. Con **🤫 Contarle** le cuenta a un solo personaje lo que pasa o lo que descubre: solo lo leen ese jugador y los másteres. Puede marcarlo como ⭐ descubrimiento o contarlo también al grupo en la crónica. Con 🎲 le pide una tirada.
+  - El jugador lo ve en su ficha («🤫 Lo que sabes tú») y lo puede pasar a su cuaderno. Si la mesa muestra otra cosa, un aviso en su ficha le deja elegir igualmente.
+  - Al cerrarlo queda en el **📜 Registro**: quién fue a dónde, qué quería hacer y lo que se le contó.
+- **Reglas de Firestore**: hay que publicarlas otra vez. Se añade la colección `whispers` (la leen solo su destinatario y los másteres) y el jugador puede guardar su elección (`ft`) en su ficha.
+
+## Hito 47 · Visión, luz y enemigos ocultos (reglas del SRD 5.2.1)
+
+- **Visión de los personajes activada por defecto** (👁 en la barra del máster para apagarla). Los jugadores solo ven las casillas y las criaturas que algún personaje en pie alcanza a ver: los muros y las **puertas cerradas tapan la vista** (un rastrillo deja ver), también en diagonal entre dos muros que se tocan. Lo ya explorado queda en penumbra.
+- **Luz según las reglas**: la escena tiene ☀️ luz brillante, ◐ luz tenue u ● oscuridad (barra del máster y editor de escenas; de noche, oscuridad por defecto).
+  - Luz tenue: se ve, en penumbra (desventaja en Sabiduría (Percepción) para ver).
+  - Oscuridad: no se ve (quien intenta ver algo ahí está cegado).
+  - **Visión en la oscuridad**: dentro de su alcance, la luz tenue cuenta como brillante y la oscuridad como tenue.
+  - **Fuentes de luz del SRD**: vela 1,5 + 1,5 m, antorcha 6 + 6 m, lámpara 4,5 + 9 m, linterna sorda 9 + 9 m y el conjuro Luz 6 + 6 m. Las llevan los personajes (🔦 en su ficha) o las criaturas (al editarlas). Las antorchas y velas de la escenografía también iluminan; la hoguera, como una antorcha (regla de campaña).
+  - En su ficha, el jugador ve qué luz hay en su casilla.
+- **Enemigos ocultos**: al añadir criaturas, la casilla «🙈 Ocultas a los jugadores» (marcada por defecto) las pone en la mesa sin que se vean. En la ficha de cada PNJ, 🙈/👁 lo oculta o lo muestra, y «Mostrar ocultas» de la barra las revela todas a la vez. En la iniciativa del máster se marca 🙈 oculto y 👁‍🗨 no lo ven (fuera de la vista de los personajes). Para los jugadores, lo que no ven no sale en la mesa, en la iniciativa ni en la barra de turno.
+- **Reglas de Firestore**: el jugador puede cambiar la luz que lleva su figura (`light`). Hay que publicarlas otra vez.

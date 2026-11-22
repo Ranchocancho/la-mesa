@@ -1,6 +1,9 @@
 // Ficha de bolsillo: la columna fija del jugador (a la derecha, el mismo ancho que el panel del máster).
 // PG, CA, estados, salvaciones contra muerte, salvaciones y pruebas, ataques, conjuros con espacios y descansos.
 import { requestOpen } from "../core/comercio.js";
+import { lightMap, darkvisionOf, LIGHT_ITEMS } from "../core/vision.js";
+import { sheetFreeHTML, whispersHTML, bindSheetFree } from "./tiempolibre.js";
+import { whispersFor } from "../core/tiempolibre.js";
 import { condImmune } from "../core/defensas.js";
 import { store } from "../core/store.js";
 import { currentUser, isDM } from "../core/session.js";
@@ -17,7 +20,7 @@ import { treasuresHTML, bindTreasures, journalHTML, bindJournal } from "./tesoro
 import { getImage } from "../core/images.js";
 import { $, $$, esc, toast } from "../core/ui.js";
 
-let tesOpen = false, cuaOpen = false, phOpen = {}, phSeq = null;
+let tesOpen = false, cuaOpen = false, whOpen = false, phOpen = {}, phSeq = null;
 let condOpen = false, charSel = null, openSpell = null, slotPick = {}, accOpen = false, restOpen = false, hdN = 1, testsOpen = false;
 
 const myChars = s => { const u = currentUser(s); return s.characters.filter(c => c.owner === (u && u.id)); };
@@ -37,11 +40,13 @@ export function renderSheet(el) {
     <header class="fhead"><div class="fport" data-portrait="${esc(c.portrait || "")}" style="--c:${esc(c.color || "#888")}">${c.portrait ? "" : esc(c.name.slice(0, 2).toUpperCase())}</div>
       <div><b>${esc(c.name)}</b><small>${esc(c.cls)} ${c.level}${c.species ? " · " + esc(c.species) : ""}</small></div>
       <a class="btn small" href="#personajes" title="Ficha completa">Ficha ↗</a></header>
+    ${sheetFreeHTML(s, c)}
     ${(+c.lvlGrant || 0) > c.level ? `<a class="flvl" href="#personajes">⬆ El máster te concede subir a nivel ${c.lvlGrant} · abrir la ficha</a>` : ""}
     <div class="fstats">
       <div class="fhp ${c.hp.cur === 0 ? "zero" : hpPct < 34 ? "low" : ""}"><div class="bar"><i style="width:${hpPct}%"></i></div><span><b>${c.hp.cur}</b>/${c.hp.max} PG${c.hp.temp ? ` <em>+${c.hp.temp}</em>` : ""}</span></div>
       <span class="fst"><small>CA</small><b>${c.ac}</b></span><span class="fst"><small>Vel.</small><b>${(+c.speed).toLocaleString("es-ES")} m</b></span><span class="fst"><small>Inic.</small><b>${sign(mod(c.abilities.des))}</b></span>
     </div>
+    ${tok && s.board ? lightLine(s, c, tok) : ""}
     ${tok ? `<div class="fconds">${conds.map(x => { const e = ESTADOS.find(y => y.id === x.id) || { n: x.id, c: "#888", t: "" }; return `<span class="cchip big" style="--c:${e.c}" title="${esc(e.t)}"><b>${esc(e.n)}${x.lvl > 1 ? " " + x.lvl : ""}</b>${x.note ? ` · ${esc(x.note)}` : ""}<button data-uncond="${x.id}" aria-label="Quitar ${esc(e.n)}">✕</button></span>`; }).join("")}<button class="cchip add" id="faddcond">${condOpen ? "Cerrar" : "+ Estado"}</button></div>
       ${condOpen ? `<div class="fcondpick">${ESTADOS.filter(e => !conds.some(c => c.id === e.id)).map(e => `<button class="cchip" style="--c:${e.c}" data-addc="${e.id}" title="${esc(e.t)}">${esc(e.n)}</button>`).join("")}</div>` : ""}
       ${conds.length ? `<details class="fcondtxt"><summary>Qué hace${conds.length > 1 ? "n" : ""}</summary>${conds.map(x => { const e = ESTADOS.find(y => y.id === x.id); return e ? `<p><b style="color:${e.c}">${esc(e.n)}:</b> ${esc(e.t)}</p>` : ""; }).join("")}</details>` : ""}` : ""}
@@ -61,6 +66,7 @@ export function renderSheet(el) {
 
 
     ${s.board && s.presentation && s.presentation.type === "tactical" ? "" : `<details class="fsec" data-k="tes" ${tesOpen ? "open" : ""}><summary>✨ Objetos especiales <small>${(c.treasures || []).length}</small></summary>${treasuresHTML(c, { compact: true })}</details>
+    ${whispersFor(s, c.id).length ? `<details class="fsec" data-k="wh" ${whOpen ? "open" : ""}><summary>🤫 Lo que sabes tú <small>${whispersFor(s, c.id).length}</small></summary>${whispersHTML(s, c, { limit: 4 })}</details>` : ""}
     <details class="fsec" data-k="cua" ${cuaOpen ? "open" : ""}><summary>📓 Cuaderno <small>${(c.journal || []).length}</small></summary>${journalHTML(c, { limit: 4 })}</details>`}
     ${s.board && s.presentation && s.presentation.type === "tactical" ? "" : `<details class="fsec" data-k="rest" ${restOpen ? "open" : ""}><summary>Descansos</summary>
       <div class="frest"><div><b>Descanso corto</b> <small>1 hora · gasta dados de golpe (d${classInfo(c.cls).hd} + CON)</small>
@@ -95,6 +101,12 @@ function spellRows(s, c, tok, list, e, incap) {
     return `<div class="fspell ${openSpell === x.name && !why ? "open" : ""} ${why ? "off" : ""}"><button class="fsph" data-spell="${esc(x.name)}" ${why ? `disabled title="${esc(why)}"` : ""}><i>${lvl || "T"}</i><b>${esc(x.name)}</b><small>${why ? esc(why) : tags.map(esc).join(" · ")}</small></button>
       ${openSpell === x.name && !why ? castBox(s, c, tok, d, m) : ""}</div>`; }).join("");
 }
+/** Luz en tu casilla y la que llevas (SRD: luz brillante, tenue y oscuridad; visión en la oscuridad). */
+function lightLine(s, c, tok) {
+  const lv = lightMap(s.board, s.tokens).at(tok.c + "," + tok.r), dv = darkvisionOf(c);
+  const txt = lv === 2 ? "☀️ Luz brillante" : lv === 1 ? "◐ Luz tenue: desventaja en Sabiduría (Percepción) para ver" : `● Oscuridad${dv ? `: ves como en luz tenue hasta ${dv} m (visión en la oscuridad, en grises)` : ": sin luz no ves nada (cegado para ver)"}`;
+  return `<div class="flight ${lv === 2 ? "" : lv === 1 ? "dim" : "dark"}"><span>${txt}</span><label title="Lo que llevas encendido ilumina a tu alrededor para todo el grupo">🔦<select id="flightsel"><option value="">Sin luz</option>${Object.entries(LIGHT_ITEMS).map(([k, x]) => `<option value="${k}" ${tok.light === k ? "selected" : ""} title="${esc(x.src)}">${x.n}</option>`).join("")}</select></label></div>`;
+}
 /** Cofres sin abrir y visibles junto a tu figura (a 1 casilla): pides abrirlo y su contenido va al botín del grupo. */
 function chestNear(s, tok) {
   if (!tok || !s.board) return "";
@@ -119,12 +131,18 @@ function turnBlock(s, c, tok) {
   const atkBtn = (w, i, use, why) => `<button class="fw ${A && A.kind === "atk" && A.i === i && (A.use || "act") === use ? "armed" : ""}" data-arm="${i}" data-use="${use}" ${why ? `disabled title="${esc(why)}"` : ""}><b>${esc(w.name)}</b><span>${sign(w.atk)} · ${esc(w.expr)}</span><small>${why ? esc(why) : w.rng.ranged ? `${w.rng.n}/${w.rng.l} m` : `${w.rng.l} m`}</small></button>`;
   // Fuera de tu turno: solo reacciones (y lo que podrás hacer cuando te toque)
   if (!myTurn) {
+    if (A && A.kind === "atk") queueMicrotask(() => arm(null)); // un arma preparada no sigue apuntando fuera de tu turno
     const cur = s.tokens.find(t => t.id === s.board.turn), N = cur ? (cur.kind === "pc" ? (s.characters.find(x => x.id === cur.char) || cur).name : (cur.hidden ? "?" : cur.name)) : "—";
     const reactBody = incap ? `<p class="phno">Estás ${incap}: no puedes usar reacciones.</p>` : `<p class="phhint">Se usa durante el turno de otro, cuando ocurre su desencadenante.</p>
       <ul class="phlist"><li><b>Ataque de oportunidad</b>: si un enemigo sale de tu alcance, la mesa te lo ofrecerá.</li>${fUse("react").map(f => `<li><b>${esc(f.name)}</b>: ${esc(f.text || "")}</li>`).join("")}</ul>
       ${byT("react").length ? `<small class="phsub">Conjuros de reacción</small>${spellRows(s, c, tok, byT("react"), e, incap)}` : ""}`;
+    // Solo se destaca si AHORA MISMO hay algo a lo que reaccionar (una oportunidad ofrecida por la mesa)
+    const oaNow = (s.rolls || []).find(r => r.kind === "oa" && r.status === "pending" && r.tok === tok.id && (r.seq == null || r.seq === s.board.seq));
+    const tgt = oaNow && s.tokens.find(t => t.id === oaNow.target);
+    const oaBox = oaNow ? `<p class="phnow">⚔ <b>¡Oportunidad!</b> ${esc(tgt ? (tgt.hidden ? "?" : tgt.name) : "Un enemigo")} sale de tu alcance. Responde en el aviso de arriba o en Tiradas.</p>` : "";
     return `<section class="fturn"><div class="ftt"><b>⏳ Turno de ${esc(N)}</b><small>Ronda ${s.board.round || 1}</small></div>
-      ${phaseBox("react", "↺", "Reacción", !!e.react, stateTag(!!e.react, e.react ? "gastada esta ronda" : "disponible"), reactBody, !e.react)}
+      <p class="phwait">${oaNow ? "" : "No es tu turno. Nada que hacer ahora: si puedes reaccionar, la mesa te avisará."}</p>${oaBox}
+      ${phaseBox("react", "↺", "Reacción", !!e.react, stateTag(!!e.react, e.react ? "gastada esta ronda" : "disponible"), reactBody, !!oaNow)}
       <details class="phpre"><summary>En tu turno podrás…</summary><p class="phhint">Moverte ${fm(moveBudget(s, tok))} m · una acción (${nAtk > 1 ? `Atacar ${nAtk} veces, ` : "Atacar, "}lanzar un conjuro, Correr, Esquivar…) · una acción adicional si tienes algo que la use${cunning ? " (Acción astuta)" : ""}.</p></details></section>`;
   }
   // ---- Tu turno ----
@@ -205,9 +223,10 @@ function bind(el, s, c, tok) {
   const on = (id, fn) => { const x = $("#" + id, el); if (x) x.onclick = fn; };
   const fs = $("#fsel", el); if (fs) fs.onchange = () => { charSel = fs.value; renderSheet(el); };
   on("fdeath", () => tok && deathSave(tok.id));
-  $$("details.fsec", el).forEach(dt => dt.ontoggle = () => { if (dt.dataset.k === "sv") testsOpen = dt.open; if (dt.dataset.k === "rest") restOpen = dt.open; if (dt.dataset.k === "tes") tesOpen = dt.open; if (dt.dataset.k === "cua") cuaOpen = dt.open; });
+  $$("details.fsec", el).forEach(dt => dt.ontoggle = () => { if (dt.dataset.k === "sv") testsOpen = dt.open; if (dt.dataset.k === "rest") restOpen = dt.open; if (dt.dataset.k === "tes") tesOpen = dt.open; if (dt.dataset.k === "cua") cuaOpen = dt.open; if (dt.dataset.k === "wh") whOpen = dt.open; });
   $$("[data-openchest]", el).forEach(b => b.onclick = () => { requestOpen(b.dataset.openchest, tok.id); toast("Pides abrir el cofre: el máster lo verá al momento"); });
-    bindTreasures(el, c, () => renderSheet(el)); bindJournal(el, c, () => renderSheet(el));
+    { const ls = $("#flightsel", el); if (ls && tok) ls.onchange = () => store.commit("token", st => { const t = st.tokens.find(x => x.id === tok.id); if (t) { if (ls.value) t.light = ls.value; else delete t.light; } }); }
+  bindSheetFree(el, c); bindTreasures(el, c, () => renderSheet(el)); bindJournal(el, c, () => renderSheet(el));
   $$("[data-save]", el).forEach(b => b.onclick = () => {
     const k = b.dataset.save, p = tok ? savePlan(s, tok, k) : { bonus: saveBonus(c, k), adv: 0, extra: "", why: [] };
     publish({ kind: "save", label: `Salvación de ${ABILITIES.find(a => a[0] === k)[1]} de ${c.name}`, expr: `1d20${p.bonus >= 0 ? "+" : ""}${p.bonus}${p.extra}`, adv: p.adv, by: tok ? tok.id : null, why: p.why.length ? p.why : null });

@@ -13,6 +13,8 @@ import { spellCard } from "./reglas.js";
 import { treasuresHTML, bindTreasures, journalHTML, bindJournal } from "./tesorosui.js";
 import { spellMech } from "../core/hechizos.js";
 import { openShop, openGive, lootHTML, bindLoot } from "./tienda.js";
+import { whispersHTML, bindSheetFree } from "./tiempolibre.js";
+import { whispersFor } from "../core/tiempolibre.js";
 import { diffChar, describe, propose, approve, reject, withdraw, stale, logTo, lootGone } from "../core/propuestas.js";
 import { giveTreasure } from "../core/tesoros.js";
 
@@ -137,7 +139,7 @@ function drawSheet(state, c0) {
       <aside class="shcol">${colHTML(c, ed)}</aside>
       <section class="shmain">
         <nav class="tabs" role="tablist">${TABS.map(([k, t]) => `<button role="tab" class="tab ${k === "atr" ? "mobonly" : ""}" data-tab="${k}" aria-selected="${tab === k}">${t}${k === "lqv" && (levelGranted(c0) || c0.lvlDraft) ? " •" : ""}</button>`).join("")}</nav>
-        <div class="tabbody">${({ atr: () => colHTML(c, ed), acc: () => tabAcc(c, ed), con: () => tabCon(c, ed), inv: () => tabInv(c, ed, dm), ras: () => tabRas(c, ed), his: () => tabHis(c, ed), cua: () => `<p class="note" style="margin:0 0 8px">Tus notas de la partida: nombres, pistas, promesas. Marca con ⭐ los descubrimientos y comparte con 📣 lo que quieras que quede en la crónica. Las notas son tuyas: no necesitan el visto bueno del máster.</p>${journalHTML(c0, { edit: mine || dm })}`, lqv: () => tabLqv(c0, dm, canLv) })[tab]()}</div>
+        <div class="tabbody">${({ atr: () => colHTML(c, ed), acc: () => tabAcc(c, ed), con: () => tabCon(c, ed), inv: () => tabInv(c, ed, dm), ras: () => tabRas(c, ed), his: () => tabHis(c, ed), cua: () => `<p class="note" style="margin:0 0 8px">Tus notas de la partida: nombres, pistas, promesas. Marca con ⭐ los descubrimientos y comparte con 📣 lo que quieras que quede en la crónica. Las notas son tuyas: no necesitan el visto bueno del máster.</p>${(mine || dm) && whispersFor(state, c0.id).length ? `<h4 class="whh">🤫 Lo que sabe solo ${esc(c0.name.split(" ")[0])} <small>se lo ha contado el máster; nadie más del grupo lo ve</small></h4>${whispersHTML(state, c0)}` : ""}${journalHTML(c0, { edit: mine || dm })}`, lqv: () => tabLqv(c0, dm, canLv) })[tab]()}</div>
       </section>
     </div>
   </div>`;
@@ -346,7 +348,7 @@ function bind(state, c0, ed) {
   on("#shop", () => openShop(id));
   on("#give", () => openGive(id));
   on("#xpgo", () => { const v = +$("#xpadd", el).value || 0; if (!v) return; store.commit("char", s => { const x = C(s); x.xp = Math.max(0, (x.xp || 0) + v); }); toast(`${v > 0 ? "+" : ""}${v} PX para ${c0.name}`); });
-  { const tb = $(".tabbody", el); if (tb) { bindTreasures(tb, c0, draw); bindJournal(tb, c0, draw); } on("#tesadd", () => giveTreasure([id], { kind: "recuerdo", name: "Objeto especial" })); }
+  { const tb = $(".tabbody", el); if (tb) { bindTreasures(tb, c0, draw); bindJournal(tb, c0, draw); bindSheetFree(tb, c0); } on("#tesadd", () => giveTreasure([id], { kind: "recuerdo", name: "Objeto especial" })); }
   if (!ed) return;
   const saveText = debounce((path, v) => mode === "prop" ? setP(draft, path, v) : store.commit("field", s => setP(C(s), path, v)), 350);
   $$("[data-p]", el).forEach(i => i.addEventListener("input", () => saveText(i.dataset.p, i.value)));

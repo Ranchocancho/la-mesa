@@ -1,5 +1,6 @@
 // Preparar escenas tácticas (solo administrador y másteres).
 // Cada escena va asociada a un lugar del mundo o a la biblioteca, para improvisar.
+import { LEVELS, ambientLevel } from "../core/vision.js";
 import { store } from "../core/store.js";
 import { isDM } from "../core/session.js";
 import { blankScene, exampleScenes } from "../data/escenas.js";
@@ -130,6 +131,7 @@ function side() {
       <label class="field">Nombre<input id="scname" value="${esc(sc.name)}"></label>
       <label class="field" style="margin-top:8px">Lugar<select id="scplace"><option value="">Biblioteca (sin lugar)</option>${s.world.places.map(p => `<option value="${p.id}" ${sc.place === p.id ? "selected" : ""}>${esc(p.name)}</option>`).join("")}</select></label>
       <div class="tkgrid" style="margin-top:8px"><label class="field">Columnas<input type="number" min="5" max="40" id="sccols" value="${sc.cols}"></label><label class="field">Filas<input type="number" min="5" max="30" id="scrows" value="${sc.rows}"></label></div>
+      <label class="field" title="Reglas de visión: con luz tenue se ve con desventaja en Percepción; a oscuras no se ve sin visión en la oscuridad. Las antorchas, velas y hogueras de la escena iluminan alrededor.">Luz de la escena<select id="sclight">${Object.entries(LEVELS).map(([k, n]) => `<option value="${k}" ${ambientLevel(sc) === k ? "selected" : ""}>${n}</option>`).join("")}</select></label>
       <div class="row" style="margin-top:10px"><button class="btn small" id="scstart" aria-pressed="${placing}">${placing ? "Toca una casilla del mapa…" : "⚑ Punto de inicio del grupo"}</button>
         <label class="field" title="Al cargar la escena, cada jugador se coloca por turnos dentro de esta zona">Zona de despliegue<select id="scrad">${[0, 1, 2, 3, 4, 5, 6].map(n => `<option value="${n}" ${(+(sc.deployRad ?? 2)) === n ? "selected" : ""}>${n ? `${n} casilla${n > 1 ? "s" : ""} (${n * 1.5} m)` : "solo el punto"}</option>`).join("")}</select></label></div>
       <p class="note" style="margin:4px 0 0">El grupo empieza en el ⚑ y, por turnos, cada jugador se coloca dentro de la zona según lo que ve.</p>
@@ -150,12 +152,13 @@ function side() {
   $("#scname", box).onchange = e => M(x => { x.name = e.target.value; });
   $("#scplace", box).onchange = e => M(x => { x.place = e.target.value || null; });
   $("#sccols", box).onchange = e => M(x => { x.cols = Math.max(5, Math.min(40, +e.target.value)); });
+  $("#sclight", box).onchange = e => M(x => { x.light = e.target.value; });
   $("#scrows", box).onchange = e => M(x => { x.rows = Math.max(5, Math.min(30, +e.target.value)); });
-  $("#monpick", box).onclick = () => openCreaturePicker({ title: "Añadir criaturas a la escena", onAdd: (m, n) => {
+  $("#monpick", box).onclick = () => openCreaturePicker({ title: "Añadir criaturas a la escena", onAdd: (m, n, h) => {
     M(x => { const busy = new Set(x.tokens.map(k => k.c + "," + k.r)); let placed = 0; const st0 = x.start || { c: 1, r: 1 };
       for (let d = 2; d < 20 && placed < n; d++) for (let r = 0; r < x.rows && placed < n; r++) for (let c = x.cols - 1; c >= 0 && placed < n; c--) {
         if (Math.max(Math.abs(c - st0.c), Math.abs(r - st0.r)) !== d || busy.has(c + "," + r) || isWallT(x.terrain[c + "," + r])) continue;
-        busy.add(c + "," + r); const t = monsterToken(m, c, r); if (n > 1) t.name = `${m.n} ${placed + 1}`; x.tokens.push(t); placed++;
+        busy.add(c + "," + r); const t = monsterToken(m, c, r); if (n > 1) t.name = `${m.n} ${placed + 1}`; if (h) t.hidden = true; x.tokens.push(t); placed++;
       } });
   } });
   $$("[data-scflgo]", box).forEach(b => b.onclick = () => { M(x => { x.tokens = swapFloor(x, x.tokens, +b.dataset.scflgo); }); sel = null; selProp = null; if (board && board.fit) board.fit(); });

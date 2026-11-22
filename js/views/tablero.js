@@ -1,5 +1,6 @@
 // Tablero de casillas cuadradas (1,5 m por casilla), vista plana. Lo usan el editor de escenas y la mesa en directo.
 // Modelo: { grid: { cols, rows, terrain: {"c,r": tipo}, props: [{id,c,r,k,rot,hidden,open,label,loot,trap}] }, tokens: [...] }
+import { tokenSeen } from "../core/vision.js";
 import { getImage } from "../core/images.js";
 import { esc } from "../core/ui.js";
 import { estado } from "../data/estados.js";
@@ -159,8 +160,8 @@ export function createBoard(host, opts) {
     const fog = opts.fogState ? opts.fogState() : null;
     let fogSvg = "";
     if (fog) for (let r = 0; r < grid.rows; r++) for (let c = 0; c < grid.cols; c++) {
-      const k = key(c, r); if (fog.vis.has(k)) continue;
-      const [x, y] = center(c, r);
+      const k = key(c, r), [x, y] = center(c, r);
+      if (fog.vis.has(k)) { if (fog.vis.dim && fog.vis.dim.has(k)) fogSvg += `<rect x="${x - S}" y="${y - S}" width="${T}" height="${T}" fill="rgba(8,10,18,.42)"/>`; continue; }
       fogSvg += `<rect x="${x - S}" y="${y - S}" width="${T}" height="${T}" fill="${fog.exp.has(k) ? "rgba(5,7,12,.62)" : "#0c0a08"}"/>`;
     }
     host.dataset.amb = grid.ambient || "interior";
@@ -169,7 +170,7 @@ export function createBoard(host, opts) {
       if (hpPrimed && was != null && was !== hp.cur && (opts.dm || !k.hidden)) { const [x, y] = center(k.c, k.r), d = hp.cur - was; setTimeout(() => floatTxt(x + S * 0.55, y + 6, (d > 0 ? "+" : "−") + Math.abs(d), d > 0 ? "#7dff9a" : "#ff5a48", Math.abs(d) >= 15), 450);
         if (d < 0) shakeUntil.set(k.id, Date.now() + 450); } });
     hpPrimed = true;
-    const toks = tokens.filter(k => (opts.dm || !k.hidden) && (!fog || k.kind === "pc" || fog.vis.has(key(k.c, k.r)))).map(k => {
+    const toks = tokens.filter(k => (opts.dm || !k.hidden) && (!fog || k.kind === "pc" || tokenSeen(k, fog.vis))).map(k => {
       const dk = { name: k.name, color: k.color, ...(opts.decorate ? opts.decorate(k) : {}) };
       const [x, y] = center(k.c, k.r), rad = S * 0.8 * (k.size || 1), hp = opts.hpOf(k), down = hp && hp.cur <= 0;
       const img = dk.portrait && imgCache.get(dk.portrait);

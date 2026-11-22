@@ -13,7 +13,7 @@ import { terrainCanvas } from "./texturas.js";
 import { PROC } from "./props3d.js";
 import { siluetaFor, siluetaURL } from "../data/siluetas.js";
 import { estado, etiqueta } from "../data/estados.js";
-import { computeVision, explored } from "../core/vision.js";
+import { computeVision, explored, visionOn, tokenSeen } from "../core/vision.js";
 import { playEffect, EFECTOS } from "./efectos3d.js";
 import { sound, AMBIENTES } from "../core/sonido.js";
 import { floatText, strike, motes } from "./golpes3d.js";
@@ -307,7 +307,7 @@ export function createBoard3D(host, opts) {
     if (k === "center") { setFree(false); frame("persp"); }
     if (k === "top") frame("top");
     if (k === "mode") setFree(!free);
-    if (k === "fog") { opts.setFog(!(G && G.fog)); return; }
+    if (k === "fog") { opts.setFog(!visionOn(G)); return; }
     if (k === "ruler") { measuring = !measuring; b.setAttribute("aria-pressed", measuring); renderer.domElement.style.cursor = measuring ? "crosshair" : ""; if (!measuring) drawRuler(null); return; }
     if (k === "mute") { sound.setMuted(!sound.muted); b.textContent = sound.muted ? "🔇" : "🔊"; return; }
     if (k === "walls") { lowWalls = !lowWalls; b.textContent = lowWalls ? "Muros bajos" : "Muros altos"; b.setAttribute("aria-pressed", lowWalls); lastSig = ""; sync(); }
@@ -661,7 +661,7 @@ export function createBoard3D(host, opts) {
     applyAmbient(G.ambient || "interior"); setMotes();
     sound.ambient(G.sound || "");
     if (snd) snd.value = G.sound || "";
-    const fb = ctl.querySelector('[data-cam="fog"]'); if (fb) { fb.setAttribute("aria-pressed", !!G.fog); fb.textContent = G.fog ? "Niebla: sí" : "Niebla: no"; }
+    const fb = ctl.querySelector('[data-cam="fog"]'); if (fb) { fb.setAttribute("aria-pressed", visionOn(G)); fb.textContent = visionOn(G) ? "Visión: sí" : "Visión: no"; }
     syncTokens(m.tokens).then(() => updateFog(m));
     updateAim(m);
     // Efectos lanzados (en la mesa o en la ficha de quien lanza). Los ve todo el mundo; no se repiten al entrar más tarde.
@@ -733,25 +733,26 @@ export function createBoard3D(host, opts) {
 
   // ---------- Niebla de guerra (solo para los jugadores) ----------
   function updateFog(m) {
-    const on = !opts.dm && G && G.fog && opts.chars;
+    const on = !opts.dm && visionOn(G) && opts.chars;
     const vis = on ? computeVision(G, m.tokens, opts.chars()) : null;
     const exp = on ? explored((G.scene || "mesa") + "", vis) : null;
-    const sig = on ? [...vis].join(";") + "|" + exp.size + "|" + G.cols + "x" + G.rows : "off";
+    const sig = on ? [...vis].join(";") + "|" + [...vis.dim].join(";") + "|" + exp.size + "|" + G.cols + "x" + G.rows : "off";
     for (const [id, rec] of toks) {
       if (!rec.root) continue;
       const t = m.tokens.find(k => k.id === id);
-      rec.root.visible = !on || !t || t.kind === "pc" || vis.has(t.c + "," + t.r);
+      rec.root.visible = !on || !t || t.kind === "pc" || tokenSeen(t, vis);
     }
     if (sig === fogSig) return; fogSig = sig;
     fogGroup.children.slice().forEach(o => { fogGroup.remove(o); o.geometry.dispose(); });
     if (!on) return;
-    const black = [], dim = [];
-    for (let r = 0; r < G.rows; r++) for (let c = 0; c < G.cols; c++) { const k = c + "," + r; if (!exp.has(k)) black.push([c, r]); else if (!vis.has(k)) dim.push([c, r]); }
+    const black = [], dim = [], shade = [];
+    for (let r = 0; r < G.rows; r++) for (let c = 0; c < G.cols; c++) { const k = c + "," + r; if (!exp.has(k)) black.push([c, r]); else if (!vis.has(k)) dim.push([c, r]); else if (vis.dim.has(k)) shade.push([c, r]); }
     const m4 = new THREE.Matrix4();
     const mk = (list, mat, h) => { if (!list.length) return; const im = new THREE.InstancedMesh(new THREE.BoxGeometry(CELL, h, CELL), mat, list.length); list.forEach(([c, r], i) => im.setMatrixAt(i, m4.makeTranslation(cx(c), h / 2 - 0.05, cz(r)))); fogGroup.add(im); };
-    mk(black, FOG_BLACK, 7.5); mk(dim, FOG_DIM, 6);
+    mk(black, FOG_BLACK, 7.5); mk(dim, FOG_DIM, 6); mk(shade, FOG_SHADE, 0.2);
   }
   const FOG_BLACK = new THREE.MeshStandardMaterial({ color: 0x0c0a08, roughness: 1 });
+  const FOG_SHADE = new THREE.MeshBasicMaterial({ color: 0x0a0c16, transparent: true, opacity: 0.45, depthWrite: false }); // luz tenue: se ve, en penumbra
   const FOG_DIM = new THREE.MeshBasicMaterial({ color: 0x05070c, transparent: true, opacity: 0.62, depthWrite: false });
 
   // ---------- Alcance del movimiento: casillas a las que llegas este turno ----------

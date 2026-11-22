@@ -75,8 +75,9 @@ function drawPrompt() {
 
 /* ---------- Ventana del máster para pedir la tirada ---------- */
 let pick = { type: "skill", key: "percepcion", ab: "sab", dc: "", hideDC: true, adv: 0, who: "all", chars: [] };
-export function openAskDialog() {
+export function openAskDialog(only = null) {
   const s = store.get(), dm = isDM(s); if (!dm) return;
+  if (only && only.length) { pick.who = "some"; pick.chars = [...only]; }
   const pcs = s.characters.filter(c => c.owner || (s.tokens || []).some(t => t.kind === "pc" && t.char === c.id));
   const ov = document.createElement("div"); ov.className = "modal reqdlg";
   const draw = () => {
