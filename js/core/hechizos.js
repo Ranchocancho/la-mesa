@@ -10,7 +10,7 @@ import { AB_KEY, spellDC, spellMod, quickSave, heal, damage, dropConcentration, 
 import { currentUser, isDM } from "./session.js";
 import { damageTraits, withTraits, lrLeft } from "./defensas.js";
 import { attack } from "./combate.js";
-import { rangeOf, inRange, cover, spend, dist, canActNow } from "./turnos.js";
+import { rangeOf, inRange, cover, spend, dist, canActNow, eco, phase } from "./turnos.js";
 import { toast } from "./ui.js";
 import { springTrap } from "./peligros.js";
 
@@ -96,7 +96,13 @@ export function cast(casterId, spellName, slot, targetIds, P = null) {
   }
   const far = targets.filter(t => !m.self && inRange(m.touch ? { n: 1.5, l: 1.5 } : m.rng, a, t) === "out" && !(m.area && /cono|línea|emanación/.test(m.area.shape)));
   if (far.length && !m.area) toast(`Fuera de alcance (${d.al}): ${far.map(t => (charOf(s, t) || t).name).join(", ")}`);
-  if (!P) spend(a.id, m.time);
+  // Turno del jugador (SRD 2024): la acción, la adicional o la reacción, y un solo conjuro con espacio por turno
+  if (!P && phase(s) === "live" && s.board.turn === a.id && a.kind === "pc") {
+    const e = eco(s, a), used = m.time === "bonus" ? e.bonus : m.time === "react" ? !!e.react : e.act;
+    if (used) { toast(m.time === "bonus" ? "Ya has usado tu acción adicional." : m.time === "react" ? "Ya has usado tu reacción." : "Ya has usado tu acción este turno."); return null; }
+    if (slot > 0 && e.slotCast) { toast("Ya has lanzado un conjuro con espacio este turno: solo puedes lanzar trucos."); return null; }
+  }
+  if (!P) { spend(a.id, m.time); if (slot > 0) spend(a.id, { slotCast: true }); }
   // Concentración: el conjuro anterior termina
   if (m.conc) store.commit("token", st => { const k = st.tokens.find(x => x.id === a.id); dropConcentration(st, k); addCond(k, "concentracion", { note: d.n }); });
   const lbl = `${who} lanza ${d.n}${m.lvl > 0 ? ` (nivel ${slot})` : ""}`, dc = P ? P.dc : spellDC(c);

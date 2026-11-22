@@ -6,7 +6,7 @@ import { charOf } from "./mesa.js";
 import { damage as hurt } from "./salud.js";
 import { findSpell } from "./srd.js";
 import { classInfo, prof } from "../data/dnd.js";
-import { rangeOf, inRange, cover, modifiers, spend, dist, gap, hasCond, canActNow } from "./turnos.js";
+import { rangeOf, inRange, cover, modifiers, spend, dist, gap, hasCond, canActNow, eco, phase } from "./turnos.js";
 import { toast } from "./ui.js";
 import { kitOf, kitAttacks, gate, spendKit, condsIn, sizeOk } from "./criaturas.js";
 import { masteryOf, onHit, onDamage } from "./maestria.js";
@@ -59,7 +59,8 @@ export function attack(attackerId, targetId, weapon, force = null, use = "act", 
   if (force != null && force !== mods.net) why.push(force ? `${force > 0 ? "ventaja" : "desventaja"} elegida a mano` : "sin ventaja ni desventaja (elegido a mano)");
   const kitA = kitOf(a);
   if (kitA && use) { const why2 = gate(s, a, use === "react" ? "react" : use, { attack: true }); if (why2) { toast(why2); return null; } }
-  if (kitA && use) spendKit(a.id, use, { attack: use === "act" }); else if (use) spend(a.id, use);
+  if (!kitA && use === "act" && a.kind === "pc" && phase(s) === "live" && s.board.turn === a.id) { const e = eco(s, a); if (e.act && !(e.atkLeft > 0)) { toast("Ya has usado tu acción este turno."); return null; } }
+  if (kitA && use) spendKit(a.id, use, { attack: use === "act" }); else if (use) spend(a.id, use === "act" ? { attack: true } : use);
   let extra = "";
   if (hasCond(a, "bendecido")) { extra += "+1d4"; why.push("+1d4 por Bendición"); }
   if (hasCond(a, "perdicion")) { extra += "-1d4"; why.push("−1d4 por Perdición"); }

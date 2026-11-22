@@ -176,6 +176,9 @@ export function sceneToBoard(scene, characters, keepPCs) {
     const at = spots[i] || spots[spots.length - 1] || { c: 0, r: 0 };
     return { id: old ? old.id : id("t"), kind: "pc", char: ch.id, owner: ch.owner || null, name: ch.name, c: at.c, r: at.r, size: 1, init: null, conds: old && old.conds ? old.conds : [] };
   });
+  // Despliegue: el grupo se coloca por turnos dentro de la zona de inicio (core/despliegue.js)
+  const st = scene.start || { c: 1, r: 1 };
+  if (pcs.length) board.deploy = { id: "dp" + Date.now().toString(36), c: st.c, r: st.r, rad: +scene.deployRad || 2, on: true };
   return { board, tokens: [...pcs, ...foes] };
 }
 function ring(start, scene) {

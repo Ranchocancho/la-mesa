@@ -188,7 +188,8 @@ export function createBoard(host, opts) {
       </g>`;
     }).join("");
     const mk = opts.marker && opts.marker(), mkp = mk && center(mk.c, mk.r);
-    const start = mkp ? `<g class="startmk" transform="translate(${mkp[0]},${mkp[1]})"><polygon points="${corners(0, 0, S * 0.92)}"/><text y="6">⚑</text></g>` : "";
+    const zr = mk && mk.rad ? mk.rad : 0;
+    const start = mkp ? `${zr ? `<rect class="deployz" x="${mkp[0] - S - zr * T}" y="${mkp[1] - S - zr * T}" width="${(2 * zr + 1) * T}" height="${(2 * zr + 1) * T}" rx="8"/>` : ""}<g class="startmk" transform="translate(${mkp[0]},${mkp[1]})"><polygon points="${corners(0, 0, S * 0.92)}"/><text y="6">⚑</text></g>` : "";
     const aim = opts.aim && opts.aim(), A = aim && tokens.find(t => t.id === aim.from), B = aim && tokens.find(t => t.id === aim.to);
     let aimSvg = "";
     if (A && B && (opts.dm || !B.hidden)) { const [x0, y0] = center(A.c, A.r), [x1, y1] = center(B.c, B.r); aimSvg = `<line x1="${x0}" y1="${y0}" x2="${x1}" y2="${y1}" stroke="${aim.color}" stroke-width="3" stroke-dasharray="8 5"/><text x="${(x0 + x1) / 2}" y="${(y0 + y1) / 2 - 8}" class="aimtxt" fill="${aim.color}">${esc(aim.label)}</text>`; }

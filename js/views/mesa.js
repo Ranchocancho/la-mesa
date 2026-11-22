@@ -1,4 +1,6 @@
 // La mesa táctica dentro de la Partida: tablero, columna de iniciativa y mini-ficha (HUD) plegable.
+import { openChest } from "../core/comercio.js";
+import { deployOf, placer, zoneCells, zoneReach, markReady, endDeploy } from "../core/despliegue.js";
 import { condImmune } from "../core/defensas.js";
 import { combatEvents } from "../core/golpes.js";
 // Iniciales para la tira de iniciativa: sin paréntesis y con el número de los repetidos («Goblin 2 (en la maleza)» → «G2»)
@@ -60,7 +62,7 @@ export function mountTactical(host, opts = {}) {
       if (id === A.tok) return false;
       const a = st.tokens.find(t => t.id === A.tok), w = a && attacksOf(st, a)[A.i]; if (!w) { arm(null); return false; }
       if (dm && a.kind === "pc") return false;
-      sel = id; const r = attack(A.tok, id, w, dm ? atkAdv : null); if (r) { arm(null); atkAdv = null; } actSig = ""; drawHud(); return true;
+      sel = id; const r = attack(A.tok, id, w, dm ? atkAdv : null, A.use || "act"); if (r) { const left = eco(S(), a).atkLeft; if (A.use === "bonus" || !(left > 0)) arm(null); atkAdv = null; } actSig = ""; drawHud(); return true;
     }
     if (A.kind === "npcact") { if (id !== A.tok || A.sp) togglePick(id); sel = id; actSig = ""; drawHud(); return true; } // el máster elige objetivos de la acción de su criatura
     if (dm) return false;
@@ -76,12 +78,17 @@ export function mountTactical(host, opts = {}) {
     model: () => ({ grid: S().board, tokens: S().tokens }),
     dm: isDM(S()), edit: !!opts.edit && isDM(S()),
     // En combate, cada uno mueve su figura solo en su turno; el máster, siempre
-    canMove: t => isDM(S()) || (!!t.owner && t.owner === me() && (phase(S()) !== "live" || S().board.turn === t.id)),
+    marker: () => { const d = deployOf(S()); return d ? { c: d.c, r: d.r, rad: d.rad } : null; },
+    // En el despliegue, cada jugador mueve su figura solo cuando le toca colocarse
+    canMove: t => { const s = S(); if (isDM(s)) return true; if (!t.owner || t.owner !== me()) return false; if (deployOf(s)) { const p = placer(s); return !!p && p.id === t.id; } return phase(s) !== "live" || s.board.turn === t.id; },
     mutate: (label, fn) => {
       let warn = null; const oas = [], traps = [], hzs = [];
       store.commit(label === "token" ? "token" : "board", s => {
         const before = new Map(s.tokens.map(t => [t.id, { c: t.c, r: t.r }]));
         fn({ grid: s.board, tokens: s.tokens });
+        // Despliegue: solo dentro de la zona de inicio y en casillas libres (el máster puede poner a cualquiera donde quiera)
+        if (deployOf(s) && !isDM(s) && !opts.edit) { const Z = zoneCells(s); for (const t of s.tokens) { const o = before.get(t.id); if (!o || (o.c === t.c && o.r === t.r)) continue;
+          if (!Z.has(t.c + "," + t.r) || s.tokens.some(x => x.id !== t.id && x.c === t.c && x.r === t.r)) { t.c = o.c; t.r = o.r; warn = "Colócate dentro de la zona de inicio, en una casilla libre."; } } }
         // Ataques de oportunidad (reglas): solo los provoca la criatura que SE MUEVE POR SÍ MISMA EN SU TURNO y sale
         // del alcance de un enemigo que aún tiene su reacción (y no se ha destrabado). Recolocar figuras, editar la mesa
         // o mover a alguien fuera de su turno (movimiento forzado) no provoca nada.
@@ -127,7 +134,8 @@ export function mountTactical(host, opts = {}) {
     },
     onProp: p => { selPropId = p.id; hudOpen = true; drawHud(); },
     // Hasta dónde puede llegar la ficha que tiene el turno (la suya o, para el máster, cualquiera)
-    reach: id => { const s = S(); if (phase(s) !== "live" || !s.board || s.board.turn !== id) return null; const t = s.tokens.find(k => k.id === id); if (!t || (!isDM(s) && t.owner !== me())) return null; return reachMap(s, t, { dm: isDM(s) }); },
+    reach: id => { const s = S(); if (deployOf(s)) { const t = s.tokens.find(k => k.id === id); if (!t || t.kind !== "pc" || (!isDM(s) && t.owner !== me())) return null; const p = placer(s); if (!isDM(s) && (!p || p.id !== id)) return null; return zoneReach(s, t); }
+      if (phase(s) !== "live" || !s.board || s.board.turn !== id) return null; const t = s.tokens.find(k => k.id === id); if (!t || (!isDM(s) && t.owner !== me())) return null; return reachMap(s, t, { dm: isDM(s) }); },
     onSelectProp: id => { selPropId = id; if (id) hudOpen = true; drawHud(); },
     decorate: t => { const c = charOf(S(), t); return { ...(c ? { name: c.name, color: c.color, portrait: c.portrait } : t.portrait ? { portrait: t.portrait } : {}), isTurn: S().board.turn === t.id }; },
     hpOf: t => hpOf(S(), t),
@@ -236,6 +244,8 @@ export function mountTactical(host, opts = {}) {
     box.className = `tb-now ${N.tone || ""}${N.mine ? " me" : ""}`;
     if (html !== nowSig) {
       nowSig = html; box.innerHTML = html;
+      // Al jugador que le toca colocarse se le selecciona su figura: así ve la zona iluminada
+      { const p = deployOf(s) && placer(s); if (p && (dm || p.owner === me()) && sel !== p.id && board && board.select) { sel = p.id; board.select(p.id); } }
       $$("[data-now]", box).forEach(b => b.onclick = () => { const a = N.acts[+b.dataset.now]; if (!a) return;
         if (a.k === "begin") { beginCombat(); toast("¡Combate! Todos tiran iniciativa"); }
         else if (a.k === "init") rollInit(a.id);
@@ -247,7 +257,10 @@ export function mountTactical(host, opts = {}) {
         else if (a.k === "oa") answerOA(a.id, true);
         else if (a.k === "oapass") answerOA(a.id, false);
         else if (a.k === "npc") selectTok(a.id);
-        else if (a.k === "rolls") wantRolls(); });
+        else if (a.k === "rolls") wantRolls();
+        else if (a.k === "depok") markReady(a.id);
+        else if (a.k === "depundo") markReady(a.id, false);
+        else if (a.k === "depend") endDeploy(); });
     }
     // Aviso momentáneo cuando algo pasa a depender de ti (tirar daño, decidir una reacción, confirmar…)
     const key = N.mine ? N.text : null;
@@ -359,7 +372,7 @@ export function mountTactical(host, opts = {}) {
     if (pc) {
       const id = selPropId, setP = fn => store.commit("board", st => { const x = (st.board.props || []).find(y => y.id === id); if (x) fn(x); });
       $(".hudprop .x", hud).onclick = () => { selPropId = null; drawHud(); };
-      bindPropEditor(pc, setP, { reveal: () => setP(p => { p.hidden = false; }), loot: () => announceLoot(id),
+      bindPropEditor(pc, setP, { reveal: () => setP(p => { p.hidden = false; }), loot: () => openChest(id),
         trap: () => { const st = S(), p = st.board.props.find(y => y.id === id), on = st.tokens.filter(t => p && t.c === p.c && t.r === p.r).map(t => t.id); if (!on.length) return toast("No hay nadie en esa casilla."); triggerTrap(id, on); },
         rot: () => setP(p => { p.rot = ((p.rot || 0) + 1) % 4; }), del: () => { store.commit("board", st => { st.board.props = st.board.props.filter(y => y.id !== id); }); selPropId = null; drawHud(); } });
     }

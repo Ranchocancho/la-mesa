@@ -1956,3 +1956,101 @@ button.inspchip{cursor:pointer;font:inherit;font-size:12.5px}
 @media (max-width:760px){.lgonly{display:none}.smonly{display:inline}}
 .sheet2 .sk select{width:38px;min-width:0;padding:0 2px;text-align:center}
 .sheet2 .rowi input{background:var(--noche)}
+.deployz{fill:rgba(214,170,78,.07);stroke:var(--oro);stroke-width:2;stroke-dasharray:8 6;pointer-events:none}
+
+/* Hito 44 · Tu turno por fases y despliegue */
+.fturn .ftt small{color:var(--tenue);margin-left:6px;font-size:12px}
+.fturn .ftt{display:flex;align-items:center;gap:6px}
+.fturn .ftt .btn{margin-left:auto}
+.phbox{border:1px solid var(--linea);border-radius:10px;margin:6px 0;background:rgba(255,255,255,.02)}
+.phbox > summary{display:flex;align-items:center;gap:8px;padding:7px 10px;cursor:pointer;list-style:none;font-family:var(--display);font-size:14.5px;color:var(--hueso)}
+.phbox > summary::-webkit-details-marker{display:none}
+.phbox.now{border-color:var(--oro);box-shadow:0 0 0 1px rgba(214,170,78,.25) inset}
+.phbox.used > summary{color:var(--tenue)}
+.phbox.used{opacity:.85}
+.phst{margin-left:auto;font-style:normal;font-family:Georgia,serif;font-size:12px;border-radius:999px;padding:1px 9px;white-space:nowrap}
+.phst.ok{color:#9be37a;border:1px solid rgba(155,227,122,.4)}
+.phst.used{color:var(--tenue);border:1px solid var(--linea)}
+.phfix{background:transparent;border:0;color:var(--tenue);cursor:pointer;font-size:13px;padding:0 2px}
+.phbody{padding:2px 10px 10px}
+.phsub{display:block;margin:8px 0 4px;font-size:11.5px;letter-spacing:.05em;text-transform:uppercase;color:var(--oro)}
+.phhint{margin:4px 0;font-size:12.5px;color:var(--tenue)}
+.phno{margin:4px 0;font-size:13px;color:#e0a050}
+.phno.big{padding:8px 10px;border:1px solid #e0a050;border-radius:8px}
+.phlist{margin:4px 0;padding-left:16px;font-size:12.5px;color:var(--tenue)}
+.phlist li{margin:3px 0}.phlist b{color:var(--hueso)}
+.phfree{margin:8px 2px 0;font-size:12px;color:var(--tenue)}
+.phdone{margin:8px 0 0;padding:8px 10px;border-radius:8px;background:rgba(214,170,78,.12);color:var(--oro);font-size:13px}
+.phpre summary{cursor:pointer;color:var(--tenue);font-size:12.5px;margin-top:6px}
+.fspell.off .fsph{opacity:.55;cursor:not-allowed}
+.fspell.off .fsph small{color:#e0a050}
+.fw[disabled] small{color:#e0a050}
+i.slot{display:inline-block;width:10px;height:10px;border-radius:50%;border:1.5px solid var(--oro);margin-right:2px}
+i.slot.on{background:var(--oro)}
+/* Conjuros de la ficha (clases propias: .slot es la de los dados y va girada) */
+.sslots{display:flex;flex-direction:column;gap:6px;margin-bottom:6px}
+.sslot{display:flex;align-items:center;gap:12px;padding:6px 10px;border:1px solid var(--linea);border-radius:10px;background:rgba(255,255,255,.02)}
+.sslot .sl{min-width:64px;font-family:var(--display);color:var(--oro);font-size:14px}
+.sslot small{color:var(--tenue);margin-left:auto}
+.sslot input{width:56px;margin-left:auto}
+.spips{display:flex;gap:6px;flex-wrap:wrap}
+.spip{display:inline-block;width:16px;height:16px;border-radius:50%;border:2px solid var(--oro);background:var(--oro);padding:0}
+.spip.used{background:transparent;opacity:.55}
+button.spip{cursor:pointer}
+.lvlh small{font-family:Georgia,serif;font-size:12px;color:var(--tenue);font-weight:normal;margin-left:6px;letter-spacing:0;text-transform:none}
+.splist3{display:flex;flex-direction:column;gap:5px}
+.sprow3{border:1px solid var(--linea);border-radius:10px;background:rgba(255,255,255,.02)}
+.sprow3.open{border-color:var(--oro)}
+.sprow3.unprep{opacity:.6}
+.sph3{width:100%;display:grid;grid-template-columns:26px minmax(140px,1fr) auto;grid-template-areas:"t n p" "t m m" "t e e";gap:1px 8px;align-items:baseline;text-align:left;background:transparent;border:0;color:var(--hueso);padding:8px 10px;cursor:pointer}
+.sph3 .spt{grid-area:t;font-size:18px;align-self:center;color:var(--oro)}
+.sph3 b{grid-area:n;font-size:15px}
+.sph3 .spm{grid-area:m;font-size:12.5px;color:var(--tenue)}
+.sph3 .spm i{font-style:normal;border:1px solid var(--linea);border-radius:4px;padding:0 4px;font-size:11px;color:var(--hueso)}
+.sph3 .spe{grid-area:e;font-size:13px;color:var(--hueso)}
+.sph3 .spp{grid-area:p;font-size:11.5px;color:var(--oro)}
+.sprow3.unprep .spp{color:var(--tenue)}
+.spfull{padding:0 10px 10px}
+.spfull .scard{margin:0;max-width:none}
+.sleg{margin:-4px 0 8px;font-size:12.5px}
+@media (max-width:760px){.shmain .tabs{top:126px}}
+
+/* ---------- Tienda, botín y cofres ---------- */
+.shopbox{width:min(980px,96vw);max-height:92vh;display:flex;flex-direction:column}
+.shopgrid{display:grid;grid-template-columns:1fr 300px;gap:14px;min-height:0;flex:1;overflow:hidden}
+.shoplist{overflow:auto;max-height:58vh;display:flex;flex-direction:column;gap:4px}
+.shopit{display:grid;grid-template-columns:1fr auto 60px auto;gap:8px;align-items:center;padding:6px 8px;border:1px solid var(--line,#3a3328);border-radius:8px;background:rgba(255,255,255,.02)}
+.shopit.in{border-color:var(--gold,#d6aa4e);background:rgba(214,170,78,.08)}
+.shopit small{display:block;opacity:.7;font-size:.78em;line-height:1.25}
+.shopit .pr{font-weight:600;color:var(--gold,#d6aa4e);white-space:nowrap}
+.shopit .kg{opacity:.7;font-size:.85em;text-align:right}
+.shopit .qty,.sellit .qty{display:flex;gap:4px;align-items:center}
+.shopcart{display:flex;flex-direction:column;gap:8px;overflow:auto;max-height:62vh}
+.shopcat{display:flex;flex-direction:column;gap:8px;min-height:0}
+.shoptot .bad b{color:#e06a5a}
+.shopcart ul{margin:0;padding-left:16px}.shopcart li{display:flex;justify-content:space-between;gap:6px}
+.sellist{display:flex;flex-direction:column;gap:4px}
+.sellit{display:flex;justify-content:space-between;gap:6px;align-items:center;font-size:.9em}
+.shoptot{border-top:1px solid var(--line,#3a3328);padding-top:8px;display:flex;flex-direction:column;gap:3px}
+.shoptot>div{display:flex;justify-content:space-between;gap:8px}.shoptot b{color:var(--gold,#d6aa4e)}
+.invacts{display:flex;gap:6px;flex-wrap:wrap;margin:6px 0}
+.lootbox{border:1px solid var(--gold,#d6aa4e);border-radius:12px;padding:12px;margin:14px 0;background:rgba(214,170,78,.05)}
+.lootcoins{font-size:1.05em;margin:4px 0 8px}
+.lootitems{display:flex;flex-direction:column;gap:5px}
+.lootit{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:6px 8px;border-radius:8px;background:rgba(255,255,255,.03)}
+.lootit .grow{flex:1;min-width:140px}
+.lootit small{opacity:.7;margin-left:6px}
+.lootsplit,.splitbox,.lootadd{display:flex;flex-wrap:wrap;gap:6px;align-items:end;margin:8px 0}
+.chestf{border:1px solid var(--line,#3a3328);border-radius:8px;padding:8px;display:flex;flex-direction:column;gap:6px}
+.chestf .row{display:flex;gap:6px;align-items:center}
+.chestnear{display:flex;flex-wrap:wrap;gap:6px;align-items:center;padding:8px 10px;margin:6px 0;border:1px dashed var(--gold,#d6aa4e);border-radius:10px;background:rgba(214,170,78,.07)}
+.chestnear small{flex-basis:100%;opacity:.75}
+@media (max-width:760px){
+  .shopbox{overflow:auto}
+  .shopgrid{display:block;overflow:visible}
+  .shopcart{margin-top:12px}
+  .shoplist{max-height:46vh;flex:none}
+  .shopcart{max-height:none;overflow:visible}
+  .shopit{grid-template-columns:1fr auto auto}
+  .shopit .kg{display:none}
+}

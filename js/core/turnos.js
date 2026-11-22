@@ -34,7 +34,7 @@ function closePending(st) { (st.rolls || []).forEach(r => { if (r.status === "pe
 
 export function beginCombat() {
   const s0 = store.get(), foes = s0.tokens.filter(t => t.kind !== "pc");
-  store.commit("board", s => { s.tokens.forEach(t => { t.init = null; t.eco = null; t.conds = (t.conds || []).filter(c => !["esquivando", "destrabado"].includes(c.id)); }); s.board.combat = "init"; s.board.turn = null; s.board.round = 0; s.board.from = null; s.board.starts = {}; s.board.seq = (s.board.seq || 0) + 1; s.board.combatAt = Date.now(); });
+  store.commit("board", s => { if (s.board.deploy) s.board.deploy.on = false; s.tokens.forEach(t => { t.init = null; t.eco = null; t.conds = (t.conds || []).filter(c => !["esquivando", "destrabado"].includes(c.id)); }); s.board.combat = "init"; s.board.turn = null; s.board.round = 0; s.board.from = null; s.board.starts = {}; s.board.seq = (s.board.seq || 0) + 1; s.board.combatAt = Date.now(); });
   store.commit("roll", closePending);
   if (!foes.length) return;
   // Todas las criaturas tiran a la vez: una sola tirada (secreta) con un d20 por criatura
@@ -98,12 +98,23 @@ export function speedOf(s, t) {
   if (has(t, "ralentizado")) v -= 3;
   return Math.max(0, v);
 }
+/** Ataques por acción Atacar (SRD 5.2.1: Ataque adicional a nivel 5 en bárbaro, explorador, guerrero, monje y paladín;
+ *  el guerrero gana más a nivel 11 y 20). También cuenta si la ficha tiene el rasgo «Ataque adicional». */
+export function attacksPerAction(s, t) {
+  const c = t && t.kind === "pc" ? (s.characters || []).find(x => x.id === t.char) : null; if (!c) return 1;
+  const cls = String(c.cls || ""), L = +c.level || 1, feats = (c.features || []).map(f => String(f.name || "")).join(" | ");
+  let n = 1;
+  if (/Guerrer/.test(cls)) n = L >= 20 ? 4 : L >= 11 ? 3 : L >= 5 ? 2 : 1;
+  else if (/B[aá]rbar|Explorador|Monje|Palad[ií]n/.test(cls) && L >= 5) n = 2;
+  if (/Tres ataques adicionales/i.test(feats)) n = Math.max(n, 4); else if (/Dos ataques adicionales/i.test(feats)) n = Math.max(n, 3); else if (/Ataque adicional/i.test(feats)) n = Math.max(n, 2);
+  return n;
+}
 /** Lo gastado en el turno actual (si el turno ha cambiado, empieza de cero). */
 export function eco(s, t) {
   const b = s.board || {}, e = t.eco || {};
   const fresh = e.seq !== b.seq || b.turn !== t.id;
   const reactUsed = e.react != null && e.react >= ((b.starts || {})[t.id] || 0);
-  return fresh ? { seq: b.seq, mov: 0, act: false, bonus: false, dash: false, react: reactUsed ? e.react : null }
+  return fresh ? { seq: b.seq, mov: 0, act: false, bonus: false, dash: false, atkLeft: 0, slotCast: false, react: reactUsed ? e.react : null }
     : { ...e, react: reactUsed ? e.react : null };
 }
 export const moveBudget = (s, t) => speedOf(s, t) * (eco(s, t).dash ? 2 : 1);
@@ -112,7 +123,11 @@ export function spend(tokenId, what) {
   store.commit("token", s => {
     const t = s.tokens.find(x => x.id === tokenId); if (!t) return;
     const e = eco(s, t);
-    if (what === "react") e.react = s.board.seq; else if (typeof what === "object") e.mov = Math.round((e.mov + what.mov) * 10) / 10; else e[what] = true;
+    if (what === "react") e.react = s.board.seq;
+    // La acción Atacar: el primer ataque la gasta; con Ataque adicional quedan más ataques de la misma acción
+    else if (what && what.attack) { if (!e.act) { e.act = true; e.atkLeft = attacksPerAction(s, t) - 1; } else if (e.atkLeft > 0) e.atkLeft--; }
+    else if (what && what.slotCast) e.slotCast = true;
+    else if (typeof what === "object") e.mov = Math.round((e.mov + what.mov) * 10) / 10; else e[what] = true;
     if (what === "dash") e.act = true;
     t.eco = e;
   });

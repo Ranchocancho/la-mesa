@@ -42,7 +42,9 @@ export function mount(root) {
   if (offAim) offAim(); offAim = onAim(() => { if (el && !isDM(store.get())) renderSheet($("#pl-sheet", el)); });
   $$("[data-mode]", el).forEach(b => b.onclick = () => { dmMode = b.dataset.mode; tabs(); });
   $$("[data-dtab]", el).forEach(b => b.onclick = () => { dmTab = b.dataset.dtab; tabs(); });
-  $$("[data-ptab]", el).forEach(b => b.onclick = () => { plTab = b.dataset.ptab; tabs(); });
+  // En el móvil el panel queda debajo de la mesa: al tocar una pestaña se baja hasta él (y otra vez arriba si ya se ve)
+  $$("[data-ptab]", el).forEach(b => b.onclick = () => { const same = plTab === b.dataset.ptab; plTab = b.dataset.ptab; tabs();
+    if (matchMedia("(max-width: 900px)").matches) { const pn = $(".plpanel", el), box = $(".partida", el) || el; if (pn) { const vis = pn.getBoundingClientRect().top < innerHeight * 0.6; if (same && vis) box.scrollTo({ top: 0, behavior: "smooth" }); else pn.scrollIntoView({ behavior: "smooth", block: "start" }); } } });
   rollsSeen = (store.get().rolls || []).length;
   root.appendChild(el);
   closing = false; tac = null; lastKey = null;

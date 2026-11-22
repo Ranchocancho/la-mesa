@@ -40,7 +40,7 @@ export const removePC = charId => store.commit("board", s => {
 export const saveBoardAsScene = (name, placeId) => store.commit("board", s => {
   const b = s.board; if (!b) return;
   s.scenes.push({ id: "esc-" + Math.random().toString(36).slice(2, 8), name, place: placeId || null, cols: b.cols, rows: b.rows, terrain: { ...b.terrain }, props: b.props.map(p => ({ ...p })),
-    ambient: b.ambient || "interior", sound: b.sound || "", region: b.region || "", lavaDmg: b.lavaDmg || "", fallH: b.fallH || 3, tokens: s.tokens.filter(t => t.kind !== "pc").map(t => ({ ...t, init: null })), start: (s.tokens.find(t => t.kind === "pc") || { c: 1, r: 1 }),
+    ambient: b.ambient || "interior", sound: b.sound || "", region: b.region || "", lavaDmg: b.lavaDmg || "", fallH: b.fallH || 3, deployRad: (b.deploy || {}).rad || 2, tokens: s.tokens.filter(t => t.kind !== "pc").map(t => ({ ...t, init: null })), start: (s.tokens.find(t => t.kind === "pc") || { c: 1, r: 1 }),
     ...(cloneFloors(b, { dropPCs: true }) ? { floors: cloneFloors(b, { dropPCs: true }), floor: b.floor || 0 } : {}) });
 });
 

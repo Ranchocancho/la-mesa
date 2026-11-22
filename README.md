@@ -635,3 +635,25 @@ Todo se lee del perfil de cada criatura (SRD 5.2.1):
 Además, un jugador ya no puede borrar su ficha (solo el máster).
 La app escribe ahora los cambios de un jugador documento a documento: si el servidor rechaza uno de su ficha, avisa («pídeselo al máster con ✎ Proponer un cambio») y no se pierden sus tiradas ni sus movimientos.
 Comprobado simulando las reglas sobre las escrituras reales de la app (gastar espacios, descansos, curación, daño, salvaciones contra muerte, cuaderno, propuestas, subida guardada y subida completa pasan; monedas, equipo, PG máximos, espacios máximos, conjuros, habilidades, darse inspiración o subir dos niveles se rechazan).
+
+## Hito 44 · Tu turno por fases y despliegue del grupo
+
+**Tu turno, paso a paso** (columna Personaje de la Partida):
+- Cuatro fases: 🦶 Movimiento, ⚡ Acción, ✦ Acción adicional y ↺ Reacción. Cada una dice si la tienes («quedan 6 m», «disponible», «1 ataque más») o ya la gastaste, y dentro muestra solo lo que puedes hacer con ella: tus armas, tus conjuros de ese tiempo de lanzamiento y tus rasgos (p. ej. Acción astuta del pícaro como acción adicional, o el ataque con la otra arma ligera).
+- Lo que no puedes hacer aparece apagado con el motivo: «Ya usaste la acción», «Sin espacios de nivel 2», «Ya lanzaste un conjuro con espacio este turno: solo trucos», «Estás aturdido».
+- Fuera de tu turno solo se abre la Reacción (ataque de oportunidad, Escudo…) y un resumen de lo que podrás hacer.
+- Reglas del SRD que ahora se aplican: **Ataque adicional** (bárbaro, explorador, guerrero, monje y paladín a nivel 5; guerrero 3 y 4 ataques a 11 y 20) con la misma acción Atacar; **un solo conjuro con espacio por turno** (2024); **agarrado** deja la velocidad a 0; la mesa no deja gastar dos veces la acción, la adicional o la reacción.
+- En el móvil, tocar «Personaje» baja hasta el panel (y otra vez sube a la mesa).
+
+**Despliegue** (regla de la mesa: el SRD no regula cómo se coloca el grupo):
+- En Escenas, el máster marca el ⚑ punto de inicio y elige la **zona de despliegue** (0 a 6 casillas alrededor). Se ve en el editor.
+- Al cargar la escena, el grupo aparece en la zona y cada jugador, **por turnos**, arrastra su figura a cualquier casilla libre de la zona según lo que ve, y pulsa «✓ Listo». Fuera de la zona no le deja.
+- El máster ve quién se está colocando, puede pulsar «Listo» por un jugador, terminar el despliegue o iniciar el combate (que lo cierra).
+
+## Hito 45 · Tienda, botín del grupo y cofres
+
+- **Tienda** (ficha → Inventario → 🛒 Tienda): catálogo del SRD 5.2.1 (armas, armaduras, equipo de aventura, herramientas, munición, canalizadores, monturas) con precio y peso. Cesta con + y −, venta a la mitad de precio (SRD), cambio en monedas y peso total. El jugador la envía al máster como propuesta; el máster la aplica al momento. Ajuste de precios por tienda (%) opcional, **regla de campaña**.
+- **Dar a un compañero** (🤝): objetos y monedas; al aprobarlo pasan de una ficha a otra y queda en el registro de las dos.
+- **Botín del grupo** (Personajes → El grupo): lo encontrado y aún sin repartir. El máster añade monedas y objetos (mágico, sintonización, de dónde sale), reparte las monedas a partes iguales (el resto a quien elija) o da un objeto a alguien. El jugador pulsa «Me lo quedo» (propuesta; aviso si ya tiene 3 objetos sintonizados). Lo que nadie coge se queda en el cofre del grupo.
+- **Cofres en la escena**: el máster pone un cofre y escribe qué hay dentro (monedas, objetos del catálogo o inventados, nota). Al abrirlo, el contenido pasa al botín del grupo y se anuncia en las tiradas. Lo abre el máster desde el objeto, o un jugador con su figura junto al cofre («Abrir el cofre» en su panel); el cliente del máster comprueba que sigue al lado.
+- Sin cambios en las reglas de Firestore: el botín vive en el documento de la campaña (lo escribe el máster) y el jugador solo crea propuestas y peticiones.

@@ -134,6 +134,7 @@ store.subscribe(state => {
 // Tapete de las tiradas que pide el máster (en cualquier pantalla)
 import("./views/peticiones.js").then(m => m.watchRequests());
 import("./core/tesoros.js").then(m => m.watchGifts());
+import("./core/comercio.js").then(m => m.watchChests());
 window.addEventListener("hashchange", render);
 window.addEventListener("lamesa:login", () => { presence.beat(); current = null; render(); });
 

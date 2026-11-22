@@ -11,9 +11,12 @@ import { openCreate } from "./crear.js";
 import { srdNow, findSpell } from "../core/srd.js";
 import { spellCard } from "./reglas.js";
 import { treasuresHTML, bindTreasures, journalHTML, bindJournal } from "./tesorosui.js";
-import { diffChar, describe, propose, approve, reject, withdraw, stale, logTo } from "../core/propuestas.js";
+import { spellMech } from "../core/hechizos.js";
+import { openShop, openGive, lootHTML, bindLoot } from "./tienda.js";
+import { diffChar, describe, propose, approve, reject, withdraw, stale, logTo, lootGone } from "../core/propuestas.js";
 import { giveTreasure } from "../core/tesoros.js";
 
+let spOpen = null;
 let el = null, openId = null, tab = null, mode = "read", draft = null, snap = null, showLog = false;
 // «atr» solo se ve en el móvil (en el ordenador es la columna de la izquierda)
 const TABS = [["atr", "Atributos"], ["acc", "Acciones"], ["con", "Conjuros"], ["inv", "Inventario"], ["ras", "Rasgos"], ["his", "Historia"], ["cua", "📓 Cuaderno"], ["lqv", "⬆ Lo que viene"]];
@@ -48,9 +51,11 @@ function drawGroup(state) {
     <h1 class="title">El grupo</h1>
     <p class="lead">Todas las fichas están a la vista. El máster las edita; cada jugador sube de nivel la suya y propone los demás cambios, que el máster aprueba.</p>
     <div class="party-grid">${list.map(c => card(state, c)).join("") || `<p class="empty">Todavía no hay personajes.</p>`}</div>
+    ${lootHTML(state)}
     ${canCreate ? `<div class="row" style="margin-top:18px"><button class="btn gold" id="newwizbtn">✨ Crear personaje paso a paso</button><button class="btn" id="newpj">+ Ficha en blanco</button></div>` : ""}
   </div>`;
   $$("[data-open]", el).forEach(b => b.onclick = () => { openId = b.dataset.open; tab = null; mode = "read"; draft = snap = null; draw(); window.scrollTo(0, 0); });
+  bindLoot(el);
   const n = $("#newpj", el);
   const nw = $("#newwizbtn", el);
   if (nw) nw.onclick = () => openCreate({ owner: dm ? null : me.id, color: me.color || "#8a9a4a", done: c => { openId = c.id; tab = null; mode = "read"; draw(); window.scrollTo(0, 0); } });
@@ -172,7 +177,9 @@ const when = t => new Date(t).toLocaleString("es-ES", { day: "numeric", month: "
 function propsHTML(c, dm, mine) {
   return `<section class="props">${(c.proposals || []).map(p => `<div class="pprop">
       <div class="ph"><b>📝 ${esc(p.by)} propone</b><small>${when(p.at)}</small>${p.note ? `<em>«${esc(p.note)}»</em>` : ""}</div>
-      <ul>${p.changes.map(ch => `<li>${esc(describe(ch))}${stale(c, ch) ? ` <small class="warn" title="La ficha ha cambiado en esto desde que se envió: al aprobar se pone el valor propuesto">⚠ ha cambiado desde entonces</small>` : ""}</li>`).join("")}</ul>
+      <ul>${p.changes.map(ch => `<li>${esc(describe(ch))}${stale(c, ch) ? ` <small class="warn" title="La ficha ha cambiado en esto desde que se envió: al aprobar se pone el valor propuesto">⚠ ha cambiado desde entonces</small>` : ""}</li>`).join("")}
+        ${p.meta && p.meta.give ? `<li>🤝 Para <b>${esc((store.get().characters.find(x => x.id === p.meta.give.to) || {}).name || "?")}</b>: ${esc([...(p.meta.give.items || []).map(i => `${i.name}${i.qty > 1 ? " ×" + i.qty : ""}`), ...Object.entries(p.meta.give.coins || {}).map(([k, v]) => `${v} ${k}`)].join(", "))}</li>` : ""}
+        ${lootGone(store.get(), p).length ? `<li><small class="warn">⚠ Ese objeto ya no está en el botín del grupo (otro se lo quedó)</small></li>` : p.meta && p.meta.lootTake ? `<li><small class="note">Sale del botín del grupo</small></li>` : ""}</ul>
       <div class="row">${dm ? `<input data-why="${p.id}" placeholder="Motivo si lo rechazas (opcional)"><button class="btn small danger" data-reject="${p.id}">Rechazar</button><button class="btn small gold" data-approve="${p.id}">✓ Aprobar</button>`
         : mine ? `<small class="note">Esperando al máster.</small><span class="grow"></span><button class="btn small" data-withdraw="${p.id}">Retirar</button>` : `<small class="note">Pendiente del máster.</small>`}</div></div>`).join("")}</section>`;
 }
@@ -215,7 +222,9 @@ const pb2 = c => prof(c.level);
 
 function tabInv(c, ed, dm) {
   const w = carried(c), cap = capacity(c), coins = [["po", "Oro"], ["pp", "Plata"], ["pe", "Electro"], ["pc", "Cobre"]];
-  return `<h2 class="sec">Monedas</h2>
+  const st = store.get(), me = currentUser(st), mine = me && c.owner === me.id;
+  return `${!ed && (mine || dm) ? `<div class="row invacts"><button class="btn small gold" id="shop">🛒 Tienda</button>${mine && !dm ? `<button class="btn small" id="give">🤝 Dar a un compañero</button>` : ""}<small class="note">${dm ? "Como máster, la compra se aplica directamente." : "Lo que compres o des, lo aprueba el máster."}</small></div>` : ""}
+    <h2 class="sec">Monedas</h2>
     ${ed ? `<div class="coins">${coins.map(([k, n]) => `<label class="field">${n}<input type="number" data-n="coins.${k}" value="${c.coins[k] || 0}"></label>`).join("")}</div>`
       : `<div class="coinrow">${coins.map(([k, n]) => `<span class="coin c-${k}"><b>${c.coins[k] || 0}</b> ${n.toLowerCase()}</span>`).join("")}</div>`}
     <h2 class="sec" style="margin-top:16px">Equipo <small class="weight ${w > cap ? "over" : ""}">${Math.round(w * 10) / 10} / ${cap} kg</small></h2>
@@ -226,25 +235,43 @@ function tabInv(c, ed, dm) {
     ${dm && mode === "dm" ? `<div class="row" style="margin:8px 0 0"><button class="btn small" id="tesadd">+ Objeto especial</button></div>` : ""}`;
 }
 
+// Conjuros: una fila por conjuro con lo que hace falta saber de un vistazo (cuándo se lanza, alcance, qué hace);
+// al tocarla se despliega el texto completo del SRD justo debajo.
+const TIME = { act: ["⚡", "Acción"], bonus: ["✦", "Acción adicional"], react: ["↺", "Reacción"] };
+function spellLine(d) {
+  const m = spellMech(d) || {}, t = d.t || "", time = /minuto|hora/i.test(t) ? ["⏳", t] : TIME[m.time] || ["⚡", t];
+  const eff = [m.dmg ? `${m.dmg} ${m.dt || ""}`.trim() : "", m.heal ? `cura ${m.heal}${m.healMod ? " + mod." : ""}` : "", m.save ? `salvación de ${String(m.save).toUpperCase()}` : "", m.atk ? "tirada de ataque" : "", m.area ? `${m.area.shape} ${m.area.size} m` : ""].filter(Boolean);
+  return { time, eff, conc: /concentraci/i.test(d.du || ""), rit: /ritual/i.test(t) };
+}
 function tabCon(c, ed) {
   const ab = classInfo(c.cls).cast;
   const sp = c.spells || { slots: {}, list: [] };
   const byLvl = {}; (sp.list || []).forEach((s, i) => (byLvl[s.level || 0] = byLvl[s.level || 0] || []).push([s, i]));
   const head = ab ? `<div class="spellstats"><span>Característica <b>${AB_SHORT[ab]}</b></span><span>CD de salvación <b>${8 + prof(c.level) + mod(c.abilities[ab])}</b></span><span>Ataque de conjuro <b>${sign(prof(c.level) + mod(c.abilities[ab]))}</b></span></div>`
     : `<p class="note" style="margin:0 0 12px">${esc(c.cls || "Esta clase")} no lanza conjuros de serie, pero se pueden anotar aquí los que obtenga por especie, dotes u objetos.</p>`;
-  const slotsHTML = `<div class="slots">${[1, 2, 3, 4, 5, 6, 7, 8, 9].filter(l => ed || +((sp.slots || {})[l] || {}).max > 0).map(l => { const s = (sp.slots || {})[l] || { max: 0, used: 0 }; return `<div class="slot"><small>Nv ${l}</small>
-      <div class="pips">${Array.from({ length: s.max }, (_, i) => ed ? `<button class="pip ${i < s.used ? "used" : ""}" data-pip="${l}.${i}" aria-label="Espacio ${i + 1} de nivel ${l}"></button>` : `<i class="pip ${i < s.used ? "used" : ""}"></i>`).join("")}</div>
-      ${ed ? `<input type="number" min="0" max="9" data-n="spells.slots.${l}.max" value="${s.max}" aria-label="Espacios de nivel ${l}">` : ""}</div>`; }).join("") || `<p class="empty">Sin espacios de conjuro.</p>`}</div>`;
+  const lv = [1, 2, 3, 4, 5, 6, 7, 8, 9].filter(l => ed || +((sp.slots || {})[l] || {}).max > 0);
+  const slotsHTML = `<div class="sslots">${lv.map(l => { const s = (sp.slots || {})[l] || { max: 0, used: 0 }, free = Math.max(0, s.max - (s.used || 0)); return `<div class="sslot"><span class="sl">Nivel ${l}</span>
+      <span class="spips">${Array.from({ length: s.max }, (_, i) => ed ? `<button class="spip ${i < s.used ? "used" : ""}" data-pip="${l}.${i}" aria-label="Espacio ${i + 1} de nivel ${l}"></button>` : `<i class="spip ${i < s.max - (s.used || 0) ? "" : "used"}"></i>`).join("")}</span>
+      ${ed ? `<input type="number" min="0" max="9" data-n="spells.slots.${l}.max" value="${s.max}" aria-label="Espacios de nivel ${l}">` : `<small>${free} de ${s.max} libres</small>`}</div>`; }).join("") || `<p class="empty">Sin espacios de conjuro.</p>`}</div>`;
   const list = ed ? Object.keys(byLvl).sort((a, b) => a - b).map(l => `<h3 class="lvlh">${+l === 0 ? "Trucos" : `Nivel ${l}`}</h3>
       <div class="rows">${byLvl[l].map(([s, i]) => `<div class="rowi"><label class="mini" title="Preparado"><input type="checkbox" data-l="spells.list.${i}.prepared" ${s.prepared ? "checked" : ""}> Prep.</label>
         <input data-l="spells.list.${i}.name" value="${esc(s.name)}" placeholder="Conjuro" style="flex:3" aria-label="Conjuro" list="spelllist">
         <input type="number" min="0" max="9" data-l="spells.list.${i}.level" value="${s.level || 0}" style="flex:.6" aria-label="Nivel">
         <input data-l="spells.list.${i}.notes" value="${esc(s.notes || "")}" placeholder="Notas" style="flex:3" aria-label="Notas">
         <button class="btn small danger" data-del="spells.list.${i}" aria-label="Quitar">✕</button></div>`).join("")}</div>`).join("") + `<div class="row" style="margin-top:8px"><button class="btn small" data-add="spells.list">+ Conjuro</button></div><datalist id="spelllist">${(srdNow.conjuros || []).map(x => `<option value="${esc(x.n)}">${x.lvl ? "Nv " + x.lvl : "Truco"}</option>`).join("")}</datalist>`
-    : Object.keys(byLvl).sort((a, b) => a - b).map(l => `<h3 class="lvlh">${+l === 0 ? "Trucos" : `Nivel ${l}`}</h3><div class="splist2">${byLvl[l].map(([s]) => `<button class="spl2 ${s.prepared || !+l ? "prep" : ""}" ${findSpell(s.name) ? `data-spinfo="${esc(s.name)}"` : "disabled"} title="${s.prepared || !+l ? "Preparado" : "No preparado"}${s.notes ? " · " + esc(s.notes) : ""}">${esc(s.name || "—")}${findSpell(s.name) ? " 📖" : ""}</button>`).join("")}</div>`).join("") || `<p class="empty">Sin conjuros.</p>`;
-  return `${head}<h2 class="sec">Espacios de conjuro</h2>${slotsHTML}<h2 class="sec">Conjuros ${ed ? "" : `<small>resaltados los preparados · 📖 para leerlo</small>`}</h2>${list}<div id="spinfo"></div>`;
+    : Object.keys(byLvl).sort((a, b) => a - b).map(l => `<h3 class="lvlh">${+l === 0 ? "Trucos <small>a voluntad, sin gastar espacios</small>" : `Nivel ${l} <small>gasta un espacio de nivel ${l} o superior</small>`}</h3>
+      <div class="splist3">${byLvl[l].map(([s]) => { const d = findSpell(s.name), prep = s.prepared || !+l;
+        if (!d) return `<div class="sprow3 ${prep ? "" : "unprep"}"><div class="sph3"><b>${esc(s.name || "—")}</b><small>No está en el SRD${s.notes ? " · " + esc(s.notes) : ""}</small></div></div>`;
+        const L = spellLine(d), open = spOpen === s.name;
+        return `<div class="sprow3 ${prep ? "" : "unprep"} ${open ? "open" : ""}"><button class="sph3" data-spinfo="${esc(s.name)}" aria-expanded="${open}">
+          <span class="spt" title="${esc(L.time[1])}">${L.time[0]}</span><b>${esc(d.n)}</b>
+          <span class="spm">${esc(L.time[1])} · ${esc(d.al || "")}${L.conc ? ` · <i title="Concentración">C</i>` : ""}${L.rit ? ` · <i title="Ritual">R</i>` : ""}</span>
+          <span class="spe">${esc(L.eff.join(" · ") || (d.txt || "").slice(0, 70) + "…")}</span>
+          <span class="spp">${prep ? "preparado" : "no preparado"}</span></button>
+          ${open ? `<div class="spfull">${spellCard(d)}</div>` : ""}</div>`; }).join("")}</div>`).join("") || `<p class="empty">Sin conjuros.</p>`;
+  return `${head}<h2 class="sec">Espacios de conjuro</h2><p class="note sleg">Se gastan al lanzar un conjuro de ese nivel o menor y vuelven con el descanso largo.</p>${slotsHTML}
+    <h2 class="sec">Conjuros</h2>${ed ? "" : `<p class="note sleg">⚡ acción · ✦ acción adicional · ↺ reacción · C concentración · R ritual. Toca uno para leerlo entero.</p>`}${list}`;
 }
-
 function tabRas(c, ed) {
   if (ed) return `<h2 class="sec">Rasgos y dotes</h2>
     <div class="rows">${(c.features || []).map((f, i) => `<div class="feat"><div class="rowi"><input data-l="features.${i}.name" value="${esc(f.name)}" placeholder="Rasgo" style="flex:1;font-weight:700" aria-label="Rasgo"><button class="btn small danger" data-del="features.${i}" aria-label="Quitar">✕</button></div>
@@ -312,10 +339,12 @@ function bind(state, c0, ed) {
   $$("[data-approve]", el).forEach(b => b.onclick = () => approve(id, b.dataset.approve));
   $$("[data-reject]", el).forEach(b => b.onclick = () => reject(id, b.dataset.reject, ($(`[data-why="${b.dataset.reject}"]`, el) || {}).value || ""));
   $$("[data-withdraw]", el).forEach(b => b.onclick = () => withdraw(id, b.dataset.withdraw));
-  $$("[data-spinfo]", el).forEach(b => b.onclick = () => { const box = $("#spinfo", el), sp = findSpell(b.dataset.spinfo); if (!box || !sp) return; box.innerHTML = box.dataset.cur === sp.n ? "" : spellCard(sp); box.dataset.cur = box.innerHTML ? sp.n : ""; if (box.innerHTML) box.scrollIntoView({ block: "nearest", behavior: "smooth" }); });
+  $$("[data-spinfo]", el).forEach(b => b.onclick = () => { spOpen = spOpen === b.dataset.spinfo ? null : b.dataset.spinfo; draw(); });
   { const hz = $(".hzhost", el); if (hz) import("./subirnivel.js").then(m => { if (hz.isConnected) hz.innerHTML = m.horizonHTML(c0, 5); }); }
   on("#lvlup", () => import("./subirnivel.js").then(m => m.openLevelUp(id)));
   on("#lvdrop", () => store.commit("char", s => { const x = C(s); if (x) delete x.lvlDraft; }));
+  on("#shop", () => openShop(id));
+  on("#give", () => openGive(id));
   on("#xpgo", () => { const v = +$("#xpadd", el).value || 0; if (!v) return; store.commit("char", s => { const x = C(s); x.xp = Math.max(0, (x.xp || 0) + v); }); toast(`${v > 0 ? "+" : ""}${v} PX para ${c0.name}`); });
   { const tb = $(".tabbody", el); if (tb) { bindTreasures(tb, c0, draw); bindJournal(tb, c0, draw); } on("#tesadd", () => giveTreasure([id], { kind: "recuerdo", name: "Objeto especial" })); }
   if (!ed) return;

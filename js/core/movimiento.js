@@ -6,7 +6,7 @@ import { TERRAIN, PROPS, isDoor } from "../data/mapas.js";
 import { eco, speedOf, hasCond } from "./turnos.js";
 
 const key = (c, r) => c + "," + r;
-const STOP = ["apresado", "paralizado", "aturdido", "inconsciente", "petrificado", "muerto"];
+const STOP = ["agarrado", "apresado", "paralizado", "aturdido", "inconsciente", "petrificado", "muerto"];
 
 /**
  * Casillas alcanzables por una ficha en su turno.
@@ -57,6 +57,7 @@ export function pathTo(R, c, r) {
 /** Texto breve para la punta del cursor. */
 export function moveHint(R, c, r) {
   if (!R) return "";
+  if (R.deploy) { const y = R.cells.get(key(c, r)); return !y ? "Fuera de la zona de inicio" : y.occ ? "Casilla ocupada" : "Zona de inicio"; }
   const x = R.cells.get(key(c, r)), m = n => n.toLocaleString("es-ES", { maximumFractionDigits: 1 });
   if (R.stopped) return `No puedes moverte (${R.stopped})`;
   if (!x) return "No llegas";

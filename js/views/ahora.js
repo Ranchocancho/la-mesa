@@ -5,6 +5,7 @@ import { nameOf, oaOpen } from "../core/combate.js";
 import { hpOf, order } from "../core/mesa.js";
 import { phase, current, pending, eco, moveBudget } from "../core/turnos.js";
 import { visibleRolls } from "./tiradas.js";
+import { deployOf, deployOrder, placer, isReady } from "../core/despliegue.js";
 
 const fm = n => (Math.round(n * 10) / 10).toLocaleString("es-ES");
 // Nombre corto: «Brena Martillo-Ceniza» → «Brena»; «Goblin 2 (en la maleza)» → «Goblin 2» (el número distingue a los repetidos)
@@ -16,6 +17,20 @@ export function nowState(s, me, dm) {
   const tok = id => s.tokens.find(t => t.id === id);
   const ownerOf = t => t && t.kind === "pc" ? t.owner : null; // de las criaturas se encarga el máster
   const mineT = s.tokens.find(t => t.kind === "pc" && t.owner === me);
+  // Despliegue: el grupo se coloca por turnos en la zona de inicio antes de empezar
+  const dep = !ph && deployOf(s);
+  if (dep) {
+    const L = deployOrder(s), cur = placer(s), done = L.filter(t => isReady(t, dep)).length;
+    const head = `Despliegue · ${done}/${L.length} colocados`;
+    if (dm) return { head, who: cur ? N(cur) : "Todos", mine: true, tone: cur ? "wait" : "go",
+      text: cur ? `Se coloca ${N(cur)}: arrastra su figura dentro de la zona marcada alrededor del ⚑ (${dep.rad} casillas). Si no responde, pulsa «Listo» por él.` : "Todos colocados. Empieza la escena o el combate.",
+      acts: [...(cur ? [{ k: "depok", id: cur.id, label: `✓ Listo ${N(cur)}` }] : []), { k: "depend", label: "Terminar despliegue" }, { k: "begin", label: "⚔️ Iniciar combate", gold: !cur }] };
+    if (cur && cur.owner === me) return { head, who: "Tú", mine: true, tone: "go", text: "Te toca colocarte: arrastra tu figura a cualquier casilla iluminada de la zona de inicio, según lo que veas (delante, detrás, a cubierto), y pulsa «Listo».", acts: [{ k: "depok", id: cur.id, label: "✓ Listo", gold: true }] };
+    const pos = mineT ? L.filter(t => !isReady(t, dep)).findIndex(t => t.id === mineT.id) : -1;
+    return { head, who: cur ? N(cur) : "Máster", mine: false, tone: "calm",
+      text: !cur ? "Todos colocados. El máster empezará en cuanto esté listo." : mineT && isReady(mineT, dep) ? `Ya estás colocado. Ahora se coloca ${N(cur)}.` : `Se está colocando ${N(cur)}.${pos > 0 ? ` Vas tú dentro de ${pos}.` : ""} Mira la mesa: lo que ves te ayuda a decidir dónde ponerte.`,
+      acts: mineT && isReady(mineT, dep) && cur ? [{ k: "depundo", id: mineT.id, label: "Cambiar mi sitio" }] : [] };
+  }
   if (!ph) {
     // Fuera de combate también hay cosas a medias: una trampa que ha saltado, un conjuro o un aliento por resolver
     const pend = visibleRolls(s).filter(r => r.kind === "spell" && r.status === "pending" && Date.now() - (r.at || 0) < 3600e3).pop();

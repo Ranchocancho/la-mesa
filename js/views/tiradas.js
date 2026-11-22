@@ -157,6 +157,7 @@ function what(s, r) {
     case "mastery": return `pide <em>${esc((r.mas || {}).n || "maestría")}</em> contra <b>${esc(t)}</b>${r.status === "ok" ? " ✓" : ""}`;
     case "save": case "check": return esc(r.label.replace(/ de [A-ZÁÉÍÓÚ][\wáéíóúñ-]+( [A-ZÁÉÍÓÚ][\wáéíóúñ-]+)*$/, "").replace(/^Salvación de /, "salvación de ").replace(/^Prueba de /, "prueba de "));
     case "loot": case "xp": return `<b>${esc(r.label)}</b>`;
+    case "open": return esc(r.label);
     default: return `tirada libre <em>${esc(r.expr || r.label)}</em>`;
   }
 }

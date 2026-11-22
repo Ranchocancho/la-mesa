@@ -115,7 +115,7 @@ function draw() {
       onStart: st => store.commit("board", z => { z.scenes.find(y => y.id === openId).start = st; }),
       onCell: h => { if (placing) { placing = false; store.commit("board", st => { st.scenes.find(y => y.id === openId).start = h; }); } },
       suggestRegion: () => scene() && scene().place ? regionPackOf(store.get(), scene().place) : "",
-      marker: () => scene() && scene().start
+      marker: () => scene() && scene().start && { ...scene().start, rad: +(scene().deployRad ?? 2) }
     });
     side();
   }
@@ -130,7 +130,9 @@ function side() {
       <label class="field">Nombre<input id="scname" value="${esc(sc.name)}"></label>
       <label class="field" style="margin-top:8px">Lugar<select id="scplace"><option value="">Biblioteca (sin lugar)</option>${s.world.places.map(p => `<option value="${p.id}" ${sc.place === p.id ? "selected" : ""}>${esc(p.name)}</option>`).join("")}</select></label>
       <div class="tkgrid" style="margin-top:8px"><label class="field">Columnas<input type="number" min="5" max="40" id="sccols" value="${sc.cols}"></label><label class="field">Filas<input type="number" min="5" max="30" id="scrows" value="${sc.rows}"></label></div>
-      <div class="row" style="margin-top:10px"><button class="btn small" id="scstart" aria-pressed="${placing}">${placing ? "Toca una casilla…" : "⚑ Punto de inicio del grupo"}</button></div>
+      <div class="row" style="margin-top:10px"><button class="btn small" id="scstart" aria-pressed="${placing}">${placing ? "Toca una casilla del mapa…" : "⚑ Punto de inicio del grupo"}</button>
+        <label class="field" title="Al cargar la escena, cada jugador se coloca por turnos dentro de esta zona">Zona de despliegue<select id="scrad">${[0, 1, 2, 3, 4, 5, 6].map(n => `<option value="${n}" ${(+(sc.deployRad ?? 2)) === n ? "selected" : ""}>${n ? `${n} casilla${n > 1 ? "s" : ""} (${n * 1.5} m)` : "solo el punto"}</option>`).join("")}</select></label></div>
+      <p class="note" style="margin:4px 0 0">El grupo empieza en el ⚑ y, por turnos, cada jugador se coloca dentro de la zona según lo que ve.</p>
       <div class="scfloors" style="margin-top:10px"><small class="note">🏰 Plantas del mapa (torres, sótanos…)</small>
         ${floorsOf(sc).map((f, i) => ({ f, i })).reverse().map(({ f, i }) => `<div class="scfl${i === floorIdx(sc) ? " on" : ""}"><input data-scfln="${i}" value="${esc(f.name)}" aria-label="Nombre de la planta">${i === floorIdx(sc) ? `<small>editando</small>` : `<button class="btn small" data-scflgo="${i}">Editar</button><button class="flic" data-scfldel="${i}" title="Quitar">🗑</button>`}</div>`).join("")}
         <div class="row"><button class="btn small" data-scfladd="up">＋ Planta encima</button><button class="btn small" data-scfladd="down">＋ Sótano</button></div></div>
@@ -162,6 +164,7 @@ function side() {
   $$("[data-scfldel]", box).forEach(b => b.onclick = () => { if (!b.dataset.sure) { b.dataset.sure = 1; b.textContent = "¿Seguro?"; return; } M(x => removeFloor(x, +b.dataset.scfldel)); });
   $("#sc3d", box).onclick = () => { preview3d = !preview3d; board = null; draw(); };
   $("#scstart", box).onclick = () => { placing = !placing; side(); };
+  { const rd = $("#scrad", box); if (rd) rd.onchange = () => store.commit("board", st => { const x = st.scenes.find(y => y.id === openId); if (x) x.deployRad = +rd.value; }); }
   $("#scload", box).onclick = () => { loadScene(openId); location.hash = "partida"; toast("Escena cargada en la mesa"); };
   $("#scdup", box).onclick = () => { const c = JSON.parse(JSON.stringify(sc)); c.id = "esc-" + Math.random().toString(36).slice(2, 8); c.name += " (copia)"; store.commit("board", st => st.scenes.push(c)); openId = c.id; board = null; draw(); };
   const del = $("#scdel", box);

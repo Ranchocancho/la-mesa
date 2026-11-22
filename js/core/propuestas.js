@@ -81,17 +81,19 @@ export function logTo(c, s, kind, lines, extra = {}) {
 }
 
 /** El jugador envía sus cambios al máster. */
-export function propose(charId, changes, note = "") {
-  if (!changes.length) { toast("No has cambiado nada."); return false; }
+export function propose(charId, changes, note = "", meta = null) {
+  if (!changes.length && !meta) { toast("No has cambiado nada."); return false; }
   store.commit("char", s => {
     const c = s.characters.find(x => x.id === charId); if (!c) return;
-    c.proposals = [...(c.proposals || []), { id: uid("prop"), at: Date.now(), by: who(s), byId: (currentUser(s) || {}).id || null, note: String(note || "").slice(0, 300), changes }];
+    c.proposals = [...(c.proposals || []), { id: uid("prop"), at: Date.now(), by: who(s), byId: (currentUser(s) || {}).id || null, note: String(note || "").slice(0, 300), changes, ...(meta ? { meta } : {}) }];
   });
   toast("Enviado al máster: lo verá en la ficha y decidirá.");
   return true;
 }
 /** ¿Ha cambiado la ficha en algo que toca la propuesta desde que se envió? */
 export const stale = (c, ch) => J(getP(c, ch.path)) !== J(ch.from);
+/** Objetos pedidos del botín que ya no están (otro se los quedó). */
+export const lootGone = (s, p) => p.meta && p.meta.lootTake ? p.meta.lootTake.filter(id => !((s.loot || {}).items || []).some(x => x.id === id)) : [];
 /** El máster aprueba: se aplica y se apunta en el registro. */
 export function approve(charId, propId) {
   const s0 = store.get(); if (!isDM(s0)) return;
@@ -99,7 +101,20 @@ export function approve(charId, propId) {
     const c = s.characters.find(x => x.id === charId), p = c && (c.proposals || []).find(x => x.id === propId); if (!p) return;
     p.changes.forEach(ch => setP(c, ch.path, ch.to));
     c.proposals = c.proposals.filter(x => x.id !== propId);
-    logTo(c, s, "aprobado", p.changes.map(describe), { from: p.by, note: p.note || undefined });
+    const extra = [];
+    // Objetos pedidos del botín del grupo: salen del botín
+    if (p.meta && p.meta.lootTake && s.loot) { s.loot.items = (s.loot.items || []).filter(x => !p.meta.lootTake.includes(x.id)); extra.push("Sale del botín del grupo"); }
+    // Regalo a un compañero: entra en su ficha
+    if (p.meta && p.meta.give) {
+      const g = p.meta.give, t = s.characters.find(x => x.id === g.to);
+      if (t) {
+        t.inventory = t.inventory || []; (g.items || []).forEach(it => { const k = t.inventory.find(x => (x.name || "").toLowerCase() === (it.name || "").toLowerCase() && !it.unique); if (k) k.qty = (+k.qty || 1) + (+it.qty || 1); else t.inventory.push({ ...it, id: uid("i") }); });
+        if (g.coins) t.coins = Object.fromEntries(["po", "pe", "pp", "pc"].map(k => [k, (+((t.coins || {})[k]) || 0) + (+(g.coins[k]) || 0)]));
+        logTo(t, s, "aprobado", [`Recibe de ${c.name}: ${[...(g.items || []).map(i => `${i.name}${i.qty > 1 ? " ×" + i.qty : ""}`), ...(g.coins ? Object.entries(g.coins).filter(([, v]) => +v).map(([k, v]) => `${v} ${k}`) : [])].join(", ")}`], { from: p.by });
+        extra.push(`Para ${t.name}`);
+      }
+    }
+    logTo(c, s, "aprobado", [...p.changes.map(describe), ...extra], { from: p.by, note: p.note || undefined });
   });
   toast("Cambios aprobados y aplicados.");
 }
