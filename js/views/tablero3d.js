@@ -14,6 +14,7 @@ import { PROC } from "./props3d.js";
 import { siluetaFor, siluetaURL } from "../data/siluetas.js";
 import { estado, etiqueta } from "../data/estados.js";
 import { computeVision, explored, visionOn, tokenSeen } from "../core/vision.js";
+import { fogCanvas } from "./niebla.js";
 import { playEffect, EFECTOS } from "./efectos3d.js";
 import { sound, AMBIENTES } from "../core/sonido.js";
 import { floatText, strike, motes } from "./golpes3d.js";
@@ -275,6 +276,7 @@ export function createBoard3D(host, opts) {
   const hl = new THREE.Mesh(new THREE.PlaneGeometry(CELL * 0.96, CELL * 0.96), new THREE.MeshBasicMaterial({ color: 0xd6aa4e, transparent: true, opacity: 0.35, depthWrite: false }));
   hl.rotation.x = -Math.PI / 2; hl.position.y = 0.12; hl.visible = false; scene.add(hl);
 
+  let fogPlane = null, shroud = [];
   let trays = 0, fogGroup = new THREE.Group(), fxList = [], seenFx = new Set(), fxReady = false, pickMode = null, fogSig = "";
   scene.add(fogGroup);
   const pickRing = new THREE.Mesh(new THREE.RingGeometry(0.9, 1, 64), new THREE.MeshBasicMaterial({ color: 0xff8a3a, transparent: true, opacity: 0.8, side: THREE.DoubleSide, depthWrite: false }));
@@ -374,6 +376,7 @@ export function createBoard3D(host, opts) {
     const wallGl = await load("dungeon/wall"); if (my !== build) return;
     let wallMesh = null; wallGl && wallGl.scene.traverse(o => { if (o.isMesh && !wallMesh) wallMesh = o; });
     const wh = lowWalls ? 0.32 : 1, faces = [], blocks = [];
+    const shroudable = []; // piezas que se esconden mientras su casilla no se haya visto nunca (niebla)
     const byType = {};
     for (let r = 0; r < g.rows; r++) for (let c = 0; c < g.cols; c++) {
       if (!isWallIn(g, c, r)) continue;
@@ -387,7 +390,7 @@ export function createBoard3D(host, opts) {
       [[0, -1, 0], [1, 0, -Math.PI / 2], [0, 1, Math.PI], [-1, 0, Math.PI / 2]].forEach(([dc, dr, rot]) => {
         const nc = c + dc, nr = r + dr;
         if (nc < 0 || nr < 0 || nc >= g.cols || nr >= g.rows || isWallIn(g, nc, nr)) return;
-        faces.push([cx(c) + dc * (CELL / 2 - 0.5), cz(r) + dr * (CELL / 2 - 0.5), rot]);
+        faces.push([cx(c) + dc * (CELL / 2 - 0.5), cz(r) + dr * (CELL / 2 - 0.5), rot, nc, nr]);
       });
     }
     for (const [kind, list] of Object.entries(byType)) {
@@ -395,7 +398,7 @@ export function createBoard3D(host, opts) {
       mt.roughness = 1; mt.metalness = 0; mt.bumpScale = 0.5;
       const top = new THREE.MeshStandardMaterial({ color: kind === "seto" ? 0x2e4a22 : 0x2a2622, roughness: 1 });
       const bm = new THREE.InstancedMesh(new THREE.BoxGeometry(CELL, hgt, CELL), [mt, mt, top, top, mt, mt], list.length);
-      list.forEach(([c, r], i) => bm.setMatrixAt(i, m4.compose(v.set(cx(c), hgt / 2, cz(r)), q.identity(), one)));
+      list.forEach(([c, r], i) => { bm.setMatrixAt(i, m4.compose(v.set(cx(c), hgt / 2, cz(r)), q.identity(), one)); shroudable.push({ im: bm, i, c, r, m: m4.clone() }); });
       bm.castShadow = bm.receiveShadow = true; grp.add(bm);
     }
     if (faces.length && wallMesh) {
@@ -403,7 +406,7 @@ export function createBoard3D(host, opts) {
       const wmat = (Array.isArray(wallMesh.material) ? wallMesh.material : [wallMesh.material]).map(x => { const c = x.clone(); if ("roughness" in c) c.roughness = 1; if ("metalness" in c) c.metalness = 0; return c; });
       const fm = new THREE.InstancedMesh(wallMesh.geometry, wmat.length === 1 ? wmat[0] : wmat, faces.length);
       const sc = new THREE.Vector3(1, wh, 1);
-      faces.forEach(([x, z, rot], i) => fm.setMatrixAt(i, m4.compose(v.set(x, 0, z), q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), rot), sc)));
+      faces.forEach(([x, z, rot, nc, nr], i) => { fm.setMatrixAt(i, m4.compose(v.set(x, 0, z), q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), rot), sc)); shroudable.push({ im: fm, i, c: nc, r: nr, m: m4.clone() }); });
       fm.castShadow = fm.receiveShadow = true; grp.add(fm);
     }
     // Escenografía
@@ -458,12 +461,12 @@ export function createBoard3D(host, opts) {
         light.position.set(x + (L.dx || 0), L.y, z + (L.dz || 0));
         grp.add(light); newTorches.push({ light, power: L.power, base: 34 * L.power, seed: Math.random() * 10 });
       }
-      grp.add(w);
+      grp.add(w); shroudable.push({ obj: w, c: p.c, r: p.r });
     } catch (e) { console.warn("Pieza sin montar", p.k, e); } }
     if (my !== build) return;
     // Sustituir el escenario anterior de golpe (sin parpadeos)
     world.children.slice().forEach(o => world.remove(o));
-    world.add(grp);
+    world.add(grp); shroud = shroudable; fogSig = ""; // la niebla se vuelve a aplicar sobre el escenario nuevo
     torches.length = 0; torches.push(...newTorches.slice(0, 10));
     newTorches.slice(10).forEach(t => (t.light.visible = false));
     ambient = null; applyAmbient(g.ambient || "interior");
@@ -650,7 +653,7 @@ export function createBoard3D(host, opts) {
     if (building) { pendingG = g; return; }
     building = true;
     Promise.resolve().then(() => buildWorld(g)).catch(e => console.warn("Mesa 3D: no se pudo montar del todo", e))
-      .finally(() => { building = false; loadingEl.hidden = true; if (pendingG && !disposed) { const n = pendingG; pendingG = null; queueBuild(n); } });
+      .finally(() => { building = false; loadingEl.hidden = true; if (!disposed) { const m = opts.model(); if (m && m.grid) updateFog(m); } if (pendingG && !disposed) { const n = pendingG; pendingG = null; queueBuild(n); } });
   }
   function sync() {
     if (disposed) return;
@@ -743,18 +746,28 @@ export function createBoard3D(host, opts) {
       rec.root.visible = !on || !t || t.kind === "pc" || tokenSeen(t, vis);
     }
     if (sig === fogSig) return; fogSig = sig;
-    fogGroup.children.slice().forEach(o => { fogGroup.remove(o); o.geometry.dispose(); });
-    if (!on) return;
-    const black = [], dim = [], shade = [];
-    for (let r = 0; r < G.rows; r++) for (let c = 0; c < G.cols; c++) { const k = c + "," + r; if (!exp.has(k)) black.push([c, r]); else if (!vis.has(k)) dim.push([c, r]); else if (vis.dim.has(k)) shade.push([c, r]); }
-    const m4 = new THREE.Matrix4();
-    const mk = (list, mat, h) => { if (!list.length) return; const im = new THREE.InstancedMesh(new THREE.BoxGeometry(CELL, h, CELL), mat, list.length); list.forEach(([c, r], i) => im.setMatrixAt(i, m4.makeTranslation(cx(c), h / 2 - 0.05, cz(r)))); fogGroup.add(im); };
-    mk(black, FOG_BLACK, 7.5); mk(dim, FOG_DIM, 6); mk(shade, FOG_SHADE, 0.2);
+    // Lo que nunca se ha visto no se dibuja (ni muros ni escenografía): así el velo puede ser fino y no un bloque
+    const Z = new THREE.Matrix4().makeScale(0, 0, 0), dirty = new Set();
+    for (const x of shroud) {
+      const show = !on || exp.has(x.c + "," + x.r);
+      if (x.obj) x.obj.visible = show;
+      else { x.im.setMatrixAt(x.i, show ? x.m : Z); dirty.add(x.im); }
+    }
+    dirty.forEach(im => { im.instanceMatrix.needsUpdate = true; });
+    if (!on) { if (fogPlane) fogPlane.visible = false; return; }
+    // Un velo suave pegado al suelo, con los bordes difuminados
+    const cv = fogCanvas(G.cols, G.rows, vis, exp);
+    if (!fogPlane) {
+      fogPlane = new THREE.Mesh(new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ transparent: true, depthWrite: false }));
+      fogPlane.renderOrder = 1; fogGroup.add(fogPlane);
+    }
+    if (fogPlane.material.map) fogPlane.material.map.dispose();
+    const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 4;
+    fogPlane.material.map = tex; fogPlane.material.needsUpdate = true;
+    fogPlane.scale.set(G.cols * CELL, 1, G.rows * CELL);
+    fogPlane.position.set((cx(0) + cx(G.cols - 1)) / 2, 0.05, (cz(0) + cz(G.rows - 1)) / 2);
+    fogPlane.visible = true;
   }
-  const FOG_BLACK = new THREE.MeshStandardMaterial({ color: 0x0c0a08, roughness: 1 });
-  const FOG_SHADE = new THREE.MeshBasicMaterial({ color: 0x0a0c16, transparent: true, opacity: 0.45, depthWrite: false }); // luz tenue: se ve, en penumbra
-  const FOG_DIM = new THREE.MeshBasicMaterial({ color: 0x05070c, transparent: true, opacity: 0.62, depthWrite: false });
-
   // ---------- Alcance del movimiento: casillas a las que llegas este turno ----------
   const reachGrp = new THREE.Group(); scene.add(reachGrp);
   let reachFor = null, reachR = null, pathMesh = null;

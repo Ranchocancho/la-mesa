@@ -681,3 +681,11 @@ Comprobado simulando las reglas sobre las escrituras reales de la app (gastar es
   - En su ficha, el jugador ve qué luz hay en su casilla.
 - **Enemigos ocultos**: al añadir criaturas, la casilla «🙈 Ocultas a los jugadores» (marcada por defecto) las pone en la mesa sin que se vean. En la ficha de cada PNJ, 🙈/👁 lo oculta o lo muestra, y «Mostrar ocultas» de la barra las revela todas a la vez. En la iniciativa del máster se marca 🙈 oculto y 👁‍🗨 no lo ven (fuera de la vista de los personajes). Para los jugadores, lo que no ven no sale en la mesa, en la iniciativa ni en la barra de turno.
 - **Reglas de Firestore**: el jugador puede cambiar la luz que lleva su figura (`light`). Hay que publicarlas otra vez.
+
+## Hito 48 · Una niebla sutil
+
+- La vista de los personajes ya no se tapa con bloques negros: es un **velo suave con los bordes difuminados** y un poco de grano, como en Foundry, Owlbear Rodeo o Roll20. Es la misma imagen en el plano 2D y en la mesa 3D, pegada al suelo.
+  - Lo que nunca se ha visto queda negro y, en 3D, sus muros y su escenografía ni se dibujan, para no adivinar el mapa.
+  - Lo explorado que ahora no se ve queda en penumbra azulada.
+  - La luz tenue, apenas un velo.
+  - Las casillas a las que puedes moverte se ven por encima del velo.

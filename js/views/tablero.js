@@ -1,6 +1,8 @@
 // Tablero de casillas cuadradas (1,5 m por casilla), vista plana. Lo usan el editor de escenas y la mesa en directo.
 // Modelo: { grid: { cols, rows, terrain: {"c,r": tipo}, props: [{id,c,r,k,rot,hidden,open,label,loot,trap}] }, tokens: [...] }
 import { tokenSeen } from "../core/vision.js";
+import { fogCanvas, fogSig } from "./niebla.js";
+let fogCache = { sig: "", url: "" };
 import { getImage } from "../core/images.js";
 import { esc } from "../core/ui.js";
 import { estado } from "../data/estados.js";
@@ -159,11 +161,8 @@ export function createBoard(host, opts) {
     const props = (grid.props || []).filter(p => propVisible(p, opts.dm)).map(p => propSvg(p, grid, wallAt)).join("");
     const fog = opts.fogState ? opts.fogState() : null;
     let fogSvg = "";
-    if (fog) for (let r = 0; r < grid.rows; r++) for (let c = 0; c < grid.cols; c++) {
-      const k = key(c, r), [x, y] = center(c, r);
-      if (fog.vis.has(k)) { if (fog.vis.dim && fog.vis.dim.has(k)) fogSvg += `<rect x="${x - S}" y="${y - S}" width="${T}" height="${T}" fill="rgba(8,10,18,.42)"/>`; continue; }
-      fogSvg += `<rect x="${x - S}" y="${y - S}" width="${T}" height="${T}" fill="${fog.exp.has(k) ? "rgba(5,7,12,.62)" : "#0c0a08"}"/>`;
-    }
+    if (fog) { const sg = fogSig(fog.vis, fog.exp, grid.cols, grid.rows); if (sg !== fogCache.sig) fogCache = { sig: sg, url: fogCanvas(grid.cols, grid.rows, fog.vis, fog.exp).toDataURL("image/png") };
+      fogSvg = `<image href="${fogCache.url}" x="4" y="4" width="${grid.cols * T}" height="${grid.rows * T}" preserveAspectRatio="none" style="pointer-events:none"/>`; }
     host.dataset.amb = grid.ambient || "interior";
     // Daño y curación: el número sale flotando sobre la ficha (todos lo ven)
     tokens.forEach(k => { const hp = opts.hpOf(k); if (!hp) return; const was = lastHp.get(k.id); lastHp.set(k.id, hp.cur);
@@ -198,7 +197,7 @@ export function createBoard(host, opts) {
     const R = selected && opts.reach ? opts.reach(selected) : null; let reach = "";
     if (R) { R.cells.forEach((v, k) => { if (!v.cost || v.occ) return; const [c, r] = k.split(",").map(Number), [x, y] = center(c, r); reach += `<rect x="${x - S + 2}" y="${y - S + 2}" width="${T - 4}" height="${T - 4}" rx="4" class="rch ${v.dash ? "dash" : v.dif ? "dif" : ""}"/>`; });
       const [ox, oy] = center(R.from.c, R.from.r); reach += `<circle cx="${ox}" cy="${oy}" r="${S * .8}" class="rorig"/>`; }
-    world.innerHTML = `<g class="cells">${cells}</g><g>${dif}</g><g filter="url(#wsh)">${walls}</g>${grid2}${start}<g class="reach">${reach}</g><g class="props">${props}</g><g class="fog">${fogSvg}</g><g class="toks">${toks}</g><g class="aim">${aimSvg}</g><g class="ghost"></g>`;
+    world.innerHTML = `<g class="cells">${cells}</g><g>${dif}</g><g filter="url(#wsh)">${walls}</g>${grid2}${start}<g class="props">${props}</g><g class="fog">${fogSvg}</g><g class="reach">${reach}</g><g class="toks">${toks}</g><g class="aim">${aimSvg}</g><g class="ghost"></g>`;
     ghost();
   }
   function propSvg(p, grid, wallAt) {
