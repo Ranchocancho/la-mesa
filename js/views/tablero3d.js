@@ -191,30 +191,44 @@ function hpBarSprite(pct, txt, color) {
   s.scale.set(2.9, 0.6, 1); s.renderOrder = 9; return s;
 }
 // Placa con el nombre y la vida: mismo tamaño en pantalla esté la cámara cerca o lejos, para que siempre se lea
-const PLATE_H = 0.043;
+const PLATE_H = 0.05; // alto de la placa (sin perspectiva: × proyección/2 = fracción del alto de la vista)
 const TITLES = /^(hermano|hermana|sir|lady|lord|maese|fray|sor|don|doña|capitán|capitana|madre|padre)$/i;
 /** Criaturas: sin el paréntesis («Tumulario (señor del mausoleo)» → «Tumulario»); si sigue largo, la primera palabra. */
 const plateName = n => { const b = String(n || "?").replace(/\s*\(.*?\)/g, "").trim() || "?"; return b.length > 16 ? b.split(/\s+/)[0] : b; };
 /** Nombre corto para la placa: «Brena Martillo-Ceniza» → «Brena», «Hermano Osric» → «Osric». */
 const shortName = n => { const w = (n || "?").trim().split(/\s+/); return w.length > 1 && TITLES.test(w[0]) ? w[1] : w[0].length < 3 && w[1] ? w.slice(0, 2).join(" ") : w[0]; };
-function namePlate(name, pct, txt, color, hl) {
-  const c = document.createElement("canvas"); c.width = 640; c.height = 150; const g = c.getContext("2d");
-  g.font = "bold 58px Georgia"; let fs = 58; while (g.measureText(name).width > 560 && fs > 30) { fs -= 2; g.font = `bold ${fs}px Georgia`; }
-  const w = Math.min(632, Math.max(300, g.measureText(name).width + 70)), x0 = (640 - w) / 2;
-  g.shadowColor = hl ? color : "rgba(0,0,0,.6)"; g.shadowBlur = hl ? 18 : 8;
-  g.fillStyle = "rgba(14,10,8,.92)"; g.beginPath(); g.roundRect(x0, 6, w, 138, 26); g.fill(); g.shadowBlur = 0;
-  g.strokeStyle = color; g.lineWidth = hl ? 7 : 4; g.stroke();
-  g.fillStyle = hl ? "#ffe6a6" : "#f6ecd2"; g.textAlign = "center"; g.textBaseline = "middle"; g.fillText(name, 320, pct != null ? 54 : 75);
-  if (pct != null) {
-    const bx = x0 + 22, bw = w - 44;
-    g.fillStyle = "#3a1b16"; g.beginPath(); g.roundRect(bx, 92, bw, 34, 10); g.fill();
+/** Placa dibujada a la resolución exacta con la que se verá (pxH píxeles de alto): así el texto sale nítido, sin
+ *  emborronarse al encogerse. Arriba el nombre; abajo la barra de vida con los PG centrados y grandes. */
+function namePlate(name, pct, txt, color, hl, pxH = 48) {
+  const U = 150, k = pxH / U, Wu = 600;               // se diseña en unidades de 150 de alto y se escala al tamaño real
+  const c = document.createElement("canvas"); c.width = Math.round(Wu * k); c.height = Math.round(U * k);
+  const g = c.getContext("2d"); g.setTransform(k, 0, 0, k, 0, 0);
+  const hasBar = pct != null;
+  let fs = hasBar ? 54 : 64; g.font = `700 ${fs}px Georgia, serif`;
+  while (g.measureText(name).width > Wu - 80 && fs > 32) { fs -= 2; g.font = `700 ${fs}px Georgia, serif`; }
+  const w = Math.min(Wu - 8, Math.max(330, g.measureText(name).width + 70)), x0 = (Wu - w) / 2;
+  // Fondo
+  g.shadowColor = hl ? color : "rgba(0,0,0,.7)"; g.shadowBlur = hl ? 16 : 10;
+  g.fillStyle = "rgba(12,9,7,.94)"; g.beginPath(); g.roundRect(x0, 4, w, U - 8, 24); g.fill(); g.shadowBlur = 0;
+  g.strokeStyle = color; g.lineWidth = hl ? 6 : 3.5; g.stroke();
+  // Nombre
+  g.fillStyle = hl ? "#ffe6a6" : "#fbf3df"; g.textAlign = "center"; g.textBaseline = "middle";
+  g.fillText(name, Wu / 2, hasBar ? 46 : U / 2);
+  if (hasBar) {
+    const bx = x0 + 16, bw = w - 32, by = 80, bh = 56;
+    g.fillStyle = "#2a1411"; g.beginPath(); g.roundRect(bx, by, bw, bh, 12); g.fill();
     const fw = bw * Math.max(0, Math.min(1, pct));
-    if (fw > 0) { const gr = g.createLinearGradient(0, 92, 0, 126), base = pct > 0.5 ? ["#9bd06a", "#4f7d2a"] : pct > 0.25 ? ["#f0c85a", "#a37a1e"] : ["#ff7a62", "#a3291c"]; gr.addColorStop(0, base[0]); gr.addColorStop(1, base[1]); g.fillStyle = gr; g.beginPath(); g.roundRect(bx, 92, Math.max(12, fw), 34, 10); g.fill(); }
-    if (txt) { g.font = "bold 28px Georgia"; g.lineWidth = 6; g.strokeStyle = "rgba(0,0,0,.85)"; g.strokeText(txt, 320, 110); g.fillStyle = "#fff"; g.fillText(txt, 320, 110); }
+    if (fw > 0) { const gr = g.createLinearGradient(0, by, 0, by + bh), base = pct > 0.5 ? ["#8cc45c", "#3f6b22"] : pct > 0.25 ? ["#e8be4c", "#946c16"] : ["#f2694f", "#951f14"]; gr.addColorStop(0, base[0]); gr.addColorStop(1, base[1]); g.fillStyle = gr; g.beginPath(); g.roundRect(bx, by, Math.max(14, fw), bh, 12); g.fill(); }
+    if (txt) { // PG centrados, en letra de palo y con contorno: se leen sobre cualquier color de la barra
+      g.font = "800 44px system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif";
+      g.lineJoin = "round"; g.lineWidth = 6; g.strokeStyle = "rgba(0,0,0,.9)"; g.strokeText(txt, Wu / 2, by + bh / 2 + 2);
+      g.fillStyle = "#fff"; g.fillText(txt, Wu / 2, by + bh / 2 + 2);
+    }
   }
-  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4;
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
+  t.generateMipmaps = false; t.minFilter = THREE.LinearFilter; t.magFilter = THREE.LinearFilter; // sin mipmaps: no se emborrona
   const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, depthTest: false, transparent: true, sizeAttenuation: false }));
-  s.scale.set(PLATE_H * 640 / 150, PLATE_H, 1); s.center.set(0.5, 0); s.renderOrder = 9; return s;
+  s.scale.set(PLATE_H * Wu / U, PLATE_H, 1); s.center.set(0.5, 0); s.renderOrder = 9; return s;
 }
 function condTag(conds) {
   const list = conds.map(cd => ({ e: estado(cd.id || cd), lvl: cd.lvl })).filter(x => x.e);
@@ -635,10 +649,11 @@ export function createBoard3D(host, opts) {
       const hl = selected === t.id || !!d.isTurn, exact = opts.dm || t.kind === "pc", top = (rec.h || 4) + 0.35;
       const pctQ = hp ? (exact ? hp.cur / Math.max(1, hp.max) : (r => r > 0.75 ? 1 : r > 0.5 ? 0.7 : r > 0.25 ? 0.45 : r > 0 ? 0.18 : 0)(hp.cur / Math.max(1, hp.max))) : null;
       const word = hp && !exact ? (pctQ >= 1 ? "Ileso" : pctQ >= 0.7 ? "Herido" : pctQ >= 0.45 ? "Malherido" : pctQ > 0 ? "Al borde" : "Fuera de combate") : "";
-      const plateKey = JSON.stringify([d.name || t.name, pctQ, exact && hp && hp.cur, exact && hp && hp.max, hl, word]);
+      const pxH = Math.max(28, Math.min(160, Math.round(PLATE_H * camera.projectionMatrix.elements[5] / 2 * renderer.domElement.height))); // píxeles reales de la placa
+      const plateKey = JSON.stringify([d.name || t.name, pctQ, exact && hp && hp.cur, exact && hp && hp.max, hl, word, pxH]);
       if (plateKey !== rec.barKey) {
         if (rec.bar) { rec.root.remove(rec.bar); rec.bar.material.map.dispose(); rec.bar.material.dispose(); rec.bar = null; }
-        rec.bar = namePlate(t.kind === "pc" ? shortName(d.name || t.name) : plateName(d.name || t.name), pctQ, hp ? (exact ? `${hp.cur} / ${hp.max} PG` : word) : "", t.kind === "pc" ? "#d6aa4e" : t.kind === "npc" ? "#7d8fe0" : "#b33a2e", hl);
+        rec.bar = namePlate(t.kind === "pc" ? shortName(d.name || t.name) : plateName(d.name || t.name), pctQ, hp ? (exact ? `${hp.cur} / ${hp.max}` : word) : "", t.kind === "pc" ? "#d6aa4e" : t.kind === "npc" ? "#7d8fe0" : "#b33a2e", hl, pxH);
         rec.root.add(rec.bar); rec.barKey = plateKey;
       }
       rec.bar.position.y = top;
@@ -898,6 +913,7 @@ export function createBoard3D(host, opts) {
   function resize() {
     const w = host.clientWidth, h = host.clientHeight; if (!w || !h) return;
     renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix();
+    clearTimeout(resize.t); resize.t = setTimeout(() => { if (!disposed && G) sync(); }, 150); // placas nítidas al nuevo tamaño
   }
   const ro = new ResizeObserver(resize); ro.observe(host);
   const fwd = new THREE.Vector3(), side = new THREE.Vector3();

@@ -689,3 +689,9 @@ Comprobado simulando las reglas sobre las escrituras reales de la app (gastar es
   - Lo explorado que ahora no se ve queda en penumbra azulada.
   - La luz tenue, apenas un velo.
   - Las casillas a las que puedes moverte se ven por encima del velo.
+
+## Hito 49 · Nombres y vida que se leen
+
+- **Placas de la mesa 3D**: se dibujan a la resolución exacta con la que se ven (antes se encogían desde una imagen grande y se emborronaban). El nombre es más grande y los PG van centrados dentro de la barra, en letra de palo gruesa con contorno («27 / 33»). En los enemigos, el estado (Ileso, Herido…). Al cambiar el tamaño de la ventana se rehacen nítidas.
+- **Barras de vida en las pestañas Personaje y PNJ**: más altas, con los PG centrados y en cifras del mismo ancho, legibles sobre cualquier color. También la barra de movimiento.
+- **Tira de turnos**: el nombre de quien actúa sale corto («Mirra», «Osric») y en letra normal, no en versalitas cortadas.

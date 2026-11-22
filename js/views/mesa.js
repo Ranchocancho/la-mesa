@@ -296,7 +296,7 @@ export function mountTactical(host, opts = {}) {
       const now = ph === "live" && k === 0;
       return `<span class="tbchip ${t.kind}${now ? " now" : ""}${h && h.cur <= 0 ? " down" : ""}${t.owner && t.owner === me() ? " mine" : ""}${fx}" data-tsel="${t.id}" title="${esc(nm)}${h ? ` · ${exact ? `${h.cur}/${h.max} PG` : healthWord(h.cur, h.max)}` : ""}">
         <i class="tbav" style="background:${(c || t).color || "#777"}">${esc(initials(nm))}${t.init != null && ph === "live" ? `<sup>${t.init}</sup>` : ""}</i>
-        ${now ? `<em>${esc(nm)}</em>` : ""}
+        ${now ? `<em>${esc((w => w.length > 1 && /^(hermano|hermana|sir|lady|lord|fray|sor|don|doña)$/i.test(w[0]) ? w[1] : w[0])(String(nm).replace(/\s*\(.*?\)/g, "").trim().split(/\s+/)))}</em>` : ""}
         ${h ? `<span class="ihb ${shown <= 0.25 ? "low" : shown <= 0.5 ? "mid" : ""}"><i style="width:${Math.round(shown * 100)}%"></i></span>` : ""}
         <span class="tbconds">${(t.conds || []).slice(0, 4).map(cd => { const e = estado(cd.id); return e ? `<i style="background:${e.c}"></i>` : ""; }).join("")}</span></span>`;
     };

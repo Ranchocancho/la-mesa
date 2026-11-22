@@ -43,7 +43,7 @@ export function renderSheet(el) {
     ${sheetFreeHTML(s, c)}
     ${(+c.lvlGrant || 0) > c.level ? `<a class="flvl" href="#personajes">⬆ El máster te concede subir a nivel ${c.lvlGrant} · abrir la ficha</a>` : ""}
     <div class="fstats">
-      <div class="fhp ${c.hp.cur === 0 ? "zero" : hpPct < 34 ? "low" : ""}"><div class="bar"><i style="width:${hpPct}%"></i></div><span><b>${c.hp.cur}</b>/${c.hp.max} PG${c.hp.temp ? ` <em>+${c.hp.temp}</em>` : ""}</span></div>
+      <div class="fhp ${c.hp.cur === 0 ? "zero" : hpPct < 34 ? "low" : ""}"><div class="bar" role="meter" aria-valuemin="0" aria-valuemax="${c.hp.max}" aria-valuenow="${c.hp.cur}" aria-label="Puntos de golpe"><i style="width:${hpPct}%"></i><span><b>${c.hp.cur}</b> / ${c.hp.max} PG${c.hp.temp ? ` <em>+${c.hp.temp} temp.</em>` : ""}</span></div></div>
       <span class="fst"><small>CA</small><b>${c.ac}</b></span><span class="fst"><small>Vel.</small><b>${(+c.speed).toLocaleString("es-ES")} m</b></span><span class="fst"><small>Inic.</small><b>${sign(mod(c.abilities.des))}</b></span>
     </div>
     ${tok && s.board ? lightLine(s, c, tok) : ""}
