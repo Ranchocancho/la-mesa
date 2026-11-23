@@ -2,7 +2,9 @@
 import { store } from "../core/store.js";
 import { isDM, currentUser } from "../core/session.js";
 import { publish, RESULT, mySkin, setMySkin, diceAnim, setDiceAnim } from "../core/dados.js";
-import { decide, damageFor, nameOf, attack, attacksOf, oaOpen, answerOA } from "../core/combate.js";
+import { decide, damageFor, nameOf, attack, attacksOf, oaOpen, answerOA, reactionPending } from "../core/combate.js";
+import { rxOpen, answerRx, RX } from "../core/reacciones.js";
+import { sneakInfo, smiteInfo, canBardic, useBardic } from "../core/rasgos.js";
 import { canInspire, useInspiration } from "../core/inspiracion.js";
 import { masteryChoice, useMastery, applyMastery, cleaveTargets, MASTERY } from "../core/maestria.js";
 import { applySpell, toggleMagicRes, useLegendaryRes } from "../core/hechizos.js";
@@ -21,6 +23,13 @@ function dmgButtons(s, r, short = false) {
   const lbl = tr ? (tr.k === "resiste" ? " ½" : tr.k === "vulnerable" ? " ×2" : " 0") : "";
   return `<button class="ib gold" data-dec="${r.id}|${act}" title="${tr ? esc(tr.txt) : "Aplicar el daño"}">✓ Aplicar${lbl}${tr && r.total != null ? ` (${withTraits(r.total, tr)})` : ""}</button>${act !== "ok" ? `<button class="ib" data-dec="${r.id}|ok" title="Daño completo, sin la defensa">${r.total}</button>` : ""}${act !== "half" ? `<button class="ib" data-dec="${r.id}|half" title="Mitad">½</button>` : ""}${short ? "" : `<button class="ib" data-edit="${r.id}" title="Cambiar">✎</button><button class="ib danger" data-dec="${r.id}|void" title="Anular">✕</button>`}`;
 }
+/** Tirar el daño del impacto y, si toca, ofrecer Ataque furtivo o Castigo divino (como BG3 al acertar). */
+function dmgOffer(s, r) {
+  const S = sneakInfo(s, r), M = smiteInfo(s, r), x2 = r.result === "crit" ? " ×2" : "";
+  return `<button class="ib red" data-dmg="${r.id}" title="Tirar daño">🩸 Tirar daño${x2}</button>`
+    + (S ? `<button class="ib gold" data-dmg="${r.id}|sneak" title="Ataque furtivo (una vez por turno): ${esc(S.why)}">🗡 + Furtivo ${S.dice}${x2}</button>` : "")
+    + (M ? M.slots.slice(0, 3).map(l => `<button class="ib gold" data-dmg="${r.id}|smite|${l}" title="Castigo divino: acción adicional y un espacio de nivel ${l}. ${M.dice(l)} de daño radiante${M.extra ? " (incluye +1d8 contra infernales y muertos vivientes)" : ""}.">✨ + Castigo nv${l} ${M.dice(l)}${x2}</button>`).join("") : "");
+}
 function rollInfo(s, r) {
   const t = s.tokens.find(x => x.id === r.target), parts = [];
   if (r.why) parts.push(`<p>${r.why.map(w => `<span class="${w.startsWith("ventaja") ? "adv" : w.startsWith("desventaja") ? "dis" : ""}">${esc(w)}</span>`).join(" · ")}</p>`);
@@ -38,7 +47,7 @@ function rollInfo(s, r) {
 let adv = 0, secret = false, editing = null, pool = {}, cleavePick = null;
 const SKIN_NAMES = { rubi: "Rubí", zafiro: "Zafiro", esmeralda: "Esmeralda", amatista: "Amatista", obsidiana: "Obsidiana", oro: "Oro", hueso: "Hueso", madera: "Madera" };
 const poolExpr = mod => { const p = Object.entries(pool).filter(([, n]) => n).map(([d, n]) => `${n}d${d}`).join("+"); return (p || "") + (mod ? (mod > 0 ? "+" : "") + mod : ""); };
-const KIND = { attack: "Ataque", damage: "Daño", check: "Prueba", save: "Salvación", init: "Iniciativa", free: "Tirada", spell: "Conjuro", cast: "Conjuro", heal: "Curación", death: "Contra muerte", oa: "Reacción", loot: "Tesoro", xp: "Experiencia", mastery: "Maestría" };
+const KIND = { attack: "Ataque", damage: "Daño", check: "Prueba", save: "Salvación", init: "Iniciativa", free: "Tirada", spell: "Conjuro", cast: "Conjuro", heal: "Curación", death: "Contra muerte", oa: "Reacción", react: "Reacción", rxuse: "Reacción", feat: "Rasgo", loot: "Tesoro", xp: "Experiencia", mastery: "Maestría" };
 const HOW = { full: "Completo", half: "Mitad", none: "Nada", double: "Doble" };
 let spellPer = {}, spellDefOff = {};
 
@@ -51,7 +60,7 @@ export function renderRolls(el, o) {
   if (el.contains(document.activeElement) && /INPUT|SELECT/.test(document.activeElement.tagName)) return; // no pisar lo que se escribe
   const s = store.get(), dm = isDM(s), me = currentUser(s);
   const list = visibleRolls(s).slice(-30).reverse();
-  const hasDamage = id => (s.rolls || []).some(x => x.link === id && x.status !== "void");
+  const hasDamage = id => (s.rolls || []).some(x => x.link === id && x.kind === "damage" && x.status !== "void");
   const pe = poolExpr(0);
   el.innerHTML = `${o.tray === false ? "" : `<div class="tray">
       <div class="trayd">${[4, 6, 8, 10, 12, 20, 100].map(d => `<button class="die d${d} ${pool[d] ? "inpool" : ""}" data-d="${d}" title="Añadir un d${d} a la mano">d${d}${pool[d] ? `<i>${pool[d]}</i>` : ""}</button>`).join("")}</div>
@@ -63,7 +72,7 @@ export function renderRolls(el, o) {
         ${dm ? `<button class="btn small" id="trsec" aria-pressed="${secret}" title="Solo la ves tú">Secreta</button>` : ""}
 </div>
     </div>`}
-    ${o.log === false ? "" : `<div class="rolls">${list.filter(r => r.kind !== "oapass" && !(r.link && list.some(x => x.id === r.link && (r.kind === "damage" || x.kind === "req")))).map(r => rowHTML(s, r, dm, me, hasDamage, list.find(x => x.kind === "damage" && x.link === r.id))).join("") || `<p class="empty">Aún no se ha tirado nada. ¡Que rueden los dados!</p>`}</div>`}`;
+    ${o.log === false ? "" : `<div class="rolls">${list.filter(r => r.kind !== "oapass" && r.kind !== "rxpass" && !(r.link && list.some(x => x.id === r.link && (r.kind === "damage" || x.kind === "req")))).map(r => rowHTML(s, r, dm, me, hasDamage, list.find(x => x.kind === "damage" && x.link === r.id))).join("") || `<p class="empty">Aún no se ha tirado nada. ¡Que rueden los dados!</p>`}</div>`}`;
 
   if (o.tray !== false) {
   const mod = () => +($("#trmod", el).value || 0);
@@ -87,7 +96,10 @@ export function renderRolls(el, o) {
   const sc = $("#trsec", el); if (sc) sc.onclick = () => { secret = !secret; renderRolls(el); };
   }
   $$("[data-dec]", el).forEach(b => b.onclick = () => { const [id, a] = b.dataset.dec.split("|"); decide(id, a); });
-  $$("[data-dmg]", el).forEach(b => b.onclick = () => damageFor(b.dataset.dmg));
+  $$("[data-dmg]", el).forEach(b => b.onclick = () => { const [id, k, v] = b.dataset.dmg.split("|"); damageFor(id, k === "sneak" ? { sneak: true } : k === "smite" ? { smite: +v } : {}); });
+  $$("[data-rx]", el).forEach(b => b.onclick = () => answerRx(b.dataset.rx, true));
+  $$("[data-rxno]", el).forEach(b => b.onclick = () => answerRx(b.dataset.rxno, false));
+  $$("[data-bard]", el).forEach(b => b.onclick = () => useBardic(b.dataset.bard));
   $$("[data-rqmiss]", el).forEach(b => b.onclick = () => import("./peticiones.js").then(m => { const r = (store.get().rolls || []).find(x => x.id === b.dataset.rqmiss); if (r) m.answerMissing(r); }));
   $$("[data-per]", el).forEach(x => x.onchange = () => { const [id, t] = x.dataset.per.split("|"); spellPer[id] = { ...(spellPer[id] || {}), [t]: x.value }; renderRolls(el); });
   $$("[data-apply]", el).forEach(b => b.onclick = () => {
@@ -132,7 +144,7 @@ function spellTable(s, r, dm) {
 }
 
 /* ---------- Una línea por acción (estilo registro de combate): quién → a quién · qué · resultado ---------- */
-const ICON = { xp: "⭐", loot: "💰", attack: "⚔", damage: "🩸", save: "🛡", check: "🎯", init: "⏱", spell: "✨", cast: "✨", heal: "✚", death: "💀", oa: "⚠", free: "🎲", mastery: "⚔" };
+const ICON = { xp: "⭐", loot: "💰", attack: "⚔", damage: "🩸", save: "🛡", check: "🎯", init: "⏱", spell: "✨", cast: "✨", heal: "✚", death: "💀", oa: "⚠", react: "⚡", rxuse: "⚡", feat: "🎵", free: "🎲", mastery: "⚔" };
 const first = n => String(n || "").split(" ")[0];
 function who(s, id) { const t = s.tokens.find(x => x.id === id); return t ? first(nameOf(s, t)) : ""; }
 // Quién tira (la figura, o la persona si es una tirada libre) y su color
@@ -154,6 +166,9 @@ function what(s, r) {
     case "init": return r.inits ? `iniciativa de ${r.inits.length} criaturas` : "iniciativa";
     case "death": return "salvación contra muerte";
     case "oa": return `puede atacar de oportunidad a <b>${esc(t)}</b>`;
+    case "react": return `puede reaccionar: <em>${esc((RX[r.rx] || {}).n || "reacción")}</em>`;
+    case "rxuse": return `<em>${esc(r.label.replace(/^\S+ /, ""))}</em>`;
+    case "feat": return esc(r.label.replace(/^\S+ /, ""));
     case "mastery": return `pide <em>${esc((r.mas || {}).n || "maestría")}</em> contra <b>${esc(t)}</b>${r.status === "ok" ? " ✓" : ""}`;
     case "save": case "check": return esc(r.label.replace(/ de [A-ZÁÉÍÓÚ][\wáéíóúñ-]+( [A-ZÁÉÍÓÚ][\wáéíóúñ-]+)*$/, "").replace(/^Salvación de /, "salvación de ").replace(/^Prueba de /, "prueba de "));
     case "loot": case "xp": return `<b>${esc(r.label)}</b>`;
@@ -194,7 +209,8 @@ function rowHTML(s, r, dm, me, hasDamage, dmgRow) {
   const d20 = (r.dice || []).find(x => x.d === 20 && !x.drop), nat = d20 && (d20.v === 20 || d20.v === 1) ? d20.v : 0;
   const A = actor(s, r), sys = r.kind === "loot" || r.kind === "xp";
   const val = r.total == null || r.kind === "heal" || sys ? "" : `<span class="rv ${nat === 20 ? "n20" : nat === 1 ? "n1" : ""}" title="${esc(r.expr || "")}">${showRes ? r.total : "?"}</span>`;
-  const canDmg = r.kind === "attack" && !pend && r.status !== "void" && r.result !== "miss" && r.dmg && !hasDamage(r.id) && (dm || r.who === me.id);
+  const canDmg = r.kind === "attack" && !pend && r.status !== "void" && r.result !== "miss" && r.dmg && !hasDamage(r.id) && (dm || r.who === me.id) && !reactionPending(s, r.id);
+  const rxWait = r.kind === "attack" && !hasDamage(r.id) && reactionPending(s, r.id);
   // Fuera de turno: tiradas libres de un jugador en pleno combate cuando no le toca
   const cur = s.board && s.board.combat === "live" && s.board.turn ? s.tokens.find(t => t.id === s.board.turn) : null;
   const offTurn = r.kind === "free" && cur && r.who && r.seq === s.board.seq && !(cur.owner && cur.owner === r.who) && (s.users.find(u => u.id === r.who) || {}).role === "player";
@@ -204,7 +220,9 @@ function rowHTML(s, r, dm, me, hasDamage, dmgRow) {
     if (!showRes) out.push(`<span class="wait">⏳ el máster lo confirma</span>`);
     else if (r.result) out.push(`<span class="pill ${r.result}">${RESULT[r.result]}</span>${r.ac != null && dm ? `<small>CA ${r.ac}</small>` : ""}`);
     if (dmgRow) out.push(`<span class="dmgd ${dmgRow.status}">🩸 <b>${dmgRow.applied != null ? "−" + dmgRow.applied : dmgRow.total}</b> ${esc(dmgRow.dtype || "")}${dmgRow.crit ? " · crít." : ""}${dmgRow.applied == null && dmgRow.status === "pending" ? (dm ? "" : ` <span class="wait">⏳ se aplica</span>`) : ""}${dmgRow.note ? ` <small>${esc(dmgRow.note)}</small>` : ""}</span>`);
+    else if (rxWait) out.push(`<span class="wait">⏸ esperando una reacción</span>`);
     else if (r.result && r.result !== "miss" && !pend && r.status !== "void") out.push(`<span class="wait">falta el daño</span>`);
+    if (r.note && r.kind === "attack" && /Escudo|Esquiva/.test(r.note)) out.push(`<small class="rxnote">${esc(r.note)}</small>`);
   }
   if (r.kind === "damage" && !dmgRow) out.push(r.applied != null ? `<span class="dmgd ok">🩸 <b>−${r.applied}</b> PG a ${esc(who(s, r.target))}</span>` : `<span class="wait">⏳ ${dm ? "aplica el daño" : "el máster lo aplica"}</span>`);
   if ((r.kind === "save" || r.kind === "death") && r.result) out.push(`<span class="pill ${r.result === "save" ? "hit" : "miss"}">${r.result === "save" ? "✓ Salva" : "✗ Falla"}${r.dc ? ` · CD ${r.dc}` : ""}</span>`);
@@ -220,7 +238,8 @@ function rowHTML(s, r, dm, me, hasDamage, dmgRow) {
   const acts = [
     dm && pend && r.kind === "attack" ? `<button class="ib gold" data-dec="${r.id}|ok" title="Confirmar">✓ Vale</button><button class="ib" data-dec="${r.id}|flip" title="${r.result === "miss" ? "Que impacte" : "Que falle"}">⇄</button>` : "",
     dm && pend && r.kind === "damage" ? dmgButtons(s, r, true) : "",
-    canDmg ? `<button class="ib red" data-dmg="${r.id}" title="Tirar daño">🩸 Tirar daño${r.result === "crit" ? " ×2" : ""}</button>` : "",
+    canDmg ? dmgOffer(s, r) : "",
+    (() => { const die = canBardic(s, r); return die ? `<button class="ib insp" data-bard="${r.id}" title="Inspiración bárdica: tira el ${die} y súmalo a esta tirada fallida">🎵 +${die}</button>` : ""; })(),
     dmgActs,
     canInspire(s, r) ? `<button class="ib insp" data-insp="${r.id}" title="Gastar tu inspiración heroica: vuelve a tirar ${r.kind === "damage" ? "el dado más bajo" : "el d20"} y usa el nuevo resultado">✨ Repetir</button>` : "",
     (() => { const mc = masteryChoice(s, r); return mc && (dm || r.who === me.id) ? `<button class="ib gold" data-mas="${r.id}" title="${esc(MASTERY[mc.n])}">⚔ ${esc(mc.label)}</button>` : ""; })(),
@@ -237,6 +256,10 @@ function rowHTML(s, r, dm, me, hasDamage, dmgRow) {
     ${r.kind === "oa" ? (() => { const open = oaOpen(s, r), ans = (s.rolls || []).find(x => x.link === r.id && x.status !== "void"), mineOA = dm || ((s.tokens.find(t => t.id === r.tok) || {}).owner === me.id);
       return open ? (mineOA ? `<div class="r2"><span class="wait">⏸ decide ${esc(who(s, r.tok))}</span><span class="ra2"><button class="ib gold" data-oa="${r.id}">⚔ Atacar</button><button class="ib" data-oano="${r.id}">Dejar pasar</button></span></div>` : `<div class="r2"><span class="wait">⏸ ${esc(who(s, r.tok))} decide si ataca</span></div>`)
         : `<div class="r2"><small>${ans ? (ans.kind === "oapass" ? "Lo dejó pasar" : "Atacó") : "No la usó (el turno siguió)"}</small></div>`; })() : ""}
+    ${r.kind === "react" ? (() => { const open = rxOpen(s, r), ans = (s.rolls || []).find(x => x.link === r.id && (x.kind === "rxuse" || x.kind === "rxpass")), X = RX[r.rx] || { n: "Reacción", i: "⚡", q: "" }, mineRx = dm || ((s.tokens.find(t => t.id === r.tok) || {}).owner === me.id);
+      const left = Math.max(0, Math.ceil((45000 - (Date.now() - (r.at || 0))) / 1000));
+      return open ? (mineRx ? `<div class="r2 rxask"><span class="wait">⏸ ${esc(X.q)} <small>(${left} s)</small></span><span class="ra2"><button class="ib gold" data-rx="${r.id}">${X.i} ${esc(X.n)}</button><button class="ib" data-rxno="${r.id}">No</button></span></div>` : `<div class="r2"><span class="wait">⏸ ${esc(who(s, r.tok))} decide si usa ${esc(X.n)}</span></div>`)
+        : `<div class="r2"><small>${ans ? (ans.kind === "rxpass" ? "No la usó" : `${X.i} La usó`) : "No la usó"}</small></div>`; })() : ""}
     ${open ? `<div class="rdet"><div class="dice">${(r.dice || []).map(x => `<span class="dv d${x.d} ${x.drop ? "drop" : ""} ${x.d === 20 && x.v === 20 && !x.drop ? "nat20" : ""} ${x.d === 20 && x.v === 1 && !x.drop ? "nat1" : ""}">${x.v}</span>`).join("")}${r.expr && r.expr.match(/[+-]\d+$/) ? `<span class="dmod">${r.expr.match(/[+-]\d+$/)[0]}</span>` : ""}</div>
       <div class="rl">${esc(r.label)}</div>${r.why ? `<small class="${r.adv > 0 ? "adv" : r.adv < 0 ? "dis" : ""}">${esc(r.why.join(" · "))}</small>` : ""}${r.note && r.kind !== "death" ? `<small>${esc(r.note)}</small>` : ""}
       <div class="rinfo">${rollInfo(s, r)}</div>

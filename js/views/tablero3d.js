@@ -13,9 +13,11 @@ import { terrainCanvas } from "./texturas.js";
 import { PROC } from "./props3d.js";
 import { siluetaFor, siluetaURL } from "../data/siluetas.js";
 import { estado, etiqueta } from "../data/estados.js";
+import { store } from "../core/store.js";
+import { leftOf } from "../core/duraciones.js";
 import { computeVision, explored, visionOn, tokenSeen } from "../core/vision.js";
 import { fogCanvas } from "./niebla.js";
-import { elevAt, altOf, hasElev, dist3 } from "../core/alturas.js";
+import { elevAt, altOf, hasElev, dist3, topOfTok } from "../core/alturas.js";
 import { templateCells, templateOk } from "../core/objetivo.js";
 import { colors, onColors } from "../core/colores.js";
 import { playEffect, EFECTOS } from "./efectos3d.js";
@@ -235,16 +237,17 @@ function namePlate(name, pct, txt, color, hl, pxH = 48) {
   s.scale.set(PLATE_H * Wu / U, PLATE_H, 1); s.center.set(0.5, 0); s.renderOrder = 9; return s;
 }
 function condTag(conds) {
-  const list = conds.map(cd => ({ e: estado(cd.id || cd), lvl: cd.lvl })).filter(x => x.e);
+  const list = conds.map(cd => ({ e: estado(cd.id || cd), lvl: cd.lvl, left: cd.left })).filter(x => x.e);
   const c = document.createElement("canvas"), rowH = 50; c.width = 400; c.height = rowH * list.length + 10;
   const g = c.getContext("2d"); g.font = "bold 30px Georgia"; g.textAlign = "center";
-  list.forEach(({ e, lvl }, i) => {
+  list.forEach(({ e, lvl, left }, i) => {
     const y = 5 + i * rowH; g.shadowColor = "rgba(0,0,0,.8)"; g.shadowBlur = 8;
     g.fillStyle = e.c; g.beginPath(); g.roundRect(14, y, 372, rowH - 8, 20); g.fill(); g.shadowBlur = 0;
     g.strokeStyle = "rgba(255,255,255,.75)"; g.lineWidth = 3; g.stroke();
     const lum = new THREE.Color(e.c), dark = (lum.r * 0.3 + lum.g * 0.59 + lum.b * 0.11) > 0.55;
-    g.lineWidth = 5; g.strokeStyle = dark ? "rgba(255,255,255,.5)" : "rgba(0,0,0,.65)"; g.strokeText(etiqueta(e.id, lvl).toUpperCase(), 200, y + 32);
-    g.fillStyle = dark ? "#1a140c" : "#fff"; g.fillText(etiqueta(e.id, lvl).toUpperCase(), 200, y + 32);
+    g.lineWidth = 5; g.strokeStyle = dark ? "rgba(255,255,255,.5)" : "rgba(0,0,0,.65)"; const txt = etiqueta(e.id, lvl).toUpperCase() + (left != null ? ` ⏳${left}` : "");
+    g.strokeText(txt, 200, y + 32);
+    g.fillStyle = dark ? "#1a140c" : "#fff"; g.fillText(txt, 200, y + 32);
   });
   const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(c), depthTest: false, transparent: true }));
   s.scale.set(3.6, 3.6 * c.height / 400, 1); s.renderOrder = 11; s.center.set(0.5, 0);
@@ -307,7 +310,7 @@ export function createBoard3D(host, opts) {
 
   const cx = c => (c - G.cols / 2 + 0.5) * CELL, cz = r => (r - G.rows / 2 + 0.5) * CELL;
   // Alturas: el suelo de cada casilla sube o baja (YS unidades por metro); las figuras que vuelan, un poco más
-  const gy = (c, r) => elevAt(G, c, r) * YS, ty = t => gy(t.c, t.r) + altOf(t) * YS;
+  const gy = (c, r) => elevAt(G, c, r) * YS, ty = t => gy(t.c, t.r) + (altOf(t) + topOfTok(G, t)) * YS;
   const inside = h => h.c >= 0 && h.r >= 0 && h.c < G.cols && h.r < G.rows;
   const isWall = (c, r) => { const t = (G.terrain || {})[c + "," + r]; return !!(TERRAIN[t] && TERRAIN[t].wall); };
 
@@ -663,7 +666,7 @@ export function createBoard3D(host, opts) {
         if (rec.mini && rec.mini.userData.mats) rec.mini.userData.mats.forEach(m => m.color.setScalar(down ? 0.45 : 1));
       }
       // Estados: anillos de color en la peana, etiqueta escrita y algunos efectos en la figura
-      const conds = t.conds || [], condKey = JSON.stringify(conds);
+      const conds = t.conds || [], S0 = store.get(), condKey = JSON.stringify(conds) + conds.map(cd => cd.dur ? leftOf(S0, cd) : "").join(",");
       if (condKey !== rec.condKey) {
         rec.condKey = condKey;
         (rec.rings || []).forEach(o => rec.root.remove(o)); rec.rings = [];
@@ -673,7 +676,7 @@ export function createBoard3D(host, opts) {
           ring.rotation.x = Math.PI / 2; ring.position.y = 0.1 + i * 0.03; rec.root.add(ring); rec.rings.push(ring);
         });
         if (rec.tag) { rec.root.remove(rec.tag); rec.tag = null; }
-        if (conds.length) { rec.tag = condTag(conds); rec.root.add(rec.tag); }
+        if (conds.length) { rec.tag = condTag(conds.map(cd => cd.dur ? { ...cd, left: leftOf(S0, cd) } : cd)); rec.root.add(rec.tag); }
         const has = id => conds.some(cd => (cd.id || cd) === id);
         rec.prone = has("derribado") || has("inconsciente");
         const ghost = has("invisible"), stone = has("petrificado");
@@ -842,7 +845,7 @@ export function createBoard3D(host, opts) {
   }
   // ---------- Alcance del movimiento: casillas a las que llegas este turno ----------
   const reachGrp = new THREE.Group(); scene.add(reachGrp);
-  let reachFor = null, reachR = null, pathMesh = null;
+  let reachFor = null, reachR = null, pathMesh = null, pathOA = [];
   const RMAT = {
     walk: new THREE.MeshBasicMaterial({ transparent: true, depthWrite: false }),
     dif: new THREE.MeshBasicMaterial({ color: 0xe0b45a, transparent: true, depthWrite: false }),
@@ -881,7 +884,8 @@ export function createBoard3D(host, opts) {
     const p = pathTo(reachR, h.c, h.r); if (p.length < 2) return;
     const x = reachR.cells.get(h.c + "," + h.r);
     const curve = new THREE.CatmullRomCurve3(p.map(q => new THREE.Vector3(cx(q.c), gy(q.c, q.r) + 0.3, cz(q.r))), false, "centripetal", 0.2);
-    pathMesh = new THREE.Mesh(new THREE.TubeGeometry(curve, p.length * 6, 0.2, 6), new THREE.MeshBasicMaterial({ color: x && x.dash ? colors().dash : colors().path, transparent: true, opacity: 0.95, depthWrite: false }));
+    const oa = opts.oaPreview && reachFor ? opts.oaPreview(reachFor, p) : []; pathOA = oa;
+    pathMesh = new THREE.Mesh(new THREE.TubeGeometry(curve, p.length * 6, 0.2, 6), new THREE.MeshBasicMaterial({ color: oa.length ? 0xff3b30 : x && x.dash ? colors().dash : colors().path, transparent: true, opacity: 0.95, depthWrite: false }));
     pathMesh.renderOrder = 3; reachGrp.add(pathMesh);
   }
 
@@ -1022,7 +1026,7 @@ export function createBoard3D(host, opts) {
     if (inside(h)) { hl.visible = true; hl.position.x = cx(h.c); hl.position.z = cz(h.r); hl.material.color.set(ok ? 0xd6aa4e : 0xb33a2e); }
     if (!drag.last || drag.last.c !== h.c || drag.last.r !== h.r) { drag.last = h; showPath(h); }
     const d = dist(drag.from, h);
-    tip.hidden = false; tip.textContent = reachR ? moveHint(reachR, h.c, h.r) : `${(d * 1.5).toLocaleString("es-ES")} m (${d} casillas)`;
+    tip.hidden = false; tip.textContent = (reachR ? moveHint(reachR, h.c, h.r) : `${(d * 1.5).toLocaleString("es-ES")} m (${d} casillas)`) + (pathOA.length ? ` · ⚠ provocas ataque de oportunidad: ${pathOA.join(", ")} (Destrabarse lo evita)` : "");
     const r = host.getBoundingClientRect(); tip.style.left = (e.clientX - r.left + 14) + "px"; tip.style.top = (e.clientY - r.top + 14) + "px";
   });
   const up = e => {

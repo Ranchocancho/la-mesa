@@ -25,6 +25,9 @@ export const ESTADOS = [
   { id: "debilitado", n: "Debilitado (maestría)", c: "#b08a6a", t: "Debilitar: desventaja en su próxima tirada de ataque antes del principio del siguiente turno de quien le acertó." },
   { id: "ralentizado", n: "Ralentizado (maestría)", c: "#6a8ab0", t: "Ralentizar: su velocidad baja 3 m hasta el principio del siguiente turno de quien le acertó (no se acumula)." },
   { id: "molestar", n: "Molestar (maestría)", c: "#c9a14a", t: "Molestar: ventaja en su siguiente tirada de ataque contra la criatura a la que dañó, antes del final de su siguiente turno." },
+  { id: "escudo", n: "Escudo", c: "#7fb6e8", t: "Conjuro Escudo (reacción): +5 a la CA, también contra el ataque que lo provocó, hasta el principio de su siguiente turno." },
+  { id: "furia", n: "Furia", c: "#c0392b", t: "Furia (bárbaro, SRD 2024): resistencia al daño contundente, cortante y perforante; suma su daño de furia a los ataques que usan Fuerza; ventaja en pruebas y salvaciones de Fuerza; no puede lanzar conjuros ni concentrarse. Dura hasta el final de su siguiente turno y se prolonga si ataca a un enemigo, le obliga a una salvación o gasta una acción adicional (hasta 10 minutos). Termina si queda incapacitado." },
+  { id: "insp_bardica", n: "Inspiración bárdica", c: "#d98cd0", t: "Tiene un dado de Inspiración bárdica: una vez en la siguiente hora, cuando falle una prueba con d20 (ataque, salvación o prueba de característica), puede tirarlo y sumarlo, lo que puede convertir el fallo en éxito." },
   { id: "muerto", n: "Muerto", c: "#111111", t: "Ha fallado tres salvaciones contra muerte (o recibió daño masivo). Solo la magia puede devolverlo." }
 ];
 export const estado = id => ESTADOS.find(e => e.id === id);

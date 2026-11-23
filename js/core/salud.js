@@ -38,6 +38,7 @@ export function savePlan(s, t, ab, coverBonus = 0, opts = {}) {
   if ((ab === "fue" || ab === "des") && ["paralizado", "aturdido", "inconsciente", "petrificado"].some(x => hasC(t, x))) { autoFail = true; why.push("falla automáticamente (" + ["paralizado", "aturdido", "inconsciente", "petrificado"].find(x => hasC(t, x)) + ")"); }
   if (ab === "des" && hasC(t, "apresado")) { adv--; why.push("desventaja: apresado"); }
   if (ab === "des" && hasC(t, "esquivando")) { adv++; why.push("ventaja: esquivando"); }
+  if (ab === "fue" && hasC(t, "furia")) { adv++; why.push("ventaja: furia"); }
   if (ab === "des" && coverBonus) { bonus += coverBonus; why.push(`+${coverBonus} por cobertura`); }
   const ex = condLvl(t, "agotamiento"); if (ex) { bonus -= 2 * ex; why.push(`−${2 * ex} por cansancio`); }
   if (hasC(t, "bendecido")) { extra += "+1d4"; why.push("+1d4 Bendición"); }
@@ -165,6 +166,7 @@ export function shortRest(charId, dice) {
     const ch = st.characters.find(x => x.id === charId); ch.hdUsed = (ch.hdUsed || 0) + n;
     if (ch.hp.cur > 0) ch.hp.cur = Math.min(ch.hp.max, ch.hp.cur + amt);
     if (/brujo/i.test(ch.cls) && ch.spells && ch.spells.slots) Object.values(ch.spells.slots).forEach(sl => { sl.used = 0; });
+    restResFn && restResFn(ch, false); // Furia: recupera un uso; Inspiración bárdica (nivel 5+): todos
     const x = (st.rolls || []).find(y => y.id === r.id); if (x) { x.note = `+${amt} PG`; x.status = "ok"; }
   });
 }
@@ -176,6 +178,7 @@ export function longRest(charId) {
     c.hp.cur = c.hp.max; c.hp.temp = 0; c.hdUsed = 0; c.death = null;
     if (/^Humano/i.test(c.species || "")) c.inspiration = true; // Ingenioso
     if (c.spells && c.spells.slots) Object.values(c.spells.slots).forEach(sl => { sl.used = 0; });
+    restResFn && restResFn(c, true);
     const t = s.tokens.find(x => x.kind === "pc" && x.char === c.id);
     if (t) {
       delCond(t, "inconsciente"); dropConcentration(s, t);
@@ -186,3 +189,6 @@ export function longRest(charId) {
   toast("Descanso largo: PG, dados de golpe y espacios de conjuro recuperados." + (c0 && /^Humano/i.test(c0.species || "") ? " ✨ Ingenioso: inspiración heroica." : ""));
 }
 export { hasC as hasCondition, addCond, delCond };
+
+let restResFn = null;
+import("./rasgos.js").then(m => { restResFn = m.restRes; });

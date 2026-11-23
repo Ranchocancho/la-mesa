@@ -2,7 +2,9 @@
 // Lo lee la barra superior de la mesa (a la izquierda de la iniciativa) para que, aunque
 // os pongáis a hablar, siempre se sepa qué falta por tirar o por resolver.
 import { unseenFn } from "../core/vision.js";
-import { nameOf, oaOpen } from "../core/combate.js";
+import { nameOf, oaOpen, reactionPending } from "../core/combate.js";
+import { rxOpen, RX } from "../core/reacciones.js";
+import { sneakInfo, smiteInfo } from "../core/rasgos.js";
 import { hpOf, order } from "../core/mesa.js";
 import { phase, current, pending, eco, moveBudget } from "../core/turnos.js";
 import { visibleRolls } from "./tiradas.js";
@@ -55,7 +57,7 @@ export function nowState(s, me, dm) {
   // Solo cuenta lo de ESTE combate (lo de combates anteriores no puede bloquear nada)
   const since = s.board.combatAt || 0;
   const rolls = visibleRolls(s).filter(r => r.status !== "void" && (r.at || 0) >= since).slice(-40);
-  const hasDmg = id => rolls.some(x => x.link === id);
+  const hasDmg = id => rolls.some(x => x.link === id && x.kind === "damage");
   const after = (() => { const o = order(s).filter(t => !(hpOf(s, t) && hpOf(s, t).cur <= 0 && t.kind !== "pc")); const i = o.findIndex(t => t.id === (cur && cur.id)); return o.length > 1 && i >= 0 ? o[(i + 1) % o.length] : null; })();
   const base = { head: `Ronda ${s.board.round} · turno de ${cur ? N(cur) : "—"}`, next: after && !(hid(after) && !dm) ? N(after) : null, nextMine: !!(after && after.owner === me) };
   // Turno de una criatura oculta: los jugadores no deben saber ni quién es
@@ -66,6 +68,11 @@ export function nowState(s, me, dm) {
   if (oa) { const a = tok(oa.tok), t = tok(oa.target), o = ownerOf(a), mine = o ? o === me : dm, can = mine || dm;
     return task(a ? N(a) : "?", `⏸ Reacción: ${N(t)} sale del alcance de ${N(a)}. ${o ? N(a) + " decide" : "El máster decide"}: ¿ataque de oportunidad o lo deja pasar? Después sigue el turno de ${cur ? N(cur) : "—"}.`, mine,
       can ? [{ k: "oa", id: oa.id, label: "⚔ Atacar", gold: true }, { k: "oapass", id: oa.id, label: "Dejar pasar" }] : [], "alert"); }
+  // Reacciones de conjuros y rasgos (Escudo, Esquiva asombrosa, Reprensión infernal, Contrahechizo): igual, antes que nada
+  const rx = (s.rolls || []).find(r => rxOpen(s, r));
+  if (rx) { const a = tok(rx.tok), o = ownerOf(a), mine = o ? o === me : dm, X = RX[rx.rx] || { n: "Reacción", i: "⚡", q: "" };
+    return task(a ? N(a) : "?", `⏸ Reacción de ${a ? N(a) : "?"}: ${X.q} ${o ? "" : "(Decide el máster.) "}Después sigue el turno de ${cur ? N(cur) : "—"}.`, mine,
+      (mine || dm) ? [{ k: "rx", id: rx.id, label: `${X.i} ${X.n}`, gold: true }, { k: "rxno", id: rx.id, label: "No" }] : [], "alert"); }
   const atk = rolls.find(r => r.kind === "attack" && r.status === "pending");
   if (atk) return task("Máster", `Confirma el ataque de ${N(tok(atk.tok))} a ${N(tok(atk.target))}: ${atk.total} contra CA ${atk.ac ?? "?"} → ${atk.result === "miss" ? "falla" : atk.result === "crit" ? "¡crítico!" : "impacta"}.`, dm,
     dm ? [{ k: "ok", id: atk.id, label: "✓ Vale", gold: true }, { k: "flip", id: atk.id, label: atk.result === "miss" ? "Que impacte" : "Que falle" }] : [], "wait");
@@ -74,7 +81,10 @@ export function nowState(s, me, dm) {
   const sp = rolls.find(r => r.saves && r.status === "pending");
   if (sp) return task("Máster", `Resuelve el conjuro de ${N(tok(sp.tok))}: salvaciones y daño.`, dm, dm ? [{ k: "rolls", label: "Resolver", gold: true }] : []);
   const hit = rolls.find(r => r.kind === "attack" && (r.status === "ok" || r.status === "mod") && r.result && r.result !== "miss" && r.dmg && !hasDmg(r.id) && r.seq === s.board.seq);
-  if (hit) { const a = tok(hit.tok), mine = hit.who === me || (dm && (!a || a.kind !== "pc")); return task(a ? N(a) : "?", `¡Impacta! Tira el daño: ${hit.dmg}${hit.result === "crit" ? " (crítico: dados ×2)" : ""}.`, mine, mine ? [{ k: "dmg", id: hit.id, label: "🩸 Tirar daño", gold: true }] : [], "go"); }
+  if (hit && !reactionPending(s, hit.id)) { const a = tok(hit.tok), mine = hit.who === me || (dm && (!a || a.kind !== "pc")), S = sneakInfo(s, hit), M = smiteInfo(s, hit);
+    const extra = [S ? `🗡 Ataque furtivo: +${S.dice} (${S.why})` : "", M ? `✨ Castigo divino: gasta un espacio y la acción adicional (${M.dice(M.slots[0])} radiante)` : ""].filter(Boolean);
+    return task(a ? N(a) : "?", `¡Impacta! Tira el daño: ${hit.dmg}${hit.result === "crit" ? " (crítico: dados ×2)" : ""}.${extra.length ? " Puedes añadir: " + extra.join(" · ") + "." : ""}`, mine,
+      mine ? [{ k: "dmg", id: hit.id, label: "🩸 Tirar daño", gold: !S && !M }, ...(S ? [{ k: "dmgsneak", id: hit.id, label: `🗡 + Furtivo ${S.dice}`, gold: true }] : []), ...(M ? M.slots.slice(0, 2).map(l => ({ k: "dmgsmite", id: hit.id, v: l, label: `✨ + Castigo nv${l}`, gold: true })) : [])] : [], "go"); }
   if (!cur) return task("Máster", "Elige quién empieza.", dm);
   const h = hpOf(s, cur), owner = ownerOf(cur), mineTurn = owner ? owner === me : dm;
   if (cur.kind === "pc" && h && h.cur <= 0) {

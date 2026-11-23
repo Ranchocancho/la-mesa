@@ -2194,3 +2194,21 @@ button.spip{cursor:pointer}
 .foesel small{color:var(--tenue);flex:1}
 .psearch{width:100%;box-sizing:border-box;padding:7px 10px;border-radius:8px;border:1px solid var(--linea);background:rgba(0,0,0,.35);color:inherit;font:inherit}
 .mpal .pal.props{max-height:none}
+.boardsvg .rpath.oa{stroke:#ff3b30;stroke-dasharray:10 5;animation:tpulse .8s ease-in-out infinite}
+.fshove{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:6px 0;padding:6px 8px;border:1px dashed var(--linea);border-radius:8px}
+.fshove small{flex-basis:100%;color:var(--tenue)}
+.fclimb{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:6px 0}
+.fclimb span{font-size:12.5px;color:#9fc4ff}
+.fexplore{margin:6px 0;padding:8px;border:1px solid var(--linea);border-radius:10px;background:rgba(255,255,255,.02)}
+.fexplore .accs{display:flex;flex-wrap:wrap;gap:6px}
+.altb.top rect{fill:rgba(48,36,16,.9);stroke:#d6aa4e}
+.altb.top text{fill:#ffe6a6}
+
+/* ---------- Hito 54: reacciones, rasgos y duraciones en turnos ---------- */
+.durb rect{stroke:rgba(255,255,255,.85);stroke-width:1.2}
+.durb text{font:800 10px system-ui,sans-serif;fill:#fff;text-anchor:middle;paint-order:stroke;stroke:rgba(0,0,0,.65);stroke-width:2.5px}
+.cdur{font-style:normal;font-weight:800;font-size:.85em;padding:0 .35em;border-radius:999px;background:rgba(0,0,0,.35);color:#fff;margin-left:.2em}
+.cdsel{font-size:.75rem;padding:0 .2rem;margin-left:.3rem;max-width:8.5rem;background:rgba(0,0,0,.25);color:inherit;border:1px solid rgba(255,255,255,.25);border-radius:6px}
+.roll .rxask .wait{white-space:normal}
+.rxnote{color:#9fd0ff}
+.phnow .accs{margin-top:.4rem}

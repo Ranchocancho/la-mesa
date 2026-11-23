@@ -1,7 +1,7 @@
 // Tablero de casillas cuadradas (1,5 m por casilla), vista plana. Lo usan el editor de escenas y la mesa en directo.
 // Modelo: { grid: { cols, rows, terrain: {"c,r": tipo}, props: [{id,c,r,k,rot,hidden,open,label,loot,trap}] }, tokens: [...] }
 import { tokenSeen } from "../core/vision.js";
-import { elevAt, hasElev, altOf, dist3 } from "../core/alturas.js";
+import { elevAt, hasElev, altOf, dist3, topOfTok } from "../core/alturas.js";
 import { templateCells, templateOk } from "../core/objetivo.js";
 const ELEVS = [-6, -4.5, -3, -1.5, 0, 1.5, 3, 4.5, 6, 9, 12];
 const hlColor = v => v > 0 ? `hsl(38 ${40 + v * 4}% ${55 + v * 2}%)` : v < 0 ? `hsl(220 25% ${40 + v * 3}%)` : "#777";
@@ -10,6 +10,8 @@ let fogCache = { sig: "", url: "" };
 import { getImage } from "../core/images.js";
 import { esc } from "../core/ui.js";
 import { estado } from "../data/estados.js";
+import { store } from "../core/store.js";
+import { leftOf } from "../core/duraciones.js";
 import { TERRAIN, TERRAIN_CATS, PROPS, PROP_CATS, REGIONS, inRegion, isDoor, isWallT, propVisible } from "../data/mapas.js";
 import { terrainURL } from "./texturas.js";
 import { generateDungeon, generateRegion } from "../core/generador.js";
@@ -215,6 +217,8 @@ export function createBoard(host, opts) {
         ${img ? `<image href="${img}" x="${-rad}" y="${-rad}" width="${rad * 2}" height="${rad * 2}" clip-path="url(#cp-${k.id})" preserveAspectRatio="xMidYMid slice"/>` : `<text class="ini" y="5">${esc((dk.name || "?").replace(/\s*\(.*?\)/g, "").split(/\s+/).map(w => w.replace(/[^\p{L}\p{N}]/gu, "")[0]).filter(Boolean).slice(0, 2).join("").toUpperCase() || "?")}</text>`}
         ${hp ? `<rect x="${-rad}" y="${rad + 3}" width="${rad * 2}" height="6" rx="2" class="hpbg"/><rect x="${-rad}" y="${rad + 3}" width="${rad * 2 * pct}" height="6" rx="2" class="hpfg ${pct <= .25 ? "low" : pct <= .5 ? "mid" : ""}"/>` : ""}
         ${dk.isTurn ? `<circle r="${rad + 7}" class="turn"/>` : ""}
+        ${topOfTok(grid, k) ? `<g class="altb top" transform="translate(${-rad * 0.72},${-rad * 0.78})"><rect x="-17" y="-8" width="34" height="16" rx="8"/><text y="4">⤒${String(topOfTok(grid, k)).replace(".", ",")}</text></g>` : ""}
+        ${(() => { const S0 = store.get(), L = (k.conds || []).filter(cd => cd.dur && estado(cd.id)).map(cd => ({ cd, n: leftOf(S0, cd) })).sort((a, b) => a.n - b.n)[0]; return L ? `<g class="durb" transform="translate(${-rad * 0.72},${rad * 0.62})"><title>${esc(estado(L.cd.id).n)}: ${L.n} turno${L.n === 1 ? "" : "s"}</title><rect x="-15" y="-8" width="30" height="16" rx="8" style="fill:${estado(L.cd.id).c}"/><text y="4">⏳${L.n}</text></g>` : ""; })()}
         ${altOf(k) ? `<g class="altb" transform="translate(${rad * 0.72},${-rad * 0.78})"><rect x="-17" y="-8" width="34" height="16" rx="8"/><text y="4">↑${String(altOf(k)).replace(".", ",")}</text></g>` : ""}
       </g>`;
     }).join("");
@@ -438,8 +442,9 @@ export function createBoard(host, opts) {
       const g = world.querySelector(`[data-tok="${drag.token.id}"]`); if (g) g.setAttribute("transform", `translate(${x},${y})`);
       const [cx, cy] = center(h.c, h.r), cost = moveCost(opts.model().grid, drag.from, h);
       const R = opts.reach ? opts.reach(drag.token.id) : null, path = R ? pathTo(R, h.c, h.r) : [], ok = !R || (R.cells.has(h.c + "," + h.r) && !R.cells.get(h.c + "," + h.r).occ);
-      world.querySelector(".ghost").innerHTML = (inside(h) ? `<polygon points="${corners(cx, cy)}" class="target ${ok ? "" : "bad"}"/>` : "") + (path.length > 1 ? `<polyline points="${path.map(q => center(q.c, q.r).join(",")).join(" ")}" class="rpath ${R.cells.get(h.c + "," + h.r).dash ? "dash" : ""}"/>` : "");
-      showTip(R ? moveHint(R, h.c, h.r) : `${(cost * 1.5).toLocaleString("es-ES")} m${cost > dist(drag.from, h) ? " (terreno difícil)" : ""}`);
+      const oa = path.length > 1 && opts.oaPreview ? opts.oaPreview(drag.token.id, path) : [];
+      world.querySelector(".ghost").innerHTML = (inside(h) ? `<polygon points="${corners(cx, cy)}" class="target ${ok ? "" : "bad"}"/>` : "") + (path.length > 1 ? `<polyline points="${path.map(q => center(q.c, q.r).join(",")).join(" ")}" class="rpath ${R.cells.get(h.c + "," + h.r).dash ? "dash" : ""} ${oa.length ? "oa" : ""}"/>` : "");
+      showTip((R ? moveHint(R, h.c, h.r) : `${(cost * 1.5).toLocaleString("es-ES")} m${cost > dist(drag.from, h) ? " (terreno difícil)" : ""}`) + (oa.length ? ` · ⚠ provocas ataque de oportunidad: ${oa.join(", ")} (Destrabarse lo evita)` : ""));
     }
   });
   svg.addEventListener("pointerleave", () => { hover = null; if (!drag) { tip.hidden = true; ghost(); } });

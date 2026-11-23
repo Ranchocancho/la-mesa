@@ -10,6 +10,7 @@ import { rangeOf, inRange, cover, modifiers, spend, dist, gap, hasCond, canActNo
 import { toast } from "./ui.js";
 import { kitOf, kitAttacks, gate, spendKit, condsIn, sizeOk } from "./criaturas.js";
 import { masteryOf, onHit, onDamage } from "./maestria.js";
+import { weaponKind, rageDamage, extendRage, sneakInfo, smiteInfo, paySmite } from "./rasgos.js";
 
 const num = s => { const m = String(s || "").match(/[+-−]?\s*\d+/); return m ? +m[0].replace(/\s|−/g, s => s === "−" ? "-" : "") : 0; };
 /** "1d8+4 perforante" → { expr: "1d8+4", type: "perforante" } */
@@ -18,7 +19,7 @@ export function splitDamage(s) {
   return m ? { expr: m[1].replace(/\s/g, "").replace(/−/g, "-"), type: m[2].trim() } : { expr: "", type: String(s || "") };
 }
 export const nameOf = (s, t) => t ? (charOf(s, t) || t).name : "";
-export const acOf = (s, t) => { const c = charOf(s, t); return c ? +c.ac : +t.ac || 10; };
+export const acOf = (s, t) => { const c = charOf(s, t), sh = (t.conds || []).some(x => x.id === "escudo") ? 5 : 0; return (c ? +c.ac : +t.ac || 10) + sh; };
 
 /** Ataques disponibles para una ficha: armas del personaje o ataques del enemigo. */
 export function attacksOf(s, t) {
@@ -40,6 +41,9 @@ export function attacksOf(s, t) {
       if (d && d.atk && d.dmg && !d.lvl) { const k = c.level >= 17 ? 4 : c.level >= 11 ? 3 : c.level >= 5 ? 2 : 1, [, n, die] = d.dmg.match(/(\d+)d(\d+)/) || [, 1, 8];
         out.push({ name: "✨ " + d.n, atk: bonus, expr: `${n * k}d${die}`, type: d.dt, spell: true, rng: rangeOf({ al: d.al }) }); }
     }
+    // Lanzar lo que tengas a mano (SRD, armas improvisadas): sin competencia, 1d4, alcance 6/18 m
+    const fu = Math.floor(((+c.abilities.fue || 10) - 10) / 2);
+    out.push({ name: "🪨 Objeto lanzado", atk: fu, expr: `1d4${fu ? (fu > 0 ? "+" : "") + fu : ""}`, type: "contundente", improv: true, rng: { n: 6, l: 18, ranged: true } });
   }
   return out;
 }
@@ -69,15 +73,20 @@ export function attack(attackerId, targetId, weapon, force = null, use = "act", 
   const atk = weapon.atk - exn;
   // Daño del SRD que depende de algo: «más 1d4 si la tirada tenía ventaja» se suma solo; el resto, como nota para el máster
   let dmgExpr = weapon.expr;
+  // Furia (SRD 2024): + daño de furia en los ataques que usan la Fuerza; atacar en tu turno la prolonga
+  const wk = weaponKind(charOf(s, a), weapon), rd = rageDamage(s, a, wk);
+  if (rd) { dmgExpr += `+${rd}`; why.push(`+${rd} de daño por Furia`); }
+  if (hasCond(a, "furia") && phase(s) === "live" && s.board.turn === a.id) extendRage(a.id);
   if (weapon.ifAdv && adv > 0) { dmgExpr += "+" + weapon.ifAdv.e; why.push(`+${weapon.ifAdv.e} de daño por atacar con ventaja`); }
   if (weapon.alt) why.push(`Daño alternativo: ${weapon.alt.e} ${weapon.alt.t} ${weapon.alt.si}`);
   (weapon.ifs || []).forEach(x => why.push(`+${x.e} ${x.t} ${x.si}`));
   if (weapon.mas && weapon.mas.n === "Mellar") why.push("Mellar (maestría): el ataque extra de «ligera» puede ir dentro de la acción de atacar");
+  import("./acciones.js").then(m => m.unhide(a.id, "ha atacado")); // atacar te descubre (Esconderse, SRD)
   const r = publish({
     kind: "attack", label: `${use === "react" ? "Ataque de oportunidad: " : ""}${nameOf(s, a)} ataca a ${nameOf(s, t)} · ${weapon.name}`, expr: `1d20${atk >= 0 ? "+" : ""}${atk}${extra}`,
     adv, by: a.id, target: t.id, ac: acOf(s, t) + (cov.bonus || 0), dmg: dmgExpr, dtype: weapon.type,
     why: why.length ? why : null, link: opt.link || null, cov: cov.txt || null, auto: mods.autoCrit ? "Objetivo paralizado o inconsciente a 1,5 m: si impacta, es crítico" : null,
-    mas: weapon.mas && !opt.cleaveOf ? weapon.mas : null, wname: weapon.name, cleaveOf: opt.cleaveOf || null
+    mas: weapon.mas && !opt.cleaveOf ? weapon.mas : null, wname: weapon.name, cleaveOf: opt.cleaveOf || null, wk
   });
   // Lo que se gasta al atacar: Debilitar (desventaja en su próximo ataque) y Molestar (ventaja en el siguiente contra ese objetivo)
   if (r && (a.conds || []).some(c => c.id === "debilitado" || (c.id === "molestar" && c.t === t.id))) store.commit("token", st => { const k = st.tokens.find(x => x.id === a.id); if (k) k.conds = (k.conds || []).filter(c => !(c.id === "debilitado" || (c.id === "molestar" && c.t === t.id))); });
@@ -104,13 +113,21 @@ function onHitEffects(a, t, w) {
   });
 }
 
-/** Tira el daño de un ataque que ha impactado (crítico: dados dobles). */
-export function damageFor(rollId) {
+/** Tira el daño de un ataque que ha impactado (crítico: dados dobles, también los del furtivo y el castigo).
+ *  opt: { sneak: true } añade Ataque furtivo; { smite: nivel } lanza Castigo divino con ese espacio. */
+export function damageFor(rollId, opt = {}) {
   const s = store.get(), r = (s.rolls || []).find(x => x.id === rollId);
   if (!r || !r.dmg) return null;
-  const a = s.tokens.find(t => t.id === r.tok), t = s.tokens.find(x => x.id === r.target);
-  return publish({ kind: "damage", label: `Daño a ${nameOf(s, t)}${r.dtype ? " · " + r.dtype : ""}`, expr: r.dmg, crit: r.result === "crit", by: r.tok, target: r.target, link: r.id, dtype: r.dtype });
+  if (reactionPending(s, r.id)) { toast("Espera: alguien está decidiendo una reacción a este ataque."); return null; }
+  const t = s.tokens.find(x => x.id === r.target);
+  let expr = r.dmg; const extras = [];
+  if (opt.sneak) { const S = sneakInfo(s, r); if (S) { expr += "+" + S.dice; extras.push(`🗡 Ataque furtivo ${S.dice} (${S.why})`); } else opt.sneak = false; }
+  if (opt.smite) { const M = smiteInfo(s, r); if (M && M.slots.includes(+opt.smite) && paySmite(s, r, +opt.smite)) { expr += "+" + M.dice(+opt.smite); extras.push(`✨ Castigo divino nv ${opt.smite}: ${M.dice(+opt.smite)} radiante${M.extra ? " (+1d8: infernal o muerto viviente)" : ""}`); } else opt.smite = null; }
+  return publish({ kind: "damage", label: `Daño a ${nameOf(s, t)}${r.dtype ? " · " + r.dtype : ""}${extras.length ? " · " + extras.map(x => x.split(" (")[0]).join(" + ") : ""}`, expr, crit: r.result === "crit", by: r.tok, target: r.target, link: r.id, dtype: r.dtype,
+    why: extras.length ? extras : null, sneak: opt.sneak ? true : null, smite: opt.smite ? +opt.smite : null, note: opt.smite ? "El castigo es daño radiante: si el objetivo resiste el tipo del arma, esa parte no se reduce (ajústalo con ✎)." : null });
 }
+/** ¿Hay una reacción abierta a este ataque (Escudo, Esquiva asombrosa)? Hasta que se decida, no hay daño. */
+export const reactionPending = (s, atkId) => (s.rolls || []).some(x => x.kind === "react" && x.link === atkId && x.status === "pending" && !(s.rolls || []).some(y => y.link === x.id && (y.kind === "rxuse" || y.kind === "rxpass")) && Date.now() - (x.at || 0) < 45000 && (x.seq == null || !s.board || x.seq === s.board.seq));
 
 /** El máster decide sobre una tirada. action: "ok" | "void" | "flip" (impacto↔fallo) | {total} | "half" (daño a la mitad) */
 export function decide(rollId, action) {
@@ -122,8 +139,13 @@ export function decide(rollId, action) {
     if (action === "flip") { r.result = r.result === "miss" ? "hit" : "miss"; r.status = "mod"; r.note = "El máster cambia el resultado"; return; }
     if (typeof action === "object" && action.total != null) { r.note = `El máster cambia ${r.total} → ${action.total}`; r.total = action.total; r.status = "mod"; if (r.kind === "attack" && r.ac != null) r.result = r.nat === 20 ? "crit" : r.total >= r.ac ? "hit" : "miss"; return; }
     if (r.kind === "damage" && !r.applied) {
-      const amt = action === "half" ? Math.floor(r.total / 2) : action === "double" ? r.total * 2 : action === "none" ? 0 : r.total;
+      let amt = action === "half" ? Math.floor(r.total / 2) : action === "double" ? r.total * 2 : action === "none" ? 0 : r.total;
+      // Esquiva asombrosa (pícaro): el daño de ese ataque se reduce a la mitad
+      const atk0 = r.link && (s.rolls || []).find(x => x.id === r.link);
+      if (atk0 && atk0.halve && !r.halved) { amt = Math.floor(amt / 2); r.halved = true; }
       r.applied = amt; r.status = action === "ok" ? "ok" : "mod"; if (action === "half") r.note = "Mitad de daño (resistencia o salvación)"; if (action === "double") r.note = "Daño doble (vulnerabilidad)"; if (action === "none") { r.note = "Sin daño (inmunidad)"; r.status = "mod"; }
+      if (r.halved) { r.note = ((r.note ? r.note + " · " : "") + "🌀 Esquiva asombrosa: mitad"); r.status = "mod"; }
+      r.appliedAt = Date.now();
       apply = { target: r.target, amt, crit: !!r.crit, dtype: r.dtype };
       return;
     }

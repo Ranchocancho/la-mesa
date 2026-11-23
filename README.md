@@ -726,3 +726,32 @@ Comprobado simulando las reglas sobre las escrituras reales de la app (gastar es
 
 - **Objetos**: la paleta salía en una sola columna enorme y sin las categorías, porque una regla de estilo de la ficha (`.props`) le cambiaba el formato desde el hito 42. Arreglado: vuelve la cuadrícula con las categorías (Mobiliario, Luz, Mazmorra, Naturaleza, Puertas, Trampas, Tesoro, Marcas, Regiones) y hay un **buscador** que busca en todas («trampa», «árbol», «puerta»…).
 - **👹 Enemigo**: abre el bestiario del SRD. Eliges criatura, cuántas y si van ocultas, y **tocas el mapa donde quieras ponerlas**; si son varias, se reparten en las casillas libres de alrededor. Se puede seguir tocando para poner más; ✕ vuelve al enemigo genérico. «Añadir criaturas…» del panel de la escena hace lo mismo. Antes las ponía solas, lejos del punto de inicio. También en el retoque en directo desde Partida.
+
+## Hito 53 · Ataques de oportunidad avisados, acciones de mesa y tesoros para diseñar mapas
+
+- **Aviso de ataque de oportunidad (como BG3)**: al arrastrar tu figura, si el camino sale del alcance de un enemigo que puede reaccionar, el camino se pone **rojo** y la punta del cursor avisa: «⚠ provocas ataque de oportunidad: Goblin 1 (Destrabarse lo evita)». Se cuenta por el camino de verdad, casilla a casilla; antes solo se miraban el principio y el final. Tiene en cuenta las armas con alcance de 3 m. No provoca quien se ha destrabado o está oculto.
+- **Acciones de mesa del SRD**:
+  - **🫥 Esconderse**: la mesa comprueba que ningún enemigo te ve, ya sea por muros, puertas, cobertura de tres cuartos o total, o una zona muy oscura sin visión en la oscuridad. Si no, te dice quién te ve. Tira Destreza (Sigilo) CD 15 y, si lo consigues, quedas invisible: tu resultado es la CD para encontrarte. Atacar o lanzar un conjuro te descubre. El pícaro puede esconderse con su Acción astuta.
+  - **🔎 Buscar**: Sabiduría (Percepción) contra quienes estén ocultos y a la vista.
+  - **🤚 Empujón** (en vez de un ataque): «Apartar 1,5 m» o «Derribar». La etiqueta del objetivo dice la CD (8 + Fuerza + competencia), la salvación que elegirá (la mejor de Fuerza o Destreza) y la probabilidad de que falle. Solo contra alguien como mucho una categoría de tamaño mayor. Si falla, el máster lo aplica solo, y si no hay sitio detrás, no se mueve.
+  - **🪨 Objeto lanzado** (arma improvisada del SRD): sin competencia, 1d4 contundente y alcance de 6/18 m. Sale siempre entre tus armas.
+  - **🧗 Subirse a objetos** (trepar): mesas, barriles, cajas, rocas, peñascos, estatuas y árboles. Cuesta 1 m de movimiento por metro de altura, más 1,5 m si está al lado. Subido, cuenta la altura para el alcance y la vista; bajar cuesta lo mismo y moverte te baja. En la mesa se ve «⤒1». Las alturas de los objetos son regla de campaña.
+  - **🫸 Empujar objetos**: un barril, una caja, una mesa o una roca se mueve 1,5 m con Fuerza (Atletismo). La CD según el peso es regla de campaña.
+  - Fuera de combate también se puede esconderse, buscar, subirse y empujar.
+- **Tesoros para diseñar mapas**: en Objetos → Tesoro hay cofre, cofre grande, cofre con cerradura, bolsa de monedas, saco, mochila abandonada, reliquia, gemas, joyas, libro o tomo, libro de conjuros, pergamino, poción, llave, mapa, carta o nota, arma en el suelo, escudo o armadura, urna, restos con pertenencias, ofrenda en un altar, montón de oro y objeto mágico. A cada uno le pones dentro monedas y objetos (catálogo del SRD o inventados, mágicos o con sintonización) y una nota. El jugador que está al lado pulsa «Abrir» o «Coger» y todo va al botín del grupo.
+
+## Hito 54 · Reacciones, rasgos de clase y duraciones en turnos (orden de Baldur's Gate 3)
+Lo que pasa en un ataque va siempre en el mismo orden: **tirada de ataque → reacciones → impacto confirmado → opciones al impactar → daño → reacciones al daño → efectos**. Mientras alguien decide una reacción, no se puede tirar el daño (la mesa lo pone el primero en «Ahora»).
+- **Reacciones automáticas** (SRD 5.2.1). La mesa pregunta a quien puede, con botón en su ficha, en «Ahora» y en Tiradas; si nadie contesta en 45 s, se entiende que no reacciona:
+  - *Escudo*: solo si con +5 a la CA el impacto fallaría (no contra un 20 natural). Gasta el espacio y la reacción; el ataque pasa a fallo y el +5 dura hasta el principio de tu turno (⏳).
+  - *Esquiva asombrosa* (pícaro 5): el daño de ese ataque se aplica a la mitad.
+  - *Reprensión infernal*: al recibir daño de una criatura a 18 m; se lanza el conjuro contra ella (salvación de Destreza, 2d10 de fuego).
+  - *Contrahechizo*: cuando una criatura a 18 m lanza un conjuro, el conjuro **espera**; si lo usas, salvación de Constitución contra tu CD y, si la falla, se disipa sin efecto.
+- **Rasgos de clase**:
+  - *Ataque furtivo*: al impactar con arma sutil o a distancia, con ventaja o con un aliado junto al objetivo (y sin desventaja), aparece «🗡 + Furtivo Nd6». Una vez por turno; en crítico, dados dobles.
+  - *Castigo divino*: al impactar cuerpo a cuerpo, «✨ + Castigo nv N» (2d8 radiante +1d8 por nivel; +1d8 contra infernales y muertos vivientes). Gasta el espacio y la acción adicional, en tu turno.
+  - *Furia*: botón en la acción adicional con sus usos (tabla del bárbaro). Resistencia a contundente, cortante y perforante, +daño de furia con ataques de Fuerza, ventaja en salvaciones de Fuerza, sin conjuros. Dura hasta el final de tu siguiente turno; atacar en tu turno la prolonga (o «Prolongar furia»). Termina si quedas incapacitado.
+  - *Inspiración bárdica*: da el dado (d6/d8/d10/d12 según nivel) a un aliado a 18 m; al fallar un ataque, salvación o prueba, le sale «🎵 +d8» para sumarlo.
+  - Los usos de Furia e Inspiración bárdica se recuperan con los descansos (como dice cada rasgo).
+- **Duraciones en turnos**: los estados pueden llevar un contador ⏳ que se ve en la figura (2D y 3D) y en el chip, y se quitan solos. Escudo y Furia la ponen solos; los conjuros con duración (1 minuto = 10 asaltos) también; el máster puede ponerla a cualquier estado desde la pestaña PNJ (hasta su turno, fin de su turno, fin del siguiente, 3 turnos, 1 minuto).
+- Sin cambios en las reglas de Firestore: todo usa lo que ya puede escribir cada uno (los usos de rasgos van con los espacios de conjuro de la ficha; lo que toca algo ajeno lo aplica el máster al verlo).

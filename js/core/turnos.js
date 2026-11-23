@@ -10,12 +10,13 @@ import { toast } from "./ui.js";
 import { onTurnStart } from "./criaturas.js";
 import { revives } from "./defensas.js";
 import { charOf, hpOf, order } from "./mesa.js";
+import { prune, unanchor } from "./duraciones.js";
 import { TERRAIN, PROPS, isDoor, doorBlocksSight } from "../data/mapas.js";
 import { dist3, reliefBlocks } from "./alturas.js";
 
 const CELL_M = 1.5;
 /** Distancia en casillas. Con alturas en el mapa, la diferencia de altura cuenta como casillas (core/alturas.js). */
-export const dist = (a, b) => { const g = (store.get() || {}).board; return g && (g.elev || a.alt || b.alt) ? dist3(g, a, b) : Math.max(Math.abs(a.c - b.c), Math.abs(a.r - b.r)); };
+export const dist = (a, b) => { const g = (store.get() || {}).board; return g && (g.elev || a.alt || b.alt || (a.conds || []).some(c => c.id === "encima") || (b.conds || []).some(c => c.id === "encima")) ? dist3(g, a, b) : Math.max(Math.abs(a.c - b.c), Math.abs(a.r - b.r)); };
 export const metres = cells => (cells * CELL_M).toLocaleString("es-ES") + " m";
 
 /* ---------- Fases ---------- */
@@ -32,7 +33,7 @@ export function canActNow(s, tokId, use = "act") {
   return s.board.turn === tokId;
 }
 // Cierra lo que quedara a medias (ataques, daños, reacciones): un combate nuevo empieza siempre de cero
-function closePending(st) { (st.rolls || []).forEach(r => { if (r.status === "pending" && (r.kind === "attack" || r.kind === "damage" || r.kind === "oa" || r.saves)) { r.status = "void"; r.note = "Quedó sin resolver al terminar el combate"; } }); }
+function closePending(st) { (st.rolls || []).forEach(r => { if (r.status === "pending" && (r.kind === "attack" || r.kind === "damage" || r.kind === "oa" || r.kind === "react" || r.saves)) { r.status = "void"; r.note = "Quedó sin resolver al terminar el combate"; } }); }
 
 export function beginCombat() {
   const s0 = store.get(), foes = s0.tokens.filter(t => t.kind !== "pc");
@@ -72,6 +73,7 @@ function advanceTo(s, t) {
   s.tokens.forEach(k => {
     if (k.conds) k.conds = k.conds.filter(c => !(c.seq != null && (st[c.until || k.id] || 0) > c.seq) && !(c.id === "molestar" && (st[k.id] || 0) > c.vseq && t.id !== k.id));
   });
+  prune(s); // duraciones en turnos (⏳): lo que termina al empezar este turno o al acabar el anterior
   if (isDM(s)) onTurnStart(s, t); // criaturas: recarga, Regeneración y legendarias (si pasa turno un jugador, lo hace el máster al verlo: main.js)
 }
 /** 3. Terminar el turno: pasa a la siguiente criatura en pie; al dar la vuelta, nueva ronda. */
@@ -88,7 +90,7 @@ export function endTurn() {
 function turnStarted() { const id = store.get().board && store.get().board.turn; if (id) import("./peligros.js").then(m => m.onTurnStarted(id)); }
 export function stopCombat() {
   import("./experiencia.js").then(m => m.postCombatXP());
-  store.commit("board", s => { s.tokens.forEach(t => { t.init = null; t.eco = null; t.conds = (t.conds || []).filter(c => !["esquivando", "destrabado"].includes(c.id)); }); s.board.combat = null; s.board.turn = null; s.board.round = 0; s.board.from = null; s.board.starts = {}; s.board.seq = (s.board.seq || 0) + 1; });
+  store.commit("board", s => { unanchor(s); s.tokens.forEach(t => { t.init = null; t.eco = null; t.conds = (t.conds || []).filter(c => !["esquivando", "destrabado"].includes(c.id)); }); s.board.combat = null; s.board.turn = null; s.board.round = 0; s.board.from = null; s.board.starts = {}; s.board.seq = (s.board.seq || 0) + 1; });
   store.commit("roll", closePending);
 }
 

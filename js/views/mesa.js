@@ -27,13 +27,15 @@ import { computeVision, explored, visionOn, tokenSeen, unseenFn, LIGHT_ITEMS } f
 import { renderRolls, visibleRolls } from "./tiradas.js";
 import { attacksOf, attack, acOf, nameOf, damageFor, answerOA, decide } from "../core/combate.js";
 import { canActNow, phase, current, pending, beginCombat, rollInit, startRounds, endTurn, stopCombat, eco, moveBudget, speedOf, spend, toggle, ACCIONES, rangeOf, inRange, cover, modifiers, dist, metres, gap } from "../core/turnos.js";
+import { durFor, durText, durTag, leftOf } from "../core/duraciones.js";
 import { srd, findSpell } from "../core/srd.js";
 import { spellMech } from "../core/hechizos.js";
 import { classInfo, prof, mod } from "../data/dnd.js";
 import { spellDC } from "../core/salud.js";
 import { nowState } from "./ahora.js";
 import { armedNow, arm, togglePick, picked, clearPicks, onAim } from "../core/apuntar.js";
-import { weaponTargeting, attackPreview, hitChance, dmgRange, templateCells, tokensIn, templateOk } from "../core/objetivo.js";
+import { hide, search, shove, shovePreview } from "../core/acciones.js";
+import { oaThreats, weaponTargeting, attackPreview, hitChance, dmgRange, templateCells, tokensIn, templateOk } from "../core/objetivo.js";
 import { npcArmedArea } from "./accionesnpc.js";
 import { colors, setColor, resetColors, onColors, COLOR_KEYS, DEFAULT_COLORS } from "../core/colores.js";
 import { floorIdx } from "../core/plantas.js";
@@ -72,6 +74,10 @@ export function mountTactical(host, opts = {}) {
       // Como en BG3: si no llegas pero puedes acercarte andando, la figura se acerca (pagando su movimiento) y ataca
       if (pv && pv.approach) { bopts.mutate("token", m => { const k = m.tokens.find(x => x.id === a.id); if (k) { k.c = pv.approach.c; k.r = pv.approach.r; } }); toast(`Te acercas ${metres(pv.approach.cost / 1.5)} y atacas.`); }
       sel = id; const r = attack(A.tok, id, w, dm ? atkAdv : null, A.use || "act"); if (r) { const left = eco(S(), a).atkLeft; if (A.use === "bonus" || !(left > 0)) arm(null); atkAdv = null; } actSig = ""; drawHud(); return true;
+    }
+    if (A.kind === "shove") {
+      const r = shove(A.tok, id, A.mode); if (r) { const left = eco(S(), st.tokens.find(t => t.id === A.tok)).atkLeft; if (!(left > 0)) arm(null); }
+      sel = id; actSig = ""; drawHud(); return true;
     }
     if (A.kind === "npcact") { if (id !== A.tok || A.sp) togglePick(id); sel = id; actSig = ""; drawHud(); return true; } // el máster elige objetivos de la acción de su criatura
     if (dm) return false;
@@ -112,13 +118,12 @@ export function mountTactical(host, opts = {}) {
         if (phase(s) === "live" && !opts.edit) for (const t of s.tokens) {
           if (s.board.turn !== t.id) continue;
           const o = before.get(t.id); if (!o || (o.c === t.c && o.r === t.r) || (t.conds || []).some(c => c.id === "destrabado")) continue;
-          for (const h of s.tokens) {
-            if (h.id === t.id || h.hidden || (h.kind === "pc") === (t.kind === "pc")) continue;
-            const hp = hpOf(s, h); if (hp && hp.cur <= 0) continue;
-            if ((h.conds || []).some(c => ["incapacitado", "inconsciente", "aturdido", "paralizado", "petrificado", "muerto"].includes(c.id)) || eco(s, h).react) continue;
-            if (dist(o, h) <= 1 && dist(t, h) > 1 && attacksOf(s, h).some(w => !w.rng.ranged || w.rng.melee)) oas.push({ by: h.id, target: t.id });
-          }
+          // Por el camino de verdad: provoca quien sale del alcance de un enemigo en cualquier punto del recorrido
+          { const R0 = reachMap(s, { ...t, c: o.c, r: o.r, eco: { ...eco(s, t), from: o, mov: 0 } }, { dm: true }), path = R0 ? pathTo(R0, t.c, t.r) : [];
+            oaThreats(s, t, path.length > 1 ? path : [o, { c: t.c, r: t.r }]).forEach(by => oas.push({ by, target: t.id })); }
         }
+        // Quien se mueve deja de estar subido al objeto (si se mueve a otra casilla)
+        for (const t of s.tokens) { const o = before.get(t.id); if (!o || (o.c === t.c && o.r === t.r)) continue; if ((t.conds || []).some(c => c.id === "encima")) t.conds = t.conds.filter(c => c.id !== "encima"); }
         // Trampas: quien pisa una trampa armada la dispara (se revela y se tiran las salvaciones)
         for (const t of s.tokens) { const o = before.get(t.id); if (!o || (o.c === t.c && o.r === t.r)) continue;
           const p = (s.board.props || []).find(x => x.c === t.c && x.r === t.r && (PROPS[x.k] || {}).trap && !x.sprung && !x.disarmed); if (p) traps.push({ p: p.id, t: t.id }); }
@@ -151,6 +156,8 @@ export function mountTactical(host, opts = {}) {
     },
     onProp: p => { selPropId = p.id; hudOpen = true; drawHud(); },
     // Hasta dónde puede llegar la ficha que tiene el turno (la suya o, para el máster, cualquiera)
+    // Antes de soltar la figura: ¿este camino provoca ataques de oportunidad? (nombres, para avisar como en BG3)
+    oaPreview: (id, path) => { const s = S(), t = s.tokens.find(k => k.id === id); if (!t || phase(s) !== "live" || s.board.turn !== id) return []; const hid = unseenFn(s, isDM(s)); return oaThreats(s, t, path).map(x => s.tokens.find(k => k.id === x)).filter(k => k && (isDM(s) || !hid(k))).map(k => nameOf(s, k)); },
     reach: id => { const s = S(); if (deployOf(s)) { const t = s.tokens.find(k => k.id === id); if (!t || t.kind !== "pc" || (!isDM(s) && t.owner !== me())) return null; const p = placer(s); if (!isDM(s) && (!p || p.id !== id)) return null; return zoneReach(s, t); }
       if (phase(s) !== "live" || !s.board || s.board.turn !== id) return null; const t = s.tokens.find(k => k.id === id); if (!t || (!isDM(s) && t.owner !== me())) return null; return reachMap(s, t, { dm: isDM(s) }); },
     onSelectProp: id => { selPropId = id; if (id) hudOpen = true; drawHud(); },
@@ -211,6 +218,12 @@ export function mountTactical(host, opts = {}) {
         return { id: t.id, state: st, ally: (t.kind === "pc") === (a.kind === "pc"), pct, picked: picked.has(t.id), save: m.save ? `CD ${dc} ${({ fue: "Fue", des: "Des", con: "Con", int: "Int", sab: "Sab", car: "Car" })[m.save]}` : "", dmg: sdmg, why: m.atk ? [...mods.adv.map(x => "▲ " + x), ...mods.dis.map(x => "▼ " + x)] : [], cov: cv.txt || "" }; });
       return { kind: "spell", from: a.id, label: d.n, rng: { n: rng.n / 1.5, l: (rng.l || rng.n) / 1.5, melee: rng.n <= 1.5 }, targets, odds, single: !!m.atk };
     }
+    if (A.kind === "shove") {
+      const a = s.tokens.find(t => t.id === A.tok); if (!a) return null;
+      const targets = s.tokens.filter(t => t.id !== a.id && vis(t)).map(t => { const P = shovePreview(s, a, t), ally = (t.kind === "pc") === (a.kind === "pc");
+        return P.ok ? { id: t.id, ally, state: "ok", save: `CD ${P.dc} ${P.ab === "des" ? "Des" : "Fue"}`, pct: odds ? P.pct : null } : { id: t.id, ally, state: "out", far: Math.round(gap(a, t) * 15) / 10 }; });
+      return { kind: "atk", from: a.id, label: `Empujón · ${A.mode === "push" ? "apartar 1,5 m" : "derribar"}`, rng: { n: 1, l: 1, melee: true }, targets, odds };
+    }
     if (A.kind === "npcact") {
       const ar = npcArmedArea(s, A); if (ar) return { kind: "tmpl", from: ar.tok, area: ar.area, rng: ar.rng, label: ar.label };
       const a = s.tokens.find(t => t.id === A.tok); if (!a) return null;
@@ -231,6 +244,7 @@ export function mountTactical(host, opts = {}) {
     if (board) board.render();
   }
   function aimInfo() {
+    if (armedNow() && targeting()) return null; // al apuntar ya se ve todo en las etiquetas de los objetivos
     const s = S(), a = actorTok(), t = s.tokens.find(x => x.id === (isDM(s) && a && a.kind !== "pc" ? dmTarget || sel : sel));
     if (!a || !t || a.id === t.id) return null;
     // Al jugador solo se le mide el ataque en su turno; a un aliado, solo la distancia
@@ -318,6 +332,10 @@ export function mountTactical(host, opts = {}) {
         else if (a.k === "ok" || a.k === "flip" || a.k === "half") decide(a.id, a.k);
         else if (a.k === "oa") answerOA(a.id, true);
         else if (a.k === "oapass") answerOA(a.id, false);
+        else if (a.k === "rx") import("../core/reacciones.js").then(m => m.answerRx(a.id, true));
+        else if (a.k === "rxno") import("../core/reacciones.js").then(m => m.answerRx(a.id, false));
+        else if (a.k === "dmgsneak") damageFor(a.id, { sneak: true });
+        else if (a.k === "dmgsmite") damageFor(a.id, { smite: a.v });
         else if (a.k === "npc") selectTok(a.id);
         else if (a.k === "rolls") wantRolls();
         else if (a.k === "depok") markReady(a.id);
@@ -453,6 +471,7 @@ export function mountTactical(host, opts = {}) {
     const T = (id, fn) => store.commit("token", st => { const t = st.tokens.find(x => x.id === id); if (t) fn(t); });
     $$("[data-addcond]", R).forEach(b => b.onclick = () => { condPick = condPick === b.dataset.addcond ? null : b.dataset.addcond; drawHud(); });
     $$("[data-cond]", R).forEach(b => b.onclick = () => { const [id, cid] = b.dataset.cond.split("|"); if (!mineOk(id)) return; T(id, t => { t.conds = t.conds || []; const i = t.conds.findIndex(c => c.id === cid); if (i >= 0) t.conds.splice(i, 1); else if (condImmune(t, cid)) toast(`${t.name} es inmune a ${estado(cid).n.toLowerCase()} (perfil del SRD).`); else t.conds.push({ id: cid, lvl: estado(cid).levels ? 1 : undefined }); }); });
+    $$("[data-cdur]", R).forEach(x => x.onchange = () => { const [id, cid] = x.dataset.cdur.split("|"), v = x.value; T(id, t => { const c = (t.conds || []).find(y => y.id === cid); if (!c) return; if (!v) delete c.dur; else { const [at, n] = v.split("|"); c.dur = durFor(store.get(), id, at, +n); } }); });
     $$("[data-condlvl]", R).forEach(b => b.onclick = () => { const [id, cid, d] = b.dataset.condlvl.split("|"); if (!mineOk(id)) return; T(id, t => { const c = (t.conds || []).find(x => x.id === cid); if (c) { c.lvl = Math.max(1, Math.min(6, (c.lvl || 1) + +d)); } }); });
     $$("[data-atk]", R).forEach(b => b.onclick = () => {
       const [aid, i] = b.dataset.atk.split("|"), st = S(), a = st.tokens.find(x => x.id === aid);
@@ -472,6 +491,8 @@ export function mountTactical(host, opts = {}) {
       const [tid, nm] = b.dataset.acc.split("|"); if (!mineOk(tid)) return; ruleOpen = nm;
       if (nm === "Correr") spend(tid, "dash");
       else if (nm === "Esquivar" || nm === "Destrabarse") { spend(tid, "act"); store.commit("token", st => { const t = st.tokens.find(x => x.id === tid); t.conds = (t.conds || []).filter(c => c.id !== (nm === "Esquivar" ? "esquivando" : "destrabado")); t.conds.push({ id: nm === "Esquivar" ? "esquivando" : "destrabado", seq: st.board.seq }); }); }
+      else if (nm === "Esconderse") hide(tid, "act");
+      else if (nm === "Buscar") search(tid, "act");
       else if (nm !== "Atacar" && nm !== "Magia") spend(tid, "act");
       drawHud();
     });
@@ -595,11 +616,15 @@ export function mountTactical(host, opts = {}) {
   };
 }
 
+/* Duraciones que el máster puede poner a un estado (turnos de esa misma figura) */
+const DUR_OPTS = [["", "⏳ —"], ["start|1", "⏳ hasta su turno"], ["end|1", "⏳ fin de su turno"], ["end|2", "⏳ fin del siguiente"], ["end|3", "⏳ 3 turnos"], ["end|10", "⏳ 1 minuto (10)"]];
+const durKey = cd => cd.dur ? `${cd.dur.at}|${cd.dur.n}` : "";
 /* Estados de una ficha: chips de color con su texto, y selector para añadir */
 function condBlock(t, canEdit) {
   const conds = t.conds || [];
   if (!conds.length && !canEdit) return "";
-  return `<div class="conds">${conds.map(cd => { const e = estado(cd.id); if (!e) return ""; return `<span class="cond" style="--c:${e.c}" title="${esc(e.t)}">${esc(etiqueta(cd.id, cd.lvl))}${canEdit && e.levels ? `<button data-condlvl="${t.id}|${cd.id}|-1" aria-label="Bajar nivel">−</button><button data-condlvl="${t.id}|${cd.id}|1" aria-label="Subir nivel">+</button>` : ""}${canEdit ? `<button data-cond="${t.id}|${cd.id}" aria-label="Quitar ${esc(e.n)}">✕</button>` : ""}</span>`; }).join("")}
+  const s = store.get(), dm = isDM(s);
+  return `<div class="conds">${conds.map(cd => { const e = estado(cd.id); if (!e) return ""; return `<span class="cond" style="--c:${e.c}" title="${esc(e.t)}${cd.dur ? " · " + esc(durText(s, cd)) : ""}">${esc(etiqueta(cd.id, cd.lvl))}${cd.dur ? ` <i class="cdur">${durTag(s, cd)}</i>` : ""}${dm && canEdit ? `<select class="cdsel" data-cdur="${t.id}|${cd.id}" title="Duración en turnos: se quita sola" aria-label="Duración de ${esc(e.n)}">${DUR_OPTS.map(([k, n]) => `<option value="${k}" ${durKey(cd) === k ? "selected" : ""}>${n}</option>`).join("")}${cd.dur && !DUR_OPTS.some(([k]) => k === durKey(cd)) ? `<option value="${durKey(cd)}" selected>⏳ ${leftOf(s, cd)}</option>` : ""}</select>` : ""}${canEdit && e.levels ? `<button data-condlvl="${t.id}|${cd.id}|-1" aria-label="Bajar nivel">−</button><button data-condlvl="${t.id}|${cd.id}|1" aria-label="Subir nivel">+</button>` : ""}${canEdit ? `<button data-cond="${t.id}|${cd.id}" aria-label="Quitar ${esc(e.n)}">✕</button>` : ""}</span>`; }).join("")}
       ${canEdit ? `<button class="btn small" data-addcond="${t.id}">${condPick === t.id ? "Cerrar" : "+ Estado"}</button>` : ""}</div>
     ${condPick === t.id ? `<div class="condpick">${ESTADOS.map(e => `<button class="cond ${conds.some(c => c.id === e.id) ? "on" : ""}" style="--c:${e.c}" data-cond="${t.id}|${e.id}" title="${esc(e.t)}">${e.n}</button>`).join("")}</div>` : ""}
     ${conds.length ? `<ul class="condtxt">${conds.map(cd => { const e = estado(cd.id); return e ? `<li><b style="color:${e.c}">${esc(etiqueta(cd.id, cd.lvl))}:</b> ${esc(e.t)}</li>` : ""; }).join("")}</ul>` : ""}`;

@@ -1,10 +1,16 @@
 // Ficha de bolsillo: la columna fija del jugador (a la derecha, el mismo ancho que el panel del máster).
 // PG, CA, estados, salvaciones contra muerte, salvaciones y pruebas, ataques, conjuros con espacios y descansos.
 import { requestOpen } from "../core/comercio.js";
+import { PROPS } from "../data/mapas.js";
+import { hide, search, hideCheck, hideDC, shoveDC, climbables, climbOn, climbDown, pushables, pushObject } from "../core/acciones.js";
+import { topOfTok } from "../core/alturas.js";
 import { lightMap, darkvisionOf, LIGHT_ITEMS } from "../core/vision.js";
 import { sheetFreeHTML, whispersHTML, bindSheetFree } from "./tiempolibre.js";
 import { whispersFor } from "../core/tiempolibre.js";
 import { condImmune } from "../core/defensas.js";
+import { rageInfo, rage, extendRage, bardicInfo, inspirable, inspire } from "../core/rasgos.js";
+import { rxOpen, answerRx, RX } from "../core/reacciones.js";
+import { durText, durTag } from "../core/duraciones.js";
 import { store } from "../core/store.js";
 import { currentUser, isDM } from "../core/session.js";
 import { publish } from "../core/dados.js";
@@ -44,10 +50,10 @@ export function renderSheet(el) {
     ${(+c.lvlGrant || 0) > c.level ? `<a class="flvl" href="#personajes">⬆ El máster te concede subir a nivel ${c.lvlGrant} · abrir la ficha</a>` : ""}
     <div class="fstats">
       <div class="fhp ${c.hp.cur === 0 ? "zero" : hpPct < 34 ? "low" : ""}"><div class="bar" role="meter" aria-valuemin="0" aria-valuemax="${c.hp.max}" aria-valuenow="${c.hp.cur}" aria-label="Puntos de golpe"><i style="width:${hpPct}%"></i><span><b>${c.hp.cur}</b> / ${c.hp.max} PG${c.hp.temp ? ` <em>+${c.hp.temp} temp.</em>` : ""}</span></div></div>
-      <span class="fst"><small>CA</small><b>${c.ac}</b></span><span class="fst"><small>Vel.</small><b>${(+c.speed).toLocaleString("es-ES")} m</b></span><span class="fst"><small>Inic.</small><b>${sign(mod(c.abilities.des))}</b></span>
+      <span class="fst"><small>CA</small><b>${+c.ac + (tok && (tok.conds || []).some(x => x.id === "escudo") ? 5 : 0)}</b></span><span class="fst"><small>Vel.</small><b>${(+c.speed).toLocaleString("es-ES")} m</b></span><span class="fst"><small>Inic.</small><b>${sign(mod(c.abilities.des))}</b></span>
     </div>
     ${tok && s.board ? lightLine(s, c, tok) : ""}
-    ${tok ? `<div class="fconds">${conds.map(x => { const e = ESTADOS.find(y => y.id === x.id) || { n: x.id, c: "#888", t: "" }; return `<span class="cchip big" style="--c:${e.c}" title="${esc(e.t)}"><b>${esc(e.n)}${x.lvl > 1 ? " " + x.lvl : ""}</b>${x.note ? ` · ${esc(x.note)}` : ""}<button data-uncond="${x.id}" aria-label="Quitar ${esc(e.n)}">✕</button></span>`; }).join("")}<button class="cchip add" id="faddcond">${condOpen ? "Cerrar" : "+ Estado"}</button></div>
+    ${tok ? `<div class="fconds">${conds.map(x => { const e = ESTADOS.find(y => y.id === x.id) || { n: x.id, c: "#888", t: "" }; return `<span class="cchip big" style="--c:${e.c}" title="${esc(e.t)}"><b>${esc(e.n)}${x.lvl > 1 ? " " + x.lvl : ""}</b>${x.note ? ` · ${esc(x.note)}` : ""}${x.dur ? ` <i class="cdur" title="${esc(durText(s, x))}">${durTag(s, x)}</i>` : ""}<button data-uncond="${x.id}" aria-label="Quitar ${esc(e.n)}">✕</button></span>`; }).join("")}<button class="cchip add" id="faddcond">${condOpen ? "Cerrar" : "+ Estado"}</button></div>
       ${condOpen ? `<div class="fcondpick">${ESTADOS.filter(e => !conds.some(c => c.id === e.id)).map(e => `<button class="cchip" style="--c:${e.c}" data-addc="${e.id}" title="${esc(e.t)}">${esc(e.n)}</button>`).join("")}</div>` : ""}
       ${conds.length ? `<details class="fcondtxt"><summary>Qué hace${conds.length > 1 ? "n" : ""}</summary>${conds.map(x => { const e = ESTADOS.find(y => y.id === x.id); return e ? `<p><b style="color:${e.c}">${esc(e.n)}:</b> ${esc(e.t)}</p>` : ""; }).join("")}</details>` : ""}` : ""}
     ${c.hp.cur === 0 ? `<div class="fdeath ${d.dead ? "dead" : d.stable ? "stable" : ""}"><b>${d.dead ? "Muerto" : d.stable ? "Estable a 0 PG" : "A 0 PG · inconsciente"}</b>
@@ -55,6 +61,7 @@ export function renderSheet(el) {
 
 
     ${chestNear(s, tok)}
+    ${tok && s.board && phase(s) !== "live" ? `<div class="fexplore">${climbHTML(s, tok)}<div class="accs"><button class="btn small" data-xhide title="Destreza (Sigilo) CD 15: necesitas cobertura de tres cuartos o total, o una zona muy oscura, y que ningún enemigo te vea">🫥 Esconderse</button><button class="btn small" data-xsearch title="Sabiduría (Percepción): encontrar a alguien oculto">🔎 Buscar</button>${pushables(s, tok).map(x => `<button class="btn small" data-fpush="${x.id}" ${x.free ? "" : "disabled"}>🫸 Empujar ${esc(x.name)} · CD ${x.dc}</button>`).join("")}</div>${hideDC(tok) ? `<p class="phhint">🫥 Estás oculto (Sigilo ${hideDC(tok)}).</p>` : ""}</div>` : ""}
     ${tok && phase(s) ? turnBlock(s, c, tok) : `<section class="fsec2"><h4>⚔️ Ataques</h4>${attacksOf(s, tok || { kind: "pc", char: c.id }).map(w => `<div class="fatk"><b>${esc(w.name)}</b><span>${sign(w.atk)} · ${esc(w.expr)} ${esc(w.type || "")}</span><small>${w.rng.ranged ? `${w.rng.n}/${w.rng.l} m` : `${w.rng.l} m`}</small></div>`).join("") || `<p class="empty">Sin ataques.</p>`}</section>`}
 
     ${ab && !(tok && phase(s) === "live") ? spellsBlock(s, c, tok) : ab ? slotsLine(c) : ""}
@@ -107,12 +114,35 @@ function lightLine(s, c, tok) {
   const txt = lv === 2 ? "☀️ Luz brillante" : lv === 1 ? "◐ Luz tenue: desventaja en Sabiduría (Percepción) para ver" : `● Oscuridad${dv ? `: ves como en luz tenue hasta ${dv} m (visión en la oscuridad, en grises)` : ": sin luz no ves nada (cegado para ver)"}`;
   return `<div class="flight ${lv === 2 ? "" : lv === 1 ? "dim" : "dark"}"><span>${txt}</span><label title="Lo que llevas encendido ilumina a tu alrededor para todo el grupo">🔦<select id="flightsel"><option value="">Sin luz</option>${Object.entries(LIGHT_ITEMS).map(([k, x]) => `<option value="${k}" ${tok.light === k ? "selected" : ""} title="${esc(x.src)}">${x.n}</option>`).join("")}</select></label></div>`;
 }
+/** Subirse a mesas, barriles, rocas o árboles (trepar, SRD): lo que tengas al lado y lo que cuesta. */
+/** Furia e Inspiración bárdica: botones propios en la acción adicional (con sus usos). */
+let bardOpen = false;
+function classBonusHTML(s, c, tok, bWhy) {
+  const R = rageInfo(c), B = bardicInfo(c), out = [];
+  if (R) {
+    const on = (tok.conds || []).find(x => x.id === "furia");
+    out.push(on ? `<div class="accs"><span class="phhint">🔥 En furia (${esc(durText(s, on))}). Atacar a un enemigo en tu turno la prolonga.</span><button class="btn small" data-fragex ${bWhy ? `disabled title="${esc(bWhy)}"` : ""} title="Gasta la acción adicional para que dure hasta el final de tu siguiente turno">🔥 Prolongar furia</button></div>`
+      : `<div class="accs"><button class="btn small ${R.left ? "red" : ""}" data-frage ${bWhy || !R.left ? `disabled title="${esc(bWhy || "Sin usos: se recuperan al descansar")}"` : ""} title="Resistencia a contundente, cortante y perforante; +${R.dmg} al daño con Fuerza; ventaja en Fuerza">🔥 Furia · ${R.left}/${R.max}</button></div>`);
+  }
+  if (B) {
+    const L = inspirable(s, tok);
+    out.push(`<div class="accs"><button class="btn small" data-fbard ${bWhy || !B.left ? `disabled title="${esc(bWhy || "Sin usos")}"` : ""} title="Da un ${B.die} a un aliado a 18 m: lo suma a una prueba con d20 que falle">🎵 Inspiración bárdica ${B.die} · ${B.left}/${B.max}</button></div>
+      ${bardOpen && !bWhy && B.left ? `<div class="accs">${L.map(x => `<button class="btn small gold" data-fbardto="${x.id}">→ ${esc(String(x.name || "").split(" ")[0])}</button>`).join("") || `<small class="phhint">No hay aliados a 18 m sin dado.</small>`}</div>` : ""}`);
+  }
+  return out.length ? `<small class="phsub">Rasgos de clase</small>${out.join("")}` : "";
+}
+function climbHTML(s, tok) {
+  const on = topOfTok(s.board, tok), list = climbables(s, tok);
+  if (!on && !list.length) return "";
+  return `<div class="fclimb">${on ? `<span>⤒ Estás subido (${fm(on)} m)</span><button class="btn small" data-fdown>⬇ Bajar · ${fm(on)} m</button>` : ""}${list.map(x => `<button class="btn small" data-fclimb="${x.id}" title="Trepar: cada metro de altura cuesta 1 m de movimiento${x.cost > x.h ? " (+1,5 m por estar al lado)" : ""}. Las alturas de los objetos son regla de campaña.">🧗 Subirte a ${esc(x.name)} · ${fm(x.cost)} m</button>`).join("")}</div>`;
+}
 /** Cofres sin abrir y visibles junto a tu figura (a 1 casilla): pides abrirlo y su contenido va al botín del grupo. */
 function chestNear(s, tok) {
   if (!tok || !s.board) return "";
-  const near = (s.board.props || []).filter(p => (p.loot != null || p.chest) && !p.opened && !p.hidden && dist(p, tok) <= 1);
+  const near = (s.board.props || []).filter(p => ((PROPS[p.k] || {}).loot || p.loot != null || p.chest) && !p.opened && !p.hidden && dist(p, tok) <= 1);
   const asked = new Set((s.rolls || []).filter(r => r.kind === "open" && r.status === "pending").map(r => r.prop));
-  return near.map(p => `<div class="chestnear">🧰 <b>${esc(p.label || "Cofre")}</b> a tu lado ${asked.has(p.id) ? `<small>· esperando al máster…</small>` : `<button class="btn small gold" data-openchest="${p.id}">Abrir el cofre</button>`}<small>Lo que haya irá al botín del grupo.${phase(s) === "live" ? " En combate, abrirlo es tu interacción gratuita con un objeto." : ""}</small></div>`).join("");
+  return near.map(p => { const v = PROPS[p.k] || {}, name = p.label || v.n || "Cofre", verb = v.open ? "Abrir" : "Coger";
+    return `<div class="chestnear">${v.i || "🧰"} <b>${esc(name)}</b> a tu lado ${asked.has(p.id) ? `<small>· esperando al máster…</small>` : `<button class="btn small gold" data-openchest="${p.id}">${verb}</button>`}<small>Lo que haya irá al botín del grupo.${phase(s) === "live" ? " En combate, es tu interacción gratuita con un objeto." : ""}</small></div>`; }).join("");
 }
 function turnBlock(s, c, tok) {
   const ph = phase(s), myTurn = ph === "live" && s.board.turn === tok.id, A = armedNow();
@@ -137,9 +167,12 @@ function turnBlock(s, c, tok) {
       <ul class="phlist"><li><b>Ataque de oportunidad</b>: si un enemigo sale de tu alcance, la mesa te lo ofrecerá.</li>${fUse("react").map(f => `<li><b>${esc(f.name)}</b>: ${esc(f.text || "")}</li>`).join("")}</ul>
       ${byT("react").length ? `<small class="phsub">Conjuros de reacción</small>${spellRows(s, c, tok, byT("react"), e, incap)}` : ""}`;
     // Solo se destaca si AHORA MISMO hay algo a lo que reaccionar (una oportunidad ofrecida por la mesa)
-    const oaNow = (s.rolls || []).find(r => r.kind === "oa" && r.status === "pending" && r.tok === tok.id && (r.seq == null || r.seq === s.board.seq));
+    const oaNow = (s.rolls || []).find(r => r.kind === "oa" && r.status === "pending" && r.tok === tok.id && (r.seq == null || r.seq === s.board.seq))
+      || (s.rolls || []).find(r => r.tok === tok.id && rxOpen(s, r));
     const tgt = oaNow && s.tokens.find(t => t.id === oaNow.target);
-    const oaBox = oaNow ? `<p class="phnow">⚔ <b>¡Oportunidad!</b> ${esc(tgt ? (tgt.hidden ? "?" : tgt.name) : "Un enemigo")} sale de tu alcance. Responde en el aviso de arriba o en Tiradas.</p>` : "";
+    const X = oaNow && oaNow.kind === "react" ? RX[oaNow.rx] : null;
+    const oaBox = !oaNow ? "" : X ? `<div class="phnow">${X.i} <b>¡Reacción!</b> ${esc(X.q)}<div class="accs"><button class="btn small gold" data-frx="${oaNow.id}">${X.i} ${esc(X.n)}</button><button class="btn small" data-frxno="${oaNow.id}">No</button></div></div>`
+      : `<p class="phnow">⚔ <b>¡Oportunidad!</b> ${esc(tgt ? (tgt.hidden ? "?" : tgt.name) : "Un enemigo")} sale de tu alcance. Responde en el aviso de arriba o en Tiradas.</p>`;
     return `<section class="fturn"><div class="ftt"><b>⏳ Turno de ${esc(N)}</b><small>Ronda ${s.board.round || 1}</small></div>
       <p class="phwait">${oaNow ? "" : "No es tu turno. Nada que hacer ahora: si puedes reaccionar, la mesa te avisará."}</p>${oaBox}
       ${phaseBox("react", "↺", "Reacción", !!e.react, stateTag(!!e.react, e.react ? "gastada esta ronda" : "disponible"), reactBody, !!oaNow)}
@@ -150,30 +183,38 @@ function turnBlock(s, c, tok) {
   const prone = conds.includes("derribado");
   const movBody = moveStop ? `<p class="phno">No puedes moverte: estás ${moveStop}.</p>`
     : `<div class="movebar thin ${e.mov > max ? "over" : ""}"><i style="width:${Math.min(100, e.mov / Math.max(1, max) * 100)}%"></i><em>🦶 ${fm(e.mov)} / ${fm(max)} m${e.dash ? " · corriendo" : ""}</em></div>
-      <p class="phhint">Arrastra tu figura por la mesa. Puedes moverte antes y después de la acción, en varios trozos.${prone ? ` <b>Derribado:</b> levantarte cuesta ${fm(speedOf(s, tok) / 2)} m; arrastrarte, el doble.` : ""}</p>`;
+      <p class="phhint">Arrastra tu figura por la mesa. Puedes moverte antes y después de la acción, en varios trozos. Si el camino se pone rojo, provocas un ataque de oportunidad.${prone ? ` <b>Derribado:</b> levantarte cuesta ${fm(speedOf(s, tok) / 2)} m; arrastrarte, el doble.` : ""}</p>
+      ${climbHTML(s, tok)}`;
   // Acción
   const actUsed = !!e.act && !(e.atkLeft > 0), aWhy = incap ? `Estás ${incap}` : actUsed ? "Ya usaste la acción" : "";
   const actBody = incap ? `<p class="phno">Estás ${incap}: no puedes hacer acciones.</p>` : `
     <small class="phsub">Atacar${nAtk > 1 ? ` · ${e.act && e.atkLeft > 0 ? `te quedan ${e.atkLeft} de ${nAtk} ataques` : `${nAtk} ataques con la misma acción`}` : ""} · elige el arma y toca al enemigo</small>
     <div class="fweap">${atks.map((w, i) => atkBtn(w, i, "act", aWhy)).join("") || `<p class="empty">Sin armas.</p>`}</div>
     ${A && A.kind === "atk" ? `<div class="farmed">🎯 Ahora toca al enemigo en la mesa <button class="btn small" data-disarm>Cancelar</button></div>` : ""}
+    <div class="fshove" title="SRD: dentro de la acción de Atacar, en lugar de un ataque. Salvación de Fuerza o Destreza (la que prefiera el objetivo), CD ${shoveDC(s, tok)}"><small>🤚 Empujón (en vez de un ataque) · CD ${shoveDC(s, tok)}</small>
+      <button class="btn small ${A && A.kind === "shove" && A.mode === "push" ? "gold" : ""}" data-shove="push" ${aWhy ? `disabled title="${esc(aWhy)}"` : ""}>Apartar 1,5 m</button><button class="btn small ${A && A.kind === "shove" && A.mode === "prone" ? "gold" : ""}" data-shove="prone" ${aWhy ? `disabled title="${esc(aWhy)}"` : ""}>Derribar</button></div>
+    ${A && A.kind === "shove" ? `<div class="farmed">🤚 Toca a quien quieras empujar (a 1,5 m) <button class="btn small" data-disarm>Cancelar</button></div>` : ""}
     ${byT("act").length ? `<small class="phsub">Lanzar un conjuro (acción Magia)</small>${spellRows(s, c, tok, byT("act"), e.act && e.atkLeft > 0 ? { ...e, act: true } : e, incap)}` : ""}
     ${conds.includes("ardiendo") ? `<button class="btn small red" data-fdouse title="SRD «Fuego»: con una acción apagas el fuego rodando por el suelo y quedas derribado" ${e.act ? "disabled" : ""}>🔥 Apagarse</button>` : ""}
-    <details class="faccs" ${accOpen ? "open" : ""}><summary>Otras acciones: Correr, Esquivar, Destrabarse, Ayudar…</summary><div class="accs">${ACCIONES.filter(([n]) => n !== "Atacar" && n !== "Magia").map(([n, d]) => `<button class="btn small" data-facc="${esc(n)}" title="${esc(d)}" ${e.act ? "disabled" : ""}>${n}</button>`).join("")}</div></details>`;
+    <details class="faccs" ${accOpen ? "open" : ""}><summary>Otras acciones: Correr, Esquivar, Destrabarse, Esconderse, Buscar…</summary><div class="accs">${ACCIONES.filter(([n]) => n !== "Atacar" && n !== "Magia").map(([n, d]) => { const hw = n === "Esconderse" ? hideCheck(s, tok) : null; return `<button class="btn small" data-facc="${esc(n)}" title="${esc(hw && !hw.ok ? hw.why : d)}" ${e.act || (hw && !hw.ok) ? "disabled" : ""}>${n === "Esconderse" ? "🫥 " : n === "Buscar" ? "🔎 " : ""}${n}</button>`; }).join("")}
+      ${pushables(s, tok).map(x => `<button class="btn small" data-fpush="${x.id}" ${e.act || !x.free ? "disabled" : ""} title="${x.free ? `Fuerza (Atletismo) CD ${x.dc} (regla de campaña): lo mueves 1,5 m` : "No hay sitio detrás"}">🫸 Empujar ${esc(x.name)} · CD ${x.dc}</button>`).join("")}</div>
+      ${hideDC(tok) ? `<p class="phhint">🫥 Estás oculto (Sigilo ${hideDC(tok)}): ventaja al atacar. Dejas de estarlo al atacar, lanzar un conjuro o si te encuentran.</p>` : ""}</details>`;
   const actState = incap ? stateTag(true, "no puedes") : e.act && e.atkLeft > 0 ? `<em class="phst ok">● ${e.atkLeft} ataque${e.atkLeft > 1 ? "s" : ""} más</em>` : stateTag(!!e.act, e.act ? "gastada" : "disponible");
   // Acción adicional
   const bUsed = !!e.bonus, bWhy = incap ? `Estás ${incap}` : bUsed ? "Ya usaste la acción adicional" : "";
-  const bonusFeats = fUse("bonus").filter(f => !/Acci[oó]n astuta/i.test(f.name));
+  const bonusFeats = fUse("bonus").filter(f => !/Acci[oó]n astuta|^Furia$|^Inspiraci[oó]n b[aá]rdica/i.test(f.name));
+  const classBonus = classBonusHTML(s, c, tok, bWhy);
   const lightOk = light.length >= 2 && e.act;
   const bonusBody = incap ? `<p class="phno">Estás ${incap}.</p>` : `
     ${cunning ? `<small class="phsub">Acción astuta</small><div class="accs">${["Correr", "Destrabarse", "Esconderse"].map(n => `<button class="btn small" data-fbon="${n}" ${bWhy ? `disabled title="${esc(bWhy)}"` : ""}>${n}</button>`).join("")}</div>` : ""}
     ${light.length >= 2 ? `<small class="phsub">Ataque con la otra arma ligera${lightOk ? "" : " · primero ataca con un arma ligera"}</small><div class="fweap">${light.map(o => atkBtn(o.w, o.i, "bonus", bWhy || (lightOk ? "" : "Primero ataca con un arma ligera (acción Atacar)"))).join("")}</div><p class="phhint">Sin sumar el modificador de característica al daño, salvo que sea negativo (propiedad Ligera).</p>` : ""}
     ${byT("bonus").length ? `<small class="phsub">Conjuros de acción adicional</small>${spellRows(s, c, tok, byT("bonus"), e, incap)}` : ""}
+    ${classBonus}
     ${bonusFeats.length ? `<small class="phsub">Rasgos</small><ul class="phlist">${bonusFeats.map(f => `<li><button class="btn small" data-fbonf="${esc(f.name)}" ${bWhy ? "disabled" : ""}>Usar</button> <b>${esc(f.name)}</b>: ${esc(f.text || "")}</li>`).join("")}</ul>` : ""}
-    ${!cunning && light.length < 2 && !byT("bonus").length && !bonusFeats.length ? `<p class="phno">No tienes nada que use la acción adicional ahora mismo.</p>` : ""}`;
+    ${!cunning && light.length < 2 && !byT("bonus").length && !bonusFeats.length && !classBonus ? `<p class="phno">No tienes nada que use la acción adicional ahora mismo.</p>` : ""}`;
   // Reacción (en tu turno casi nunca se usa, pero se ve si ya la gastaste)
   const reactBody = incap ? `<p class="phno">Estás ${incap}.</p>` : `<p class="phhint">Se usa en el turno de otro (por ejemplo, un ataque de oportunidad). Vuelve al empezar tu siguiente turno.</p>${byT("react").length ? spellRows(s, c, tok, byT("react"), e, incap) : ""}`;
-  const hasBonus = cunning || byT("bonus").some(o => !spellWhy(c, e, o.m, incap)) || bonusFeats.length || lightOk;
+  const hasBonus = cunning || byT("bonus").some(o => !spellWhy(c, e, o.m, incap)) || bonusFeats.length || lightOk || !!classBonus;
   const order = [!moveStop && left > 0 && !e.mov ? "mov" : null, !e.act || e.atkLeft > 0 ? "act" : null, !bUsed && hasBonus ? "bonus" : null].filter(Boolean);
   const nowK = order[0] || null;
   return `<section class="fturn mine">
@@ -241,14 +282,27 @@ function bind(el, s, c, tok) {
   $$("[data-arm]", el).forEach(b => b.onclick = () => { const i = +b.dataset.arm, use = b.dataset.use || "act", A = armedNow(); openSpell = null; arm(A && A.kind === "atk" && A.i === i && (A.use || "act") === use ? null : { kind: "atk", tok: tok.id, i, use }); renderSheet(el); });
   $$("[data-fbon]", el).forEach(b => b.onclick = () => {
     const nm = b.dataset.fbon, tid = tok.id;
+    if (nm === "Esconderse") { hide(tid, "bonus"); return; }
     spend(tid, "bonus");
     if (nm === "Correr") store.commit("token", st => { const t = st.tokens.find(x => x.id === tid); const e = eco(st, t); e.dash = true; t.eco = e; });
     if (nm === "Destrabarse") store.commit("token", st => { const t = st.tokens.find(x => x.id === tid); t.conds = (t.conds || []).filter(x => x.id !== "destrabado"); t.conds.push({ id: "destrabado", seq: st.board.seq }); });
     toast(`Acción astuta · ${nm}: ${(ACCIONES.find(x => x[0] === nm) || [, ""])[1]}`);
   });
+  $$("[data-frage]", el).forEach(b => b.onclick = () => rage(tok.id));
+  $$("[data-fragex]", el).forEach(b => b.onclick = () => extendRage(tok.id, true));
+  $$("[data-fbard]", el).forEach(b => b.onclick = () => { bardOpen = !bardOpen; renderSheet(el); });
+  $$("[data-fbardto]", el).forEach(b => b.onclick = () => { bardOpen = false; inspire(tok.id, b.dataset.fbardto); });
+  $$("[data-frx]", el).forEach(b => b.onclick = () => answerRx(b.dataset.frx, true));
+  $$("[data-frxno]", el).forEach(b => b.onclick = () => answerRx(b.dataset.frxno, false));
   $$("[data-fbonf]", el).forEach(b => b.onclick = () => { spend(tok.id, "bonus"); toast(`${b.dataset.fbonf}: acción adicional gastada. El máster aplica el efecto.`); });
   $$("details.phbox", el).forEach(d => d.ontoggle = () => { phOpen[d.dataset.ph] = d.open; });
   $$("[data-disarm]", el).forEach(b => b.onclick = () => { arm(null); renderSheet(el); });
+  $$("[data-shove]", el).forEach(b => b.onclick = () => { const A = armedNow(), mode = b.dataset.shove; openSpell = null; arm(A && A.kind === "shove" && A.mode === mode ? null : { kind: "shove", tok: tok.id, mode }); renderSheet(el); });
+  $$("[data-fclimb]", el).forEach(b => b.onclick = () => climbOn(tok.id, b.dataset.fclimb));
+  $$("[data-xhide]", el).forEach(b => b.onclick = () => hide(tok.id, null));
+  $$("[data-xsearch]", el).forEach(b => b.onclick = () => search(tok.id, null));
+  $$("[data-fdown]", el).forEach(b => b.onclick = () => climbDown(tok.id));
+  $$("[data-fpush]", el).forEach(b => b.onclick = () => pushObject(tok.id, b.dataset.fpush));
   on("finit", () => tok && rollInit(tok.id));
   on("fend", () => { arm(null); endTurn(); });
   $$("[data-feco]", el).forEach(b => b.onclick = () => tok && toggle(tok.id, b.dataset.feco));
@@ -257,6 +311,8 @@ function bind(el, s, c, tok) {
   $$("[data-facc]", el).forEach(b => b.onclick = () => {
     const nm = b.dataset.facc, tid = tok.id;
     if (nm === "Correr") spend(tid, "dash");
+    else if (nm === "Esconderse") { hide(tid, "act"); return; }
+    else if (nm === "Buscar") { search(tid, "act"); return; }
     else if (nm === "Esquivar" || nm === "Destrabarse") { spend(tid, "act"); store.commit("token", st => { const t = st.tokens.find(x => x.id === tid); const id = nm === "Esquivar" ? "esquivando" : "destrabado"; t.conds = (t.conds || []).filter(x => x.id !== id); t.conds.push({ id, seq: st.board.seq }); }); }
     else spend(tid, "act");
     toast(`${nm}: ${(ACCIONES.find(x => x[0] === nm) || [, ""])[1]}`);

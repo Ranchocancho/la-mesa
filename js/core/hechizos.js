@@ -13,6 +13,7 @@ import { attack } from "./combate.js";
 import { rangeOf, inRange, cover, spend, dist, canActNow, eco, phase } from "./turnos.js";
 import { toast } from "./ui.js";
 import { springTrap } from "./peligros.js";
+import { durFor } from "./duraciones.js";
 
 const clean = t => String(t || "").replace(/\s*\d+\s+Documento de referencia del sistema 5\.2\.1\s*/g, " ").replace(/([a-záéíóúñ])-\s+([a-záéíóúñ])/gi, "$1$2").replace(/\s+/g, " ");
 const SHAPES = { esfera: "Esfera", cono: "Cono", cubo: "Cubo", "línea": "Línea", cilindro: "Cilindro", "emanación": "Emanación" };
@@ -87,6 +88,10 @@ export function cast(casterId, spellName, slot, targetIds, P = null) {
   // P: lanzador que no es un personaje (criatura del SRD): { name, dc, atk, lvl, use } — sin espacios: sus usos los lleva criaturas.js
   const s = store.get(), a = s.tokens.find(t => t.id === casterId), c = a && !P && charOf(s, a), d = findSpell(spellName), m = spellMech(d);
   if (!a || !(c || P) || !m) return null;
+  if (!P && (a.conds || []).some(x => x.id === "furia")) { toast("En furia no puedes lanzar conjuros (SRD 2024)."); return null; }
+  // Contrahechizo: si un personaje puede cortarlo, el conjuro de la criatura espera a que decida (como en BG3)
+  if (P && !P.noCounter && isDM(s)) { const dfr = deferCastFn && deferCastFn(casterId, spellName, slot, targetIds, P); if (dfr) return dfr; }
+  import("./acciones.js").then(mm => mm.unhide(a.id, "ha lanzado un conjuro"));
   const who = c ? c.name : P.name, cl = c ? c.level : P.lvl;
   if (!P && !canActNow(s, a.id, m.time === "react" ? "react" : "act")) { toast(`No es el turno de ${who}: fuera de su turno solo reacciones.`); return null; }
   const targets = targetIds.map(id => s.tokens.find(t => t.id === id)).filter(Boolean);
@@ -113,7 +118,8 @@ export function cast(casterId, spellName, slot, targetIds, P = null) {
   }
   // Beneficios y estados sin salvación (Bendición…)
   if (m.buff && !m.save) {
-    store.commit("token", st => targets.forEach(t => { const k = st.tokens.find(x => x.id === t.id); if (k) addCond(k, m.buff, { src: a.id, note: d.n }); }));
+    const n = spellRounds(d);
+    store.commit("token", st => targets.forEach(t => { const k = st.tokens.find(x => x.id === t.id); if (k) addCond(k, m.buff, { src: a.id, note: d.n, ...(n ? { dur: durFor(st, a.id, "start", n) } : {}) }); }));
     return logCast(lbl, a, targets, `${targets.map(t => (charOf(s, t) || t).name).join(", ")}: ${ESTADOS.find(e => e.id === m.buff).t}`);
   }
   if (m.heal) {
@@ -130,7 +136,7 @@ export function cast(casterId, spellName, slot, targetIds, P = null) {
     const r = dmgExpr ? publish({ ...base, expr: dmgExpr, dtype: m.dt }) : logCast(base.label, a, targets, null, true);
     store.commit("roll", st => {
       const x = st.rolls.find(y => y.id === r.id); if (!x) return;
-      Object.assign(x, { saves, half: m.half, dc, sv: m.save, conds: m.conds.length ? m.conds : m.buff ? [m.buff] : [], dtype: m.dt || null, spell: d.n, src: m.conc ? a.id : null, status: "pending", targets: targets.map(t => t.id) });
+      Object.assign(x, { saves, durN: spellRounds(d), half: m.half, dc, sv: m.save, conds: m.conds.length ? m.conds : m.buff ? [m.buff] : [], dtype: m.dt || null, spell: d.n, src: m.conc ? a.id : null, status: "pending", targets: targets.map(t => t.id) });
     });
     return r;
   }
@@ -141,8 +147,19 @@ export function cast(casterId, spellName, slot, targetIds, P = null) {
     store.commit("roll", st => { const x = st.rolls.find(y => y.id === r.id); if (x) Object.assign(x, { saves: targets.map(t => ({ t: t.id, name: (charOf(s, t) || t).name, ok: false, auto: true })), half: false, dtype: m.dt, spell: d.n, status: "pending", targets: targets.map(t => t.id), note: m.darts ? `${n} dardos que impactan siempre (repártelos como quieras)` : null }); });
     return r;
   }
+  // Escudo lanzado a mano (sin aviso): +5 a la CA hasta el principio de tu siguiente turno
+  if (d.n === "Escudo") store.commit("token", st => { const k = st.tokens.find(x => x.id === a.id); if (!k) return; k.conds = (k.conds || []).filter(x => x.id !== "escudo"); k.conds.push({ id: "escudo", dur: durFor(st, k.id, "start", 1) }); });
   return logCast(lbl, a, targets, d.du && d.du !== "Instantáneo" ? `Duración: ${d.du}` : null);
 }
+/** Duración del conjuro en asaltos (SRD: 1 minuto = 10 asaltos de 6 s); null si es instantáneo o dura horas. */
+export function spellRounds(d) {
+  const t = String((d && d.du) || "").toLowerCase(); let m;
+  if (/asalto/.test(t)) return +((t.match(/(\d+) asalto/) || [, 1])[1]);
+  if ((m = t.match(/(\d+) minutos?/))) return +m[1] * 10 <= 100 ? +m[1] * 10 : null;
+  return null;
+}
+let deferCastFn = null;
+import("./reacciones.js").then(m => { deferCastFn = m.deferCast; });
 
 /**
  * Acción de una criatura con tirada de salvación (alientos, miradas, venenos…), tal como la escribe el SRD:
@@ -201,7 +218,7 @@ export function applySpell(rollId, per = {}, defOff = {}) {
   store.commit("roll", st => {
     const x = st.rolls.find(y => y.id === rollId); if (!x) return;
     x.applied = plan.reduce((a, p) => a + p.amt, 0); x.status = "ok"; x.plan = plan;
-    if (x.conds && x.conds.length) plan.filter(p => p.fail).forEach(p => { const k = st.tokens.find(t => t.id === p.t); if (k) x.conds.forEach(id => addCond(k, id, { src: x.src || null, note: x.spell })); });
+    if (x.conds && x.conds.length) plan.filter(p => p.fail).forEach(p => { const k = st.tokens.find(t => t.id === p.t); if (k) x.conds.forEach(id => addCond(k, id, { src: x.src || null, note: x.spell, ...(x.durN && x.tok ? { dur: durFor(st, x.tok, "start", x.durN) } : {}) })); });
   });
   plan.forEach(p => { if (p.amt) damage(p.t, p.amt, { dtype: r.dtype }); });
 }

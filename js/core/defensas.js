@@ -37,6 +37,9 @@ export function defensesOf(t) {
 
 /** Cómo le afecta un tipo de daño: { k: "inmune"|"resiste"|"vulnerable", txt, glos } o null. */
 export function damageTraits(t, dtype) {
+  // Furia del bárbaro (SRD 2024): resistencia al daño contundente, cortante y perforante
+  if (t && dtype && (t.conds || []).some(c => c.id === "furia") && /^(contundente|cortante|perforante)/i.test(String(dtype).trim()))
+    return { k: "resiste", txt: `${t.name} está en furia: resistencia al daño ${String(dtype).split(/[ +,]/)[0]} (recibe la mitad).`, glos: "Resistencia" };
   const d = defensesOf(t); if (!d || !dtype) return null;
   const ty = String(dtype).toLowerCase().split(/[ +,]/)[0];
   if (d.inm.includes(ty)) return { k: "inmune", txt: `${d.n} es inmune al daño de ${ty}: no recibe daño.`, glos: "Inmunidad" };
