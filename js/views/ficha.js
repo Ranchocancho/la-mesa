@@ -11,6 +11,7 @@ import { condImmune } from "../core/defensas.js";
 import { rageInfo, rage, extendRage, bardicInfo, inspirable, inspire } from "../core/rasgos.js";
 import { rxOpen, answerRx, RX } from "../core/reacciones.js";
 import { durText, durTag } from "../core/duraciones.js";
+import { barOn } from "./barra.js";
 import { store } from "../core/store.js";
 import { currentUser, isDM } from "../core/session.js";
 import { publish } from "../core/dados.js";
@@ -62,9 +63,9 @@ export function renderSheet(el) {
 
     ${chestNear(s, tok)}
     ${tok && s.board && phase(s) !== "live" ? `<div class="fexplore">${climbHTML(s, tok)}<div class="accs"><button class="btn small" data-xhide title="Destreza (Sigilo) CD 15: necesitas cobertura de tres cuartos o total, o una zona muy oscura, y que ningún enemigo te vea">🫥 Esconderse</button><button class="btn small" data-xsearch title="Sabiduría (Percepción): encontrar a alguien oculto">🔎 Buscar</button>${pushables(s, tok).map(x => `<button class="btn small" data-fpush="${x.id}" ${x.free ? "" : "disabled"}>🫸 Empujar ${esc(x.name)} · CD ${x.dc}</button>`).join("")}</div>${hideDC(tok) ? `<p class="phhint">🫥 Estás oculto (Sigilo ${hideDC(tok)}).</p>` : ""}</div>` : ""}
-    ${tok && phase(s) ? turnBlock(s, c, tok) : `<section class="fsec2"><h4>⚔️ Ataques</h4>${attacksOf(s, tok || { kind: "pc", char: c.id }).map(w => `<div class="fatk"><b>${esc(w.name)}</b><span>${sign(w.atk)} · ${esc(w.expr)} ${esc(w.type || "")}</span><small>${w.rng.ranged ? `${w.rng.n}/${w.rng.l} m` : `${w.rng.l} m`}</small></div>`).join("") || `<p class="empty">Sin ataques.</p>`}</section>`}
+    ${tok && phase(s) && barOn(s) ? `<p class="fbarnote">⬇ Tu turno se juega en la barra de abajo, sobre la mesa. Aquí queda tu ficha para consultar.</p>` : tok && phase(s) ? turnBlock(s, c, tok) : `<section class="fsec2"><h4>⚔️ Ataques</h4>${attacksOf(s, tok || { kind: "pc", char: c.id }).map(w => `<div class="fatk"><b>${esc(w.name)}</b><span>${sign(w.atk)} · ${esc(w.expr)} ${esc(w.type || "")}</span><small>${w.rng.ranged ? `${w.rng.n}/${w.rng.l} m` : `${w.rng.l} m`}</small></div>`).join("") || `<p class="empty">Sin ataques.</p>`}</section>`}
 
-    ${ab && !(tok && phase(s) === "live") ? spellsBlock(s, c, tok) : ab ? slotsLine(c) : ""}
+    ${ab && !(tok && phase(s) === "live") ? spellsBlock(s, c, tok) : ab && !barOn(s) ? slotsLine(c) : ""}
 
     <details class="fsec" data-k="sv" ${testsOpen ? "open" : ""}><summary>Salvaciones y pruebas</summary>
       <div class="fsaves">${ABILITIES.map(([k]) => `<button class="btn small" data-save="${k}">${AB_SHORT[k]} ${sign(saveBonus(c, k))}</button>`).join("")}</div>
@@ -149,11 +150,11 @@ function turnBlock(s, c, tok) {
   if (ph === "init") return `<section class="fturn"><div class="ftt"><b>⚔️ ¡Combate!</b></div>${tok.init == null || tok.init === "" ? `<button class="btn gold" id="finit">🎲 Tirar iniciativa</button>` : `<p class="note">Tu iniciativa: <b>${tok.init}</b>. Esperad a que el máster empiece la ronda.</p>`}</section>`;
   const e = eco(s, tok), max = moveBudget(s, tok), left = Math.max(0, max - e.mov);
   const conds = (tok.conds || []).map(x => x.id), incapId = conds.find(x => NOACT.includes(x)), incap = incapId ? (ESTADOS.find(y => y.id === incapId) || { n: incapId }).n.toLowerCase() : "";
-  const nAtk = attacksPerAction(s, tok), atkLeft = !e.act ? nAtk : (e.atkLeft || 0), atks = attacksOf(s, tok).filter(w => !w.spell);
+  const nAtk = attacksPerAction(s, tok), atkLeft = !e.act ? nAtk : (e.atkLeft || 0), atks = attacksOf(s, tok).map((w, i) => ({ ...w, _i: i })).filter(w => !w.spell); // _i: su sitio en attacksOf (lo usa la mesa al apuntar)
   const SP = mySpells(c), byT = k => SP.filter(o => o.m.time === k);
   const F = c.features || [], fUse = k => F.filter(f => { const t = (f.name + " " + (f.text || "")).toLowerCase(); return k === "bonus" ? /acci[oó]n adicional/.test(t) : /reacci[oó]n/.test(t); });
   const cunning = F.some(f => /Acci[oó]n astuta/i.test(f.name));
-  const light = atks.map((w, i) => ({ w, i })).filter(o => /ligera/i.test(o.w.notes || o.w.props || ""));
+  const light = atks.map(w => ({ w, i: w._i })).filter(o => /ligera/i.test(o.w.notes || o.w.props || ""));
   const stateTag = (used, txt) => `<em class="phst ${used ? "used" : "ok"}">${used ? "✓ " : "● "}${txt}</em>`;
   const fix = k => myTurn || k === "react" ? `<button class="phfix" data-feco="${k}" title="Corregir: marcarla como ${k === "react" ? (e.react ? "disponible" : "gastada") : e[k] ? "disponible" : "gastada"}">↺</button>` : "";
   if (phSeq !== s.board.seq) { phSeq = s.board.seq; phOpen = {}; } // turno nuevo: se abren las fases que tienes disponibles
@@ -189,7 +190,7 @@ function turnBlock(s, c, tok) {
   const actUsed = !!e.act && !(e.atkLeft > 0), aWhy = incap ? `Estás ${incap}` : actUsed ? "Ya usaste la acción" : "";
   const actBody = incap ? `<p class="phno">Estás ${incap}: no puedes hacer acciones.</p>` : `
     <small class="phsub">Atacar${nAtk > 1 ? ` · ${e.act && e.atkLeft > 0 ? `te quedan ${e.atkLeft} de ${nAtk} ataques` : `${nAtk} ataques con la misma acción`}` : ""} · elige el arma y toca al enemigo</small>
-    <div class="fweap">${atks.map((w, i) => atkBtn(w, i, "act", aWhy)).join("") || `<p class="empty">Sin armas.</p>`}</div>
+    <div class="fweap">${atks.map(w => atkBtn(w, w._i, "act", aWhy)).join("") || `<p class="empty">Sin armas.</p>`}</div>
     ${A && A.kind === "atk" ? `<div class="farmed">🎯 Ahora toca al enemigo en la mesa <button class="btn small" data-disarm>Cancelar</button></div>` : ""}
     <div class="fshove" title="SRD: dentro de la acción de Atacar, en lugar de un ataque. Salvación de Fuerza o Destreza (la que prefiera el objetivo), CD ${shoveDC(s, tok)}"><small>🤚 Empujón (en vez de un ataque) · CD ${shoveDC(s, tok)}</small>
       <button class="btn small ${A && A.kind === "shove" && A.mode === "push" ? "gold" : ""}" data-shove="push" ${aWhy ? `disabled title="${esc(aWhy)}"` : ""}>Apartar 1,5 m</button><button class="btn small ${A && A.kind === "shove" && A.mode === "prone" ? "gold" : ""}" data-shove="prone" ${aWhy ? `disabled title="${esc(aWhy)}"` : ""}>Derribar</button></div>

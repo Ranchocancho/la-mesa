@@ -5,6 +5,7 @@ import { unseenFn } from "../core/vision.js";
 import { nameOf, oaOpen, reactionPending } from "../core/combate.js";
 import { rxOpen, RX } from "../core/reacciones.js";
 import { sneakInfo, smiteInfo } from "../core/rasgos.js";
+import { barOn } from "./barra.js";
 import { hpOf, order } from "../core/mesa.js";
 import { phase, current, pending, eco, moveBudget } from "../core/turnos.js";
 import { visibleRolls } from "./tiradas.js";
@@ -97,7 +98,7 @@ export function nowState(s, me, dm) {
   // Qué hay que hacer en este turno, paso a paso, según quién lo lleva
   const text = mineTurn
     ? (foe ? (left.length ? `Lo llevas tú: muévelo arrastrándolo, elige su ataque (pestaña PNJ) y toca al objetivo. Le queda: ${left.join(", ")}.` : `${N(cur)} ya lo ha hecho todo: termina su turno.`)
-      : (left.length ? `Te toca: muévete arrastrando tu figura; para atacar, elige arma en «Personaje» y toca al enemigo. Te queda: ${left.join(", ")}.` : "Lo has gastado todo: termina tu turno."))
+      : (left.length ? `Te toca: muévete arrastrando tu figura; para atacar, elige arma o conjuro ${barOn(s) ? "en la barra de abajo" : "en «Personaje»"} y toca al enemigo. Te queda: ${left.join(", ")}.` : "Lo has gastado todo: termina tu turno."))
     : foe ? `El máster mueve a ${N(cur)} y decide qué hace. Espera${base.nextMine ? ": vas tú después" : " tu turno"}.`
     : `${N(cur)} está actuando${left.length ? ` (le queda ${left.join(", ")})` : ""}.${base.nextMine ? " Vas tú después." : ""}`;
   const acts = mineTurn ? [...(foe && dm ? [{ k: "npc", id: cur.id, label: "👹 Sus ataques" }] : []), { k: "end", label: "Terminar turno ▶", gold: !left.length }] : [];

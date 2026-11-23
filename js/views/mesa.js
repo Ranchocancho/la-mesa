@@ -28,6 +28,7 @@ import { renderRolls, visibleRolls } from "./tiradas.js";
 import { attacksOf, attack, acOf, nameOf, damageFor, answerOA, decide } from "../core/combate.js";
 import { canActNow, phase, current, pending, beginCombat, rollInit, startRounds, endTurn, stopCombat, eco, moveBudget, speedOf, spend, toggle, ACCIONES, rangeOf, inRange, cover, modifiers, dist, metres, gap } from "../core/turnos.js";
 import { durFor, durText, durTag, leftOf } from "../core/duraciones.js";
+import { mountHotbar } from "./barra.js";
 import { srd, findSpell } from "../core/srd.js";
 import { spellMech } from "../core/hechizos.js";
 import { classInfo, prof, mod } from "../data/dnd.js";
@@ -563,6 +564,7 @@ export function mountTactical(host, opts = {}) {
   loadKits().then(() => { if (!host.isConnected) return; actSig = ""; drawHud(); }).catch(e => console.warn("Acciones del SRD no disponibles", e));
   const tickNow = setInterval(() => { if (!host.isConnected || !$(".tb-now", host)) return clearInterval(tickNow); drawNow(); }, 4000);
   // Apuntar (BG3): al elegir arma o conjuro, la mesa enseña el alcance y los objetivos; una barra dice qué hacer
+  if (!opts.edit && !isDM(S())) mountHotbar($(".tactical", host)); // barra de acciones del jugador (como BG3)
   const aimbar = document.createElement("div"); aimbar.className = "aimbar"; aimbar.hidden = true; $(".tactical", host).appendChild(aimbar);
   function drawAimbar() {
     const T = targeting(), A = armedNow();

@@ -755,3 +755,14 @@ Lo que pasa en un ataque va siempre en el mismo orden: **tirada de ataque → re
   - Los usos de Furia e Inspiración bárdica se recuperan con los descansos (como dice cada rasgo).
 - **Duraciones en turnos**: los estados pueden llevar un contador ⏳ que se ve en la figura (2D y 3D) y en el chip, y se quitan solos. Escudo y Furia la ponen solos; los conjuros con duración (1 minuto = 10 asaltos) también; el máster puede ponerla a cualquier estado desde la pestaña PNJ (hasta su turno, fin de su turno, fin del siguiente, 3 turnos, 1 minuto).
 - Sin cambios en las reglas de Firestore: todo usa lo que ya puede escribir cada uno (los usos de rasgos van con los espacios de conjuro de la ficha; lo que toca algo ajeno lo aplica el máster al verlo).
+
+## Hito 55 · Barra de acciones como Baldur's Gate 3
+En combate, el jugador juega su turno desde una **barra abajo, sobre la mesa** (pantallas de más de 900 px; en pantallas estrechas sigue todo en la ficha):
+- **Retrato** con la vida y los estados (con su contador ⏳).
+- **Recursos del turno** encima de los iconos: acción (●), acción adicional (▲), barra de movimiento, reacción (◆), espacios de conjuro por nivel y usos de Furia / Inspiración bárdica. Al pasar por un icono se ilumina lo que gastaría.
+- **Iconos** en dos filas por grupos: Ataques (armas, otra mano, empujón), Conjuros (con su nivel), Rasgos (Furia, Inspiración bárdica, Acción astuta…) y Acciones (Correr, Esquivar, Esconderse, subirse, empujar objetos…). Cada icono lleva en la esquina la forma de lo que gasta; lo que no puedes usar sale apagado y la ficha emergente dice por qué.
+- Pulsar un icono lo prepara y la mesa pide el objetivo, como ya hacía. Los conjuros abren encima un panel con el espacio, los objetivos marcados y «Lanzar».
+- **Avisos de reacción** (oportunidad, Escudo, Contrahechizo…) aparecen encima de la barra con sus botones.
+- **Terminar turno** grande a la derecha; fuera de tu turno, a quién le toca.
+- La columna de la derecha ya no repite las fases del turno: queda la ficha para consultar.
+- Arreglado: con trucos de ataque en la ficha, el arma elegida podía no ser la que se tiraba (índice del ataque).
