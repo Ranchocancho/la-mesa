@@ -766,3 +766,11 @@ En combate, el jugador juega su turno desde una **barra abajo, sobre la mesa** (
 - **Terminar turno** grande a la derecha; fuera de tu turno, a quién le toca.
 - La columna de la derecha ya no repite las fases del turno: queda la ficha para consultar.
 - Arreglado: con trucos de ataque en la ficha, el arma elegida podía no ser la que se tiraba (índice del ataque).
+
+## Hito 56 · Barra compacta, barra del máster y barra superior más baja
+- **Como en BG3, la barra no desaparece**: el jugador la tiene siempre que su personaje está en la mesa táctica, en combate y fuera (fuera de combate, sin recursos de turno; con cofres y bolsas cercanos para abrir o coger). Fuera de tu turno se ve apagada y con a quién le toca.
+- **Arreglado**: la barra podía quedarse vacía al cambiar entre máster y jugador o tras tirar el daño (se volvía a montar la mesa y la barra creía que ya estaba pintada).
+- **Más compacta**: retrato de 44 px, recursos en una línea fina, iconos de 38 px en dos filas, grupos sin títulos (el nombre sale al pasar por encima). Unos 110 px de alto.
+- **Barra del máster**: la criatura que tiene el turno (o la elegida en PNJ): ataques, acciones de su perfil del SRD (alientos, conjuros con sus usos, adicional, reacciones, legendarias con su contador), acciones comunes, ataque múltiple, avisos de oportunidad y terminar turno. Al preparar un ataque, Ventaja / Desventaja encima de la barra.
+- **Columna derecha**: el jugador conserva ahí su ficha para consultar (vida, CA, luz, estados, salvaciones y pruebas, dados); el máster, en PNJ, la vida, los estados con duración, las defensas y editar. Las acciones ya no se repiten.
+- **Barra superior**: más espacio para la explicación del turno (izquierda) y los controles de cámara en un solo bloque de botones pegados, de una fila.

@@ -9,7 +9,7 @@
 // (menos de 900 px) no hay barra y todo sigue en la ficha.
 import { store } from "../core/store.js";
 import { currentUser, isDM } from "../core/session.js";
-import { charOf } from "../core/mesa.js";
+import { charOf, hpOf } from "../core/mesa.js";
 import { findSpell } from "../core/srd.js";
 import { ESTADOS } from "../data/estados.js";
 import { spellMech, freeSlots, useSlot, cast, inArea } from "../core/hechizos.js";
@@ -17,6 +17,12 @@ import { spellDC, deathSave } from "../core/salud.js";
 import { attacksOf } from "../core/combate.js";
 import { phase, eco, moveBudget, speedOf, spend, endTurn, rollInit, ACCIONES, attacksPerAction, toggle } from "../core/turnos.js";
 import { arm, armedNow, picked, togglePick, onAim } from "../core/apuntar.js";
+import { requestOpen } from "../core/comercio.js";
+import { presentationFor } from "../core/sesiones.js";
+import { PROPS } from "../data/mapas.js";
+import { kitOf, multiOf, multiN, spellsOf, usesLeft, gate } from "../core/criaturas.js";
+import { kitArmed, bindKit, legLeft, legMax } from "./accionesnpc.js";
+import { dist } from "../core/turnos.js";
 import { hide, search, hideCheck, hideDC, shoveDC, climbables, climbOn, climbDown, pushables, pushObject } from "../core/acciones.js";
 import { topOfTok } from "../core/alturas.js";
 import { rageInfo, rage, extendRage, bardicInfo, inspirable, inspire } from "../core/rasgos.js";
@@ -32,10 +38,12 @@ const fm = n => (Math.round(n * 10) / 10).toLocaleString("es-ES");
 const sign = n => (n >= 0 ? "+" : "") + n;
 const wide = () => !window.matchMedia || window.matchMedia("(min-width: 901px)").matches;
 const myTok = s => { const u = currentUser(s); return u && (s.tokens || []).find(t => t.kind === "pc" && t.owner === u.id); };
-/** ¿Se juega con la barra? (jugador con figura en la mesa, combate en marcha y pantalla ancha) */
-export const barOn = s => !isDM(s) && !!s.board && !!phase(s) && !!myTok(s) && wide();
+const tactical = s => { const p = presentationFor(s); return !!s.board && !!p && p.type === "tactical"; };
+/** ¿Se juega con la barra? Como en BG3, siempre que tu personaje esté en la mesa táctica (en combate y fuera),
+ *  en pantallas anchas. El máster la tiene para la criatura que lleva. */
+export const barOn = s => tactical(s) && wide() && (isDM(s) || !!myTok(s));
 
-let pop = null, slotPick = {}, imgUrl = {}, sig = "";
+let pop = null, slotPick = {}, imgUrl = {};
 
 /* ---------- Iconos (dibujados con símbolos propios, sin el arte de BG3) ---------- */
 function weaponIcon(w) {
@@ -65,7 +73,7 @@ function entries(s, c, tok) {
   const live = phase(s) === "live", mine = live && s.board.turn === tok.id, e = eco(s, tok), A = armedNow();
   const ids = (tok.conds || []).map(x => x.id), incapId = ids.find(x => NOACT.includes(x));
   const incap = incapId ? `Estás ${(ESTADOS.find(y => y.id === incapId) || { n: incapId }).n.toLowerCase()}` : "";
-  const notTurn = !mine ? "No es tu turno" : "";
+  const notTurn = live && !mine ? "No es tu turno" : "";
   const nAtk = attacksPerAction(s, tok), actUsed = !!e.act && !(e.atkLeft > 0);
   const whyAct = incap || notTurn || (actUsed ? "Ya has usado tu acción" : ""), whyAtkAct = whyAct;
   const whyBonus = incap || notTurn || (e.bonus ? "Ya has usado tu acción adicional" : "");
@@ -111,6 +119,10 @@ function entries(s, c, tok) {
     G.act.push({ id: "a:" + n, ico: ACT_ICON[n] || "•", name: n, cost: "act", why: whyAct || (hw && !hw.ok ? hw.why : ""), tip: [t], run: () => basic(tok.id, n) }); });
   if (ids.includes("ardiendo")) G.act.push({ id: "douse", ico: "🧯", name: "Apagarse", cost: "act", why: whyAct, tip: ["SRD «Fuego»: con una acción apagas el fuego rodando por el suelo y quedas derribado."], run: () => import("../core/peligros.js").then(m => m.douse(tok.id)) });
   const moveWhy = incap || notTurn;
+  // Cofres, bolsas y reliquias a tu lado: abrir o coger (lo resuelve el máster)
+  const asked = new Set((s.rolls || []).filter(r => r.kind === "open" && r.status === "pending").map(r => r.prop));
+  (s.board.props || []).filter(p => ((PROPS[p.k] || {}).loot || p.loot != null || p.chest) && !p.opened && !p.hidden && dist(p, tok) <= 1).forEach(p => { const v = PROPS[p.k] || {}, nm = p.label || v.n || "Cofre";
+    G.act.push({ id: "op" + p.id, ico: v.i || "🧰", name: `${v.open ? "Abrir" : "Coger"} ${nm}`, cost: "free", why: asked.has(p.id) ? "Esperando al máster…" : "", tip: ["Interacción con un objeto: el máster te dice lo que hay."], run: () => { requestOpen(p.id, tok.id); toast("Se lo pides al máster: lo verá al momento"); } }); });
   climbables(s, tok).forEach(x => G.act.push({ id: "cl" + x.id, ico: "🧗", name: `Subirte a ${x.name}`, cost: "move", why: moveWhy, tip: [`Cuesta ${fm(x.cost)} m de movimiento. Alturas de objetos: regla de campaña.`], run: () => climbOn(tok.id, x.id) }));
   if (topOfTok(s.board, tok)) G.act.push({ id: "down", ico: "⬇", name: "Bajar", cost: "move", why: moveWhy, tip: ["Bajar del objeto."], run: () => climbDown(tok.id) });
   pushables(s, tok).forEach(x => G.act.push({ id: "po" + x.id, ico: "🫸", name: `Empujar ${x.name}`, cost: "act", why: whyAct || (!x.free ? "No hay sitio detrás" : ""), tip: [`Fuerza (Atletismo) CD ${x.dc} (regla de campaña): lo mueves 1,5 m.`], run: () => pushObject(tok.id, x.id) }));
@@ -144,19 +156,64 @@ function doCast(tokId, charId) {
   if (r !== null) { pop = null; arm(null); }
 }
 
+/* ---------- Criatura del máster: mismas ideas, con su perfil del SRD ---------- */
+const KGROUPS = [["act", "Acciones"], ["bonus", "Adicional"], ["react", "Reacciones"], ["leg", "Legendarias"]];
+const useOf = g => g === "bonus" ? "bonus" : g === "react" ? "react" : g === "leg" ? "leg" : "act";
+function kitIcon(a) {
+  if (a.type === "save") return DT_ICON[(((a.dmg || [])[0] || {}).t || "").toLowerCase()] || "💨";
+  if (a.type === "cast1") return "✨"; if (a.type === "atk") return "⚔";
+  return /cura|regenera/i.test(a.n) ? "✚" : /mueve|salta|vuela|teletransporta/i.test(a.txt || "") ? "💨" : "★";
+}
+function npcEntries(s, t) {
+  const live = phase(s) === "live", turn = live && s.board.turn === t.id, e = live ? eco(s, t) : {}, A = armedNow(), kit = kitOf(t);
+  const ids = (t.conds || []).map(x => x.id), incapId = ids.find(x => NOACT.includes(x));
+  const incap = incapId ? `Está ${(ESTADOS.find(y => y.id === incapId) || { n: incapId }).n.toLowerCase()}` : "";
+  const notTurn = live && !turn ? "No es su turno" : "";
+  const out = [];
+  // Ataques (los del perfil del SRD o los de su ficha)
+  const atkWhy = incap || notTurn || (live ? (kit ? gate(s, t, "act", { attack: true }) : e.act ? "Ya ha usado su acción" : "") || "" : "");
+  const W = attacksOf(s, t).map((w, i) => ({ id: "w" + i, ico: weaponIcon(w), name: w.name, cost: "act", why: atkWhy, on: A && A.kind === "atk" && A.tok === t.id && A.i === i,
+    tip: [`${sign(w.atk)} al ataque · ${w.expr} ${w.type || ""}`, w.rng.ranged ? `Alcance ${w.rng.n}/${w.rng.l} m` : `Alcance ${w.rng.l} m`, ...(kit && multiOf(kit) ? [`Ataque múltiple: ${multiN(kit)} ataques por acción`] : [])],
+    run: () => { const A2 = armedNow(); arm(A2 && A2.kind === "atk" && A2.tok === t.id && A2.i === i ? null : { kind: "atk", tok: t.id, i }); } }));
+  out.push(["Ataques", W]);
+  if (kit) {
+    const armedHere = A && A.kind === "npcact" && A.tok === t.id, sp = spellsOf(kit);
+    const tm = x => { const d = x.srd && findSpell(x.n), m = d && spellMech(d); return m && m.time === "bonus" ? "bonus" : m && m.time === "react" ? "react" : "act"; };
+    for (const [g, gn] of KGROUPS) {
+      const L = [];
+      (kit[g] || []).forEach((a, i) => { if (a.type === "multi" || a.type === "spells" || (g === "act" && a.type === "atk")) return;
+        const u = usesLeft(t, a), gw = live ? gate(s, t, useOf(g), { attack: a.type === "atk" }) : null;
+        const why = incap || (g === "act" || g === "bonus" ? notTurn : "") || gw || (!u.ok ? `Sin usos (${u.txt})` : "");
+        L.push({ id: `k${g}${i}`, ico: kitIcon(a), name: a.n, cost: g === "leg" ? "leg" : useOf(g), why, uses: u.txt || "", on: armedHere && !A.sp && A.g === g && A.i === i,
+          attrs: why ? "" : `data-ka="${t.id}|${g}|${i}"`, tip: [a.type === "save" ? `Salvación de ${String(a.sv || "").toUpperCase()} CD ${a.dc}` : "", String(a.txt || "").slice(0, 260)] }); });
+      if (sp && g !== "leg") (sp.lists || []).forEach(Lx => Lx.sp.filter(x => tm(x) === g).forEach(x => {
+        const d = x.srd && findSpell(x.n), m = d && spellMech(d), u = usesLeft(t, sp, x.n, Lx.u), gw = live ? gate(s, t, g) : null;
+        const why = incap || (g === "act" || g === "bonus" ? notTurn : "") || gw || (!d ? "No está en el compendio: tíralo a mano" : "") || (!u.ok ? "Sin usos hoy" : "");
+        L.push({ id: `ks${x.n}`, ico: d && m ? spellIcon(d, m) : "✨", lvl: x.lv || (d && d.lvl) || 0, name: x.n, cost: g, why, uses: Lx.u !== "will" ? `${u.left}/${Lx.u}` : "", on: armedHere && A.sp === x.n,
+          attrs: why ? "" : `data-ksp="${t.id}|${esc(x.n)}|${Lx.u}|${x.lv || ""}"`, tip: [d ? `${d.lvl ? `Nivel ${d.lvl}` : "Truco"} · ${d.al || "—"}${sp.dc ? ` · CD ${sp.dc}` : ""}` : "", Lx.u === "will" ? "A voluntad" : `${Lx.u}/día`] }); }));
+      if (L.length) out.push([gn, L]);
+    }
+  }
+  const whyAct = incap || notTurn || (live && e.act ? "Ya ha usado su acción" : "");
+  out.push(["Comunes", ACCIONES.filter(([n]) => n !== "Atacar" && n !== "Magia").map(([n, d]) => { const hw = n === "Esconderse" ? hideCheck(s, t) : null;
+    return { id: "a:" + n, ico: ACT_ICON[n] || "•", name: n, cost: "act", why: whyAct || (hw && !hw.ok ? hw.why : ""), tip: [d], run: () => basic(t.id, n) }; })]);
+  return out;
+}
+
 /* ---------- Dibujo ---------- */
 function slotsHTML(c) {
   const sl = Object.entries((c.spells || {}).slots || {}).filter(([, v]) => v.max > 0); if (!sl.length) return "";
-  return `<span class="hbslots" data-res="slot" title="Espacios de conjuro (CD ${spellDC(c)})">${sl.map(([l, v]) => `<span><small>${["", "I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX"][+l] || l}</small>${Array.from({ length: v.max }, (_, i) => `<i class="${i < v.max - v.used ? "on" : ""}"></i>`).join("")}</span>`).join("")}</span>`;
+  return `<span class="hbslots" title="Espacios de conjuro (CD ${spellDC(c)})">${sl.map(([l, v]) => `<span><small>${["", "I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX"][+l] || l}</small>${Array.from({ length: v.max }, (_, i) => `<i class="${i < v.max - v.used ? "on" : ""}"></i>`).join("")}</span>`).join("")}</span>`;
 }
+const COSTK = k => (COST[k] || (k === "leg" ? { t: "Acción legendaria", k: "leg" } : COST.act));
 function iconHTML(x, k) {
-  const cost = COST[x.cost] || COST.act;
-  return `<button class="hbi c-${cost.k} ${x.why ? "off" : ""} ${x.on ? "on" : ""}" data-hb="${k}" data-cost="${cost.k}" aria-label="${esc(x.name)}${x.why ? ": " + esc(x.why) : ""}">
-    <span class="hbg">${x.ico}</span>${x.lvl ? `<em class="hblv">${x.lvl}</em>` : ""}${x.sub ? `<em class="hbsub">${esc(x.sub)}</em>` : ""}${x.uses ? `<em class="hbuse">${x.uses}</em>` : ""}<i class="hbcost"></i></button>`;
+  const cost = COSTK(x.cost);
+  return `<button class="hbi c-${cost.k} ${x.why ? "off" : ""} ${x.on ? "on" : ""}" data-hb="${k}" ${x.attrs || ""} data-cost="${cost.k}" aria-label="${esc(x.name)}${x.why ? ": " + esc(x.why) : ""}">
+    <span class="hbg">${x.ico}</span>${x.lvl ? `<em class="hblv">${x.lvl}</em>` : ""}${x.sub ? `<em class="hbsub">${esc(x.sub)}</em>` : ""}${x.uses ? `<em class="hbuse">${esc(x.uses)}</em>` : ""}<i class="hbcost"></i></button>`;
 }
 function tipHTML(x) {
-  const cost = COST[x.cost] || COST.act;
-  return `<b>${esc(x.name)}</b><span class="hbtc c-${cost.k}"><i></i>${cost.t}</span>${x.tip.filter(Boolean).map(t => `<p>${esc(t)}</p>`).join("")}${x.why ? `<p class="hbwhy">⛔ ${esc(x.why)}</p>` : ""}`;
+  const cost = COSTK(x.cost);
+  return `<b>${esc(x.name)}</b><span class="hbtc c-${cost.k}"><i></i>${cost.t}</span>${(x.tip || []).filter(Boolean).map(t => `<p>${esc(t)}</p>`).join("")}${x.why ? `<p class="hbwhy">⛔ ${esc(x.why)}</p>` : ""}`;
 }
 function castPanel(s, c, tok) {
   const d = findSpell(pop.spell), m = spellMech(d); if (!d || !m) return "";
@@ -165,100 +222,129 @@ function castPanel(s, c, tok) {
   const nm = t => t.kind === "pc" ? (s.characters.find(x => x.id === t.char) || t).name : t.name;
   return `<div class="hbpop"><b>${esc(d.n)}</b>
     ${m.lvl ? `<label>Espacio <select data-hbslot="${esc(d.n)}">${free.map(l => `<option value="${l}" ${slotPick[d.n] === l ? "selected" : ""}>Nivel ${l}${l > m.lvl && m.up ? ` (+${m.up})` : ""}</option>`).join("")}</select></label>` : ""}
-    ${m.self ? `<span class="hbhint">Sobre ti</span>` : `<span class="hbhint">${m.area ? "Coloca el área en la mesa" : m.atk ? "Toca al objetivo en la mesa" : "Toca los objetivos en la mesa"}</span>
+    ${m.self ? `<span class="hbhint">Sobre ti</span>` : `<span class="hbhint">${m.area ? "Coloca el área en la mesa" : m.atk ? "Toca al objetivo" : "Toca los objetivos"}</span>
       <span class="hbpicks">${[...picked].map(id => { const t = s.tokens.find(x => x.id === id); return t ? `<button class="cchip" style="--c:#d6aa4e" data-hbunpick="${id}">${esc(String(nm(t)).split(" ")[0])} ✕</button>` : ""; }).join("")}</span>
-      ${m.area ? `<button class="btn small" data-hbarea title="Marca a todas las criaturas dentro del área">◎ Marcar el área</button>` : ""}`}
+      ${m.area ? `<button class="btn small" data-hbarea title="Marca a todas las criaturas dentro del área">◎ Área</button>` : ""}`}
     <button class="btn gold small" data-hbcast>Lanzar</button><button class="ib" data-hbx aria-label="Cancelar">✕</button></div>`;
 }
 function bardPanel(s, tok) {
   const L = inspirable(s, tok);
   return `<div class="hbpop"><b>🎵 Inspiración bárdica</b><span class="hbhint">¿A quién?</span>${L.map(x => `<button class="btn small gold" data-hbbard="${x.id}">${esc(String(x.name || "").split(" ")[0])}</button>`).join("") || `<span class="hbhint">No hay aliados a 18 m sin dado.</span>`}<button class="ib" data-hbx aria-label="Cancelar">✕</button></div>`;
 }
-/** Avisos de reacción (oportunidad, Escudo…) para ti: encima de la barra, como en BG3. */
+/** Avisos de reacción para esta figura (oportunidad, Escudo…): encima de la barra, como en BG3. */
 function promptHTML(s, tok) {
   const oa = (s.rolls || []).find(r => r.tok === tok.id && oaOpen(s, r));
-  if (oa) { const t = s.tokens.find(x => x.id === oa.target); return `<div class="hbask"><span>⚔ <b>¡Oportunidad!</b> ${esc(t ? (t.hidden ? "Alguien" : t.name) : "Un enemigo")} sale de tu alcance.</span><button class="btn small gold" data-hboa="${oa.id}">⚔ Atacar</button><button class="btn small" data-hboano="${oa.id}">Dejar pasar</button></div>`; }
+  if (oa) { const t = s.tokens.find(x => x.id === oa.target); return `<div class="hbask"><span>⚔ <b>¡Oportunidad!</b> ${esc(t ? (t.hidden && !isDM(s) ? "Alguien" : String(t.name).split(" ")[0]) : "Un enemigo")} sale del alcance.</span><button class="btn small gold" data-hboa="${oa.id}">⚔ Atacar</button><button class="btn small" data-hboano="${oa.id}">Dejar pasar</button></div>`; }
   const rx = (s.rolls || []).find(r => r.tok === tok.id && rxOpen(s, r));
   if (rx) { const X = RX[rx.rx]; return `<div class="hbask"><span>${X.i} <b>¡Reacción!</b> ${esc(X.q)}</span><button class="btn small gold" data-hbrx="${rx.id}">${X.i} ${esc(X.n)}</button><button class="btn small" data-hbrxno="${rx.id}">No</button></div>`; }
   return "";
 }
-
-function html(s) {
-  const tok = myTok(s), c = tok && charOf(s, tok); if (!c) return "";
-  const ph = phase(s), live = ph === "live", mine = live && s.board.turn === tok.id, e = eco(s, tok);
-  const hp = c.hp, pct = Math.max(0, Math.min(100, hp.cur / Math.max(1, hp.max) * 100));
+function portHTML(s, tok, name, hp, color, portrait) {
+  const pct = hp ? Math.max(0, Math.min(100, hp.cur / Math.max(1, hp.max) * 100)) : 0;
   const conds = (tok.conds || []).map(x => ({ x, e: ESTADOS.find(y => y.id === x.id) })).filter(o => o.e);
-  const port = `<div class="hbport"><div class="hbface" style="--c:${esc(c.color || "#888")};${imgUrl[c.portrait] ? `background-image:url('${imgUrl[c.portrait]}')` : ""}">${imgUrl[c.portrait] ? "" : esc(c.name.slice(0, 2).toUpperCase())}</div>
-    <div class="hbwho"><b>${esc(c.name.split(" ")[0])}</b><div class="hbhp ${pct < 34 ? "low" : ""}"><i style="width:${pct}%"></i><span>${hp.cur}/${hp.max}${hp.temp ? ` +${hp.temp}` : ""}</span></div>
+  return `<div class="hbport"><div class="hbface" style="--c:${esc(color || "#888")};${imgUrl[portrait] ? `background-image:url('${imgUrl[portrait]}')` : ""}">${imgUrl[portrait] ? "" : esc(String(name).slice(0, 2).toUpperCase())}</div>
+    <div class="hbwho"><b>${esc(String(name).split(" ")[0])}</b>${hp ? `<div class="hbhp ${pct < 34 ? "low" : ""}"><i style="width:${pct}%"></i><span>${hp.cur}/${hp.max}${hp.temp ? ` +${hp.temp}` : ""}</span></div>` : ""}
       <div class="hbconds">${conds.map(({ x, e: E }) => `<span class="hbcond" style="--c:${E.c}" title="${esc(E.n)}: ${esc(E.t)}${x.dur ? " · " + esc(durText(s, x)) : ""}">${esc(E.n.split(" ")[0])}${x.dur ? `<sub>${durTag(s, x).replace("⏳", "")}</sub>` : ""}</span>`).join("")}</div></div></div>`;
-  if (ph === "init") return `<div class="hotbar init">${port}<div class="hbmid"><p class="hbmsg">⚔️ ¡Combate! ${tok.init == null || tok.init === "" ? "" : `Tu iniciativa: <b>${tok.init}</b>. Esperad a que el máster empiece la ronda.`}</p></div>
-    <div class="hbend">${tok.init == null || tok.init === "" ? `<button class="btn gold" data-hbinit>🎲 Tirar iniciativa</button>` : ""}</div></div>`;
-  const G = entries(s, c, tok), all = [...G.atk, ...G.spell, ...G.feat, ...G.act];
-  const max = moveBudget(s, tok), left = Math.max(0, max - (mine ? e.mov : 0)), stuck = (tok.conds || []).some(x => NOMOVE.includes(x.id));
-  const nAtk = attacksPerAction(s, tok);
-  const R = rageInfo(c), B = bardicInfo(c);
-  const res = `<div class="hbres">
-      <span class="hbr r-act ${e.act && !(e.atkLeft > 0) || !mine ? "used" : ""}" data-res="act" title="Acción"><i></i>Acción${e.act && e.atkLeft > 0 ? ` <small>×${e.atkLeft}</small>` : nAtk > 1 && !e.act ? ` <small>×${nAtk}</small>` : ""}</span>
-      <span class="hbr r-bonus ${e.bonus || !mine ? "used" : ""}" data-res="bonus" title="Acción adicional"><i></i>Adicional</span>
-      <span class="hbr r-move ${!mine || stuck || !left ? "used" : ""}" data-res="move" title="Movimiento: arrastra tu figura"><span class="hbmv"><i style="width:${stuck ? 0 : Math.min(100, left / Math.max(1, max) * 100)}%"></i></span>${stuck ? "0" : fm(left)}/${fm(max)} m${e.dash ? " · corriendo" : ""}</span>
-      <span class="hbr r-react ${e.react ? "used" : ""}" data-res="react" title="Reacción: vuelve al empezar tu turno"><i></i>Reacción</span>
-      ${slotsHTML(c)}
-      ${R ? `<span class="hbr r-cls" title="Usos de Furia">🔥 ${R.left}/${R.max}</span>` : ""}${B ? `<span class="hbr r-cls" title="Usos de Inspiración bárdica (${B.die})">🎵 ${B.left}/${B.max}</span>` : ""}
-      ${e.slotCast && mine ? `<span class="hbnote">Ya lanzaste un conjuro con espacio: solo trucos</span>` : ""}
-    </div>`;
-  let k = 0; const idx = new Map(); all.forEach(x => idx.set(x, k++));
-  const group = (t, L) => L.length ? `<div class="hbgrp"><small>${t}</small><div class="hbrow ${L.length <= 3 ? "one" : ""}">${L.map(x => iconHTML(x, idx.get(x))).join("")}</div></div>` : "";
-  const cur = live && s.tokens.find(t => t.id === s.board.turn), curName = cur ? (cur.kind === "pc" ? (s.characters.find(x => x.id === cur.char) || cur).name : cur.hidden ? "?" : cur.name) : "—";
-  const dead = hp.cur <= 0 && !(c.death && (c.death.stable || c.death.dead));
-  const popH = pop && pop.spell ? castPanel(s, c, tok) : pop && pop.bard ? bardPanel(s, tok) : "";
-  return `<div class="hotbar ${mine ? "mine" : "wait"}">
-    <div class="hbtop">${promptHTML(s, tok)}${popH}</div>
-    ${port}
-    <div class="hbmid">${res}<div class="hbicons">${group("Ataques", G.atk)}${group("Conjuros", G.spell)}${group("Rasgos", G.feat)}${group("Acciones", G.act)}</div></div>
-    <div class="hbend">${mine ? (dead ? `<button class="btn gold" data-hbdeath>💀 Salvación contra muerte</button>` : "") + `<button class="btn gold hbendb" data-hbend>Terminar turno ▶</button>` : `<p class="hbmsg">Turno de<br><b>${esc(String(curName).split(" ")[0])}</b></p>`}</div>
-    <div class="hbtip" hidden></div></div>`;
+}
+function resHTML(s, tok, mine, extra = "") {
+  const live = phase(s) === "live", e = eco(s, tok), max = moveBudget(s, tok), left = Math.max(0, max - (mine ? e.mov : 0)), stuck = (tok.conds || []).some(x => NOMOVE.includes(x.id));
+  if (!live) return extra ? `<div class="hbres">${extra}</div>` : "";
+  return `<div class="hbres">
+    <span class="hbr r-act ${e.act && !(e.atkLeft > 0) || !mine ? "used" : ""}" title="Acción"><i></i>Acción${e.act && e.atkLeft > 0 ? ` <small>×${e.atkLeft}</small>` : ""}</span>
+    <span class="hbr r-bonus ${e.bonus || !mine ? "used" : ""}" title="Acción adicional"><i></i>Adicional</span>
+    <span class="hbr r-move ${!mine || stuck || !left ? "used" : ""}" title="Movimiento: arrastra la figura"><span class="hbmv"><i style="width:${stuck ? 0 : Math.min(100, left / Math.max(1, max) * 100)}%"></i></span>${stuck ? "0" : fm(left)}/${fm(max)} m${e.dash ? " · corre" : ""}</span>
+    <span class="hbr r-react ${e.react ? "used" : ""}" title="Reacción: vuelve al empezar su turno"><i></i>Reacción</span>${extra}</div>`;
+}
+function endHTML(s, tok, who) {
+  const live = phase(s) === "live", mine = live && s.board.turn === tok.id;
+  if (!live) return "";
+  if (mine) return `<button class="btn gold hbendb" data-hbend title="Terminar turno">Terminar<br>turno ▶</button>`;
+  const cur = s.tokens.find(t => t.id === s.board.turn), cn = cur ? (cur.kind === "pc" ? (s.characters.find(x => x.id === cur.char) || cur).name : cur.hidden && !isDM(s) ? "?" : cur.name) : "—";
+  return `<p class="hbmsg">Turno de<br><b>${esc(String(cn).split(" ")[0])}</b></p>`;
+}
+function frame(cls, top, port, res, groups, end) {
+  let k = 0; const all = [];
+  const body = groups.filter(([, L]) => L.length).map(([t, L]) => `<div class="hbrow ${L.length <= 2 ? "one" : ""}" title="${esc(t)}">${L.map(x => { all.push(x); return iconHTML(x, k++); }).join("")}</div>`).join("");
+  return { html: `<div class="hotbar ${cls}"><div class="hbtop">${top}</div>${port}<div class="hbmid">${res}<div class="hbicons">${body}</div></div><div class="hbend">${end}</div><div class="hbtip" hidden></div></div>`, all };
 }
 
-/** Monta la barra dentro de la mesa táctica (solo jugadores). */
-export function mountHotbar(tac) {
+/** Lo que pinta la barra ahora: { html, all (iconos), tok, c } */
+export function build(s, o) {
+  if (!isDM(s)) {
+    const tok = myTok(s), c = tok && charOf(s, tok); if (!c) return null;
+    const ph = phase(s), live = ph === "live", mine = live && s.board.turn === tok.id;
+    if (c.portrait && imgUrl[c.portrait] === undefined) loadImg(c.portrait);
+    const port = portHTML(s, tok, c.name, c.hp, c.color, c.portrait);
+    if (ph === "init") return { tok, c, all: [], html: `<div class="hotbar init">${port}<div class="hbmid"><p class="hbmsg">⚔️ ¡Combate! ${tok.init == null || tok.init === "" ? "Tira tu iniciativa." : `Tu iniciativa: <b>${tok.init}</b>. Esperad al máster.`}</p></div><div class="hbend">${tok.init == null || tok.init === "" ? `<button class="btn gold" data-hbinit>🎲 Iniciativa</button>` : ""}</div></div>` };
+    const G = entries(s, c, tok), R = rageInfo(c), B = bardicInfo(c);
+    const extra = `${slotsHTML(c)}${R ? `<span class="hbr r-cls" title="Usos de Furia">🔥 ${R.left}/${R.max}</span>` : ""}${B ? `<span class="hbr r-cls" title="Usos de Inspiración bárdica (${B.die})">🎵 ${B.left}/${B.max}</span>` : ""}${e0(s, tok).slotCast && mine ? `<span class="hbnote">Solo trucos este turno</span>` : ""}`;
+    const dead = c.hp.cur <= 0 && !(c.death && (c.death.stable || c.death.dead));
+    const top = promptHTML(s, tok) + (pop && pop.spell ? castPanel(s, c, tok) : pop && pop.bard ? bardPanel(s, tok) : "");
+    const end = (mine && dead ? `<button class="btn gold" data-hbdeath>💀 Salvación</button>` : "") + endHTML(s, tok);
+    const f = frame(mine ? "mine" : live ? "wait" : "explore", top, port, resHTML(s, tok, mine, extra), [["Ataques", G.atk], ["Conjuros", G.spell], ["Rasgos", G.feat], ["Acciones", G.act]], end);
+    return { ...f, tok, c };
+  }
+  // Máster: la criatura que tiene el turno o la que ha elegido en la pestaña PNJ
+  const live = phase(s) === "live", cur = live && s.tokens.find(t => t.id === s.board.turn);
+  const pickId = cur && cur.kind !== "pc" ? cur.id : o.npc && o.npc();
+  const t = pickId && s.tokens.find(x => x.id === pickId && x.kind !== "pc"); if (!t) return null;
+  const mine = live && s.board.turn === t.id, A = armedNow(), hp = hpOf(s, t);
+  if (t.portrait && imgUrl[t.portrait] === undefined) loadImg(t.portrait);
+  const kit = kitOf(t), ll = legLeft(t), e = live ? eco(s, t) : {};
+  const extra = `${kit && multiOf(kit) && live ? `<span class="hbr r-cls" title="Ataque múltiple">⚔ ${Math.min(e.n || 0, multiN(kit))}/${multiN(kit)}</span>` : ""}${ll != null ? `<span class="hbr r-leg ${ll <= 0 ? "used" : ""}" title="Acciones legendarias esta ronda">👑 ${ll}/${legMax(t)}</span>` : ""}`;
+  let top = promptHTML(s, t);
+  if (A && A.kind === "npcact" && A.tok === t.id) top += `<div class="hbpop hbkit">${kitArmed(s, t)}</div>`;
+  if (A && A.kind === "atk" && A.tok === t.id) { const adv = o.getAdv ? o.getAdv() : null; top += `<div class="hbpop"><b>🎯 Toca al objetivo</b><button class="btn small ${adv === 1 ? "gold" : ""}" data-hbadv="1">Ventaja</button><button class="btn small ${adv === -1 ? "gold" : ""}" data-hbadv="-1">Desventaja</button><button class="ib" data-hbx aria-label="Cancelar">✕</button></div>`; }
+  const port = portHTML(s, t, t.name, hp, t.kind === "npc" ? "#7d8fe0" : "#b33a2e", t.portrait) .replace('<div class="hbwho">', `<div class="hbwho">${t.hidden ? `<small class="hbhid" title="Oculto a los jugadores">🙈 oculto</small>` : ""}`);
+  const f = frame(`dm ${mine ? "mine" : live ? "wait" : "explore"}`, top, port, resHTML(s, t, mine, extra), npcEntries(s, t), endHTML(s, t));
+  return { ...f, tok: t, c: null };
+}
+const e0 = (s, t) => eco(s, t);
+const loadImg = key => { imgUrl[key] = null; getImage(key).then(u => { imgUrl[key] = u || null; }); };
+
+/** Monta la barra dentro de la mesa táctica. o: { npc() → id elegido por el máster, getAdv(), setAdv(v), redraw() } */
+export function mountHotbar(tac, o = {}) {
   const box = document.createElement("div"); box.className = "hbbox"; tac.appendChild(box);
-  let G = null;
+  let all = [], sig = "", seen = false, born = Date.now(); // la firma es de ESTA barra: si la mesa se vuelve a montar, se pinta de nuevo
   const render = () => {
-    if (!box.isConnected) { off(); offA(); removeEventListener("resize", render); return; }
-    const s = store.get(), on = barOn(s);
-    tac.classList.toggle("withbar", on);
-    if (!on) { if (sig) { box.innerHTML = ""; sig = ""; } return; }
+    // La mesa puede montarse antes de entrar en la página: solo se desmonta si ya estuvo y ha desaparecido
+    if (!box.isConnected) { if (seen || Date.now() - born > 15000) { off(); offA(); removeEventListener("resize", render); clearInterval(iv); } return; }
+    seen = true;
+    const s = store.get(), on = barOn(s), B = on ? build(s, o) : null;
+    tac.classList.toggle("withbar", !!B);
+    if (!B) { if (sig) { box.innerHTML = ""; sig = ""; } return; }
     const ae = document.activeElement; if (ae && box.contains(ae) && ae.tagName === "SELECT") return;
-    const tok = myTok(s), c = charOf(s, tok);
-    if (c.portrait && imgUrl[c.portrait] === undefined) { imgUrl[c.portrait] = null; getImage(c.portrait).then(u => { imgUrl[c.portrait] = u || null; sig = ""; render(); }); }
-    if (pop && pop.spell && !armedNow()) pop = null; // se canceló en la mesa (Esc, clic derecho) o ya se lanzó
-    const h = html(s);
-    if (h === sig) return;
-    sig = h; box.innerHTML = h;
-    G = (() => { const x = entries(s, c, tok); return [...x.atk, ...x.spell, ...x.feat, ...x.act]; })();
-    tac.style.setProperty("--hb-h", (box.offsetHeight || 140) + "px");
-    bind(s, tok, c);
+    if (pop && pop.spell && !armedNow()) { pop = null; return render(); } // se canceló en la mesa (Esc, clic derecho) o ya se lanzó
+    if (B.html === sig) return;
+    sig = B.html; box.innerHTML = B.html; all = B.all;
+    tac.style.setProperty("--hb-h", (box.offsetHeight || 110) + "px");
+    bind(B.tok, B.c);
   };
+  const redraw = () => { sig = ""; render(); if (o.redraw) o.redraw(); };
   const tipEl = () => $(".hbtip", box);
-  function bind(s, tok, c) {
+  function bind(tok, c) {
     $$("[data-hb]", box).forEach(b => {
-      const x = G[+b.dataset.hb]; if (!x) return;
-      b.onclick = () => { if (x.why) { toast(x.why); return; } x.run(); sig = ""; render(); };
+      const x = all[+b.dataset.hb]; if (!x) return;
+      if (!x.attrs) b.onclick = () => { if (x.why) { toast(x.why); return; } x.run(); redraw(); };
       b.onmouseenter = () => { const t = tipEl(); t.innerHTML = tipHTML(x); t.hidden = false; const r = b.getBoundingClientRect(), R0 = box.getBoundingClientRect();
-        t.style.left = Math.max(4, Math.min(R0.width - 300, r.left - R0.left + r.width / 2 - 150)) + "px"; box.querySelector(".hotbar").dataset.hl = b.dataset.cost; };
+        t.style.left = Math.max(4, Math.min(R0.width - 290, r.left - R0.left + r.width / 2 - 140)) + "px"; const hb = box.querySelector(".hotbar"); if (hb) hb.dataset.hl = b.dataset.cost; };
       b.onmouseleave = () => { tipEl().hidden = true; const hb = box.querySelector(".hotbar"); if (hb) delete hb.dataset.hl; };
     });
-    const on = (sel, fn) => $$(sel, box).forEach(b => b.onclick = () => { fn(b); sig = ""; render(); });
+    bindKit(box, redraw, () => (o.getAdv ? o.getAdv() : null)); // acciones del perfil de la criatura (las mismas de la pestaña PNJ)
+    const on = (sel, fn) => $$(sel, box).forEach(b => b.onclick = () => { fn(b); redraw(); });
     on("[data-hbend]", () => { arm(null); pop = null; endTurn(); });
     on("[data-hbinit]", () => rollInit(tok.id));
     on("[data-hbdeath]", () => deathSave(tok.id));
     on("[data-hbx]", () => { pop = null; arm(null); });
-    on("[data-hbcast]", () => doCast(tok.id, c.id));
+    on("[data-hbadv]", b => { const v = +b.dataset.hbadv; if (o.setAdv) o.setAdv(o.getAdv && o.getAdv() === v ? null : v); });
+    if (c) {
+      on("[data-hbcast]", () => doCast(tok.id, c.id));
+      on("[data-hbarea]", () => { const st = store.get(), d = findSpell(pop.spell), m = spellMech(d), center = st.tokens.find(t => t.id === [...picked][0]);
+        if (!center && !/cono|línea|emanación/.test(m.area.shape)) return toast("Marca primero la criatura del centro del área.");
+        inArea(st, m, tok, center).forEach(id => picked.add(id)); });
+      on("[data-hbbard]", b => { pop = null; inspire(tok.id, b.dataset.hbbard); });
+    }
     on("[data-hbunpick]", b => togglePick(b.dataset.hbunpick));
-    on("[data-hbarea]", () => { const st = store.get(), d = findSpell(pop.spell), m = spellMech(d), center = st.tokens.find(t => t.id === [...picked][0]);
-      if (!center && !/cono|línea|emanación/.test(m.area.shape)) return toast("Marca primero la criatura del centro del área.");
-      inArea(st, m, tok, center).forEach(id => picked.add(id)); });
-    on("[data-hbbard]", b => { pop = null; inspire(tok.id, b.dataset.hbbard); });
     on("[data-hboa]", b => answerOA(b.dataset.hboa, true)); on("[data-hboano]", b => answerOA(b.dataset.hboano, false));
     on("[data-hbrx]", b => answerRx(b.dataset.hbrx, true)); on("[data-hbrxno]", b => answerRx(b.dataset.hbrxno, false));
     $$("[data-hbslot]", box).forEach(x => x.onchange = () => { slotPick[x.dataset.hbslot] = +x.value; });
@@ -266,7 +352,7 @@ export function mountHotbar(tac) {
   const off = store.subscribe(() => render());
   const offA = onAim(() => { sig = ""; render(); });
   addEventListener("resize", render);
-  // Los avisos de reacción caducan solos (45 s): se repinta de vez en cuando
-  const iv = setInterval(() => { if (!box.isConnected) return clearInterval(iv); render(); }, 4000);
-  render();
+  // Los avisos caducan solos y la imagen del retrato llega tarde: se repinta de vez en cuando
+  const iv = setInterval(render, 800);
+  return { render: () => { sig = ""; render(); } };
 }

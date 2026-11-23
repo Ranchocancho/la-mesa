@@ -266,7 +266,7 @@ export function createBoard3D(host, opts) {
   const camHTML = opts.controlsHost ? `<div class="cam3d compact" role="toolbar" aria-label="Cámara">
       <span class="camsq"><button class="sq" data-cam="center" title="Centrar la cámara en la mesa" aria-label="Centrar">⌖</button><button class="sq" data-cam="top" title="Vista cenital (desde arriba)" aria-label="Cenital">⬇</button><button class="sq" data-cam="ruler" aria-pressed="false" title="Regla: arrastra de una casilla a otra para medir" aria-label="Regla">📏</button><button class="sq" data-cam="mute" title="Silenciar">${sound.muted ? "🔇" : "🔊"}</button></span>
       <span class="volv" title="Volumen"><input type="range" min="0" max="1" step="0.05" value="${sound.volume}" data-vol aria-label="Volumen" orient="vertical"></span>
-      <span class="camst"><button class="btn small" data-cam="mode" aria-pressed="false" title="Órbita alrededor del centro o cámara libre">Órbita</button><button class="btn small" data-cam="walls" aria-pressed="true" title="Muros bajos para ver mejor">Muros bajos</button></span>
+      <span class="camst"><button class="btn small" data-cam="mode" aria-pressed="false" title="Cámara en órbita (pulsa para libre)">⟳</button><button class="btn small" data-cam="walls" aria-pressed="true" title="Muros bajos (pulsa para altos)">▁</button></span>
     </div>` : `<div class="cam3d" role="toolbar" aria-label="Cámara">
       <button class="btn small" data-cam="center" title="Centrar la cámara en la mesa">⌖ Centrar</button>
       <button class="btn small" data-cam="top" title="Vista desde arriba">⬇ Cenital</button>
@@ -325,7 +325,7 @@ export function createBoard3D(host, opts) {
   function setFree(on) {
     free = on; controls.enablePan = on; controls.screenSpacePanning = false; controls.zoomToCursor = on;
     if (!on) { const off = camera.position.clone().sub(controls.target); controls.target.set(0, 0, 0); camera.position.copy(off); }
-    const b = ctl.querySelector('[data-cam="mode"]'); b.textContent = on ? "Libre" : "Órbita"; b.setAttribute("aria-pressed", on);
+    const b = ctl.querySelector('[data-cam="mode"]'); b.textContent = on ? "✥" : "⟳"; b.title = on ? "Cámara libre (pulsa para órbita)" : "Cámara en órbita (pulsa para libre)"; b.setAttribute("aria-pressed", on);
   }
   ctl.querySelectorAll("[data-cam]").forEach(b => b.onclick = () => {
     const k = b.dataset.cam;
@@ -335,7 +335,7 @@ export function createBoard3D(host, opts) {
     if (k === "fog") { opts.setFog(!visionOn(G)); return; }
     if (k === "ruler") { measuring = !measuring; b.setAttribute("aria-pressed", measuring); renderer.domElement.style.cursor = measuring ? "crosshair" : ""; if (!measuring) drawRuler(null); return; }
     if (k === "mute") { sound.setMuted(!sound.muted); b.textContent = sound.muted ? "🔇" : "🔊"; return; }
-    if (k === "walls") { lowWalls = !lowWalls; b.textContent = lowWalls ? "Muros bajos" : "Muros altos"; b.setAttribute("aria-pressed", lowWalls); lastSig = ""; sync(); }
+    if (k === "walls") { lowWalls = !lowWalls; b.textContent = lowWalls ? "▁" : "▇"; b.title = lowWalls ? "Muros bajos (pulsa para altos)" : "Muros altos (pulsa para bajos)"; b.setAttribute("aria-pressed", lowWalls); lastSig = ""; sync(); }
   });
   const amb = ctl.querySelector("[data-amb]");
   if (amb) amb.onchange = () => opts.setAmbient && opts.setAmbient(amb.value);

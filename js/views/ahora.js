@@ -97,7 +97,7 @@ export function nowState(s, me, dm) {
   const foe = cur.kind !== "pc";
   // Qué hay que hacer en este turno, paso a paso, según quién lo lleva
   const text = mineTurn
-    ? (foe ? (left.length ? `Lo llevas tú: muévelo arrastrándolo, elige su ataque (pestaña PNJ) y toca al objetivo. Le queda: ${left.join(", ")}.` : `${N(cur)} ya lo ha hecho todo: termina su turno.`)
+    ? (foe ? (left.length ? `Lo llevas tú: muévelo arrastrándolo, elige su ataque ${barOn(s) ? "en la barra de abajo" : "(pestaña PNJ)"} y toca al objetivo. Le queda: ${left.join(", ")}.` : `${N(cur)} ya lo ha hecho todo: termina su turno.`)
       : (left.length ? `Te toca: muévete arrastrando tu figura; para atacar, elige arma o conjuro ${barOn(s) ? "en la barra de abajo" : "en «Personaje»"} y toca al enemigo. Te queda: ${left.join(", ")}.` : "Lo has gastado todo: termina tu turno."))
     : foe ? `El máster mueve a ${N(cur)} y decide qué hace. Espera${base.nextMine ? ": vas tú después" : " tu turno"}.`
     : `${N(cur)} está actuando${left.length ? ` (le queda ${left.join(", ")})` : ""}.${base.nextMine ? " Vas tú después." : ""}`;

@@ -28,7 +28,7 @@ import { renderRolls, visibleRolls } from "./tiradas.js";
 import { attacksOf, attack, acOf, nameOf, damageFor, answerOA, decide } from "../core/combate.js";
 import { canActNow, phase, current, pending, beginCombat, rollInit, startRounds, endTurn, stopCombat, eco, moveBudget, speedOf, spend, toggle, ACCIONES, rangeOf, inRange, cover, modifiers, dist, metres, gap } from "../core/turnos.js";
 import { durFor, durText, durTag, leftOf } from "../core/duraciones.js";
-import { mountHotbar } from "./barra.js";
+import { mountHotbar, barOn } from "./barra.js";
 import { srd, findSpell } from "../core/srd.js";
 import { spellMech } from "../core/hechizos.js";
 import { classInfo, prof, mod } from "../data/dnd.js";
@@ -62,7 +62,7 @@ export function mountTactical(host, opts = {}) {
   const sideShow = () => { if (!rc) return; $$("[data-side]", host).forEach(b => b.setAttribute("aria-selected", b.dataset.side === sideTab)); ini.hidden = sideTab !== "ini"; rc.hidden = sideTab !== "tir"; if (sideTab === "tir") renderRolls(rc); };
   $$("[data-side]", host).forEach(b => b.onclick = () => { sideTab = b.dataset.side; sideShow(); });
   let rollsSeen = (store.get().rolls || []).length;
-  const actHost = opts.actHost || null; let actSig = "", npcId = null, npcPick = null;
+  const actHost = opts.actHost || null; let actSig = "", npcId = null, npcPick = null, hotbar = null;
   // Seleccionar una figura (desde la mesa, la iniciativa o la tira): se abre su consulta abajo
   // El jugador ha elegido arma o conjuro en su ficha: tocar una figura la usa como objetivo
   function aimAt(id) {
@@ -182,7 +182,7 @@ export function mountTactical(host, opts = {}) {
     if (board && board.dispose) board.dispose();
     bw.innerHTML = ""; bw.className = "boardwrap"; board = null;
     const tg = $("#v3d", host); $(".tb-right", host).appendChild(tg); // vuelve a su sitio antes de vaciar los controles
-    $(".tb-ctl", host).innerHTML = ""; tg.textContent = use3d() ? "🗺 Plano 2D" : "🎲 Mesa 3D"; tg.hidden = !!opts.edit;
+    $(".tb-ctl", host).innerHTML = ""; tg.textContent = use3d() ? "2D" : "3D"; tg.title = use3d() ? "Ver el plano en 2D" : "Ver la mesa en 3D"; tg.hidden = !!opts.edit;
     if (use3d()) import("./tablero3d.js").then(m => { if (!m.webglOK) throw new Error("sin WebGL"); board = m.createBoard3D(bw, bopts); const col = $(".tb-ctl .camst", host); if (col) col.appendChild($("#v3d", host)); if (sel) board.select(sel); drawHud(); })
       .catch(e => { console.warn("Vista 3D no disponible", e); want3d = false; mountBoard(); });
     else board = createBoard(bw, bopts);
@@ -440,7 +440,7 @@ export function mountTactical(host, opts = {}) {
       } else {
         const npcs = s.tokens.filter(t => t.kind !== "pc");
         const pickId = npcId && s.tokens.some(t => t.id === npcId) ? npcId : cur && cur.kind !== "pc" ? cur.id : (target ? target.id : npcs[0] && npcs[0].id);
-        const t = s.tokens.find(x => x.id === pickId); npcPick = pickId;
+        const t = s.tokens.find(x => x.id === pickId); if (npcPick !== pickId) { npcPick = pickId; if (hotbar) queueMicrotask(() => hotbar.render()); }
         html = `<div class="npcpick">${npcs.map(n => { const h = hpOf(s, n); return `<button class="npcchip ${n.id === pickId ? "on" : ""} ${h && h.cur <= 0 ? "down" : ""} ${cur && cur.id === n.id ? "turn" : ""}" data-npc="${n.id}" title="${esc(n.name)}${h ? ` · ${h.cur}/${h.max}` : ""}">${esc(n.name.split(" ")[0])}${h ? `<small>${h.cur}</small>` : ""}</button>`; }).join("") || `<p class="empty">No hay PNJ ni enemigos en la mesa.</p>`}</div>
           ${t ? npcCard(s, t, live && cur && cur.id === t.id, !!(board && board.pick)) : ""}`;
       }
@@ -564,7 +564,8 @@ export function mountTactical(host, opts = {}) {
   loadKits().then(() => { if (!host.isConnected) return; actSig = ""; drawHud(); }).catch(e => console.warn("Acciones del SRD no disponibles", e));
   const tickNow = setInterval(() => { if (!host.isConnected || !$(".tb-now", host)) return clearInterval(tickNow); drawNow(); }, 4000);
   // Apuntar (BG3): al elegir arma o conjuro, la mesa enseña el alcance y los objetivos; una barra dice qué hacer
-  if (!opts.edit && !isDM(S())) mountHotbar($(".tactical", host)); // barra de acciones del jugador (como BG3)
+  // Barra de acciones como la de BG3: el jugador, su personaje; el máster, la criatura que lleva
+  hotbar = !opts.edit ? mountHotbar($(".tactical", host), { npc: () => npcPick, getAdv: () => atkAdv, setAdv: v => { atkAdv = v; }, redraw: () => { actSig = ""; drawHud(); } }) : null;
   const aimbar = document.createElement("div"); aimbar.className = "aimbar"; aimbar.hidden = true; $(".tactical", host).appendChild(aimbar);
   function drawAimbar() {
     const T = targeting(), A = armedNow();
@@ -668,6 +669,8 @@ function npcCard(s, t, turn, canPick) {
     ${A && A.kind === "atk" && A.tok === t.id ? `<div class="farmed">🎯 Toca al objetivo en la mesa <span><button class="ib ${atkAdv === 1 ? "gold" : ""}" data-atkadv="1">Ventaja</button><button class="ib ${atkAdv === -1 ? "gold" : ""}" data-atkadv="-1">Desv.</button><button class="ib" data-ndisarm>✕</button></span></div>` : ""}`;
   const fx = canPick && !kit && !(live && !turn) ? `<details class="castbox"><summary title="Solo dibuja el efecto en la mesa: no tira dados ni aplica daño">✨ Efecto visual (sin reglas)</summary><div class="castlist">${Object.entries(EFECTOS).map(([k, x]) => `<button class="btn small" data-cast="${t.id}|${k}" title="${x.hint || ""}">${x.n}</button>`).join("")}</div></details>` : "";
   const more = `<div class="npcmore">${kitRest(t)}${fx}<details class="tkdetails" ${editOpen ? "open" : ""}><summary>✎ Editar</summary>${tokenEditor(t)}</details></div>`;
+  // Con la barra de abajo, aquí solo queda la consulta: vida, estados, defensas, editar
+  if (barOn(s)) return `<div class="npcc">${head}<p class="fbarnote">⬇ Sus acciones están en la barra de abajo, sobre la mesa.</p>${more}</div>`;
   // Fuera de combate: todo a la vista
   if (!live) return `<div class="npcc">${head}${weapons("")}${kitHTML(s, t, false).replace(kitDefs(t), "")}${more}</div>`;
 
