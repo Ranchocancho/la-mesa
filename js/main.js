@@ -49,7 +49,9 @@ function topbar(state) {
   const r = route();
   const cloudMode = store.mode() === "cloud";
   const live = visibleLive(state);
-  const players = state.users.filter(u => u.role === "player");
+  // En una escena táctica, solo los jugadores cuyo personaje está en la mesa (más el que ya se esté mirando)
+  const pf0 = presentationFor(state), onBoard = pf0 && pf0.type === "tactical" && state.board ? new Set((state.tokens || []).filter(t => t.kind === "pc" && t.owner).map(t => t.owner)) : null;
+  const players = state.users.filter(u => u.role === "player" && (!onBoard || onBoard.has(u.id) || u.id === session.viewAs()));
   return `<header class="top">
     <div class="brand"><b>La Mesa</b><span>${esc(state.campaign.name)} · ${live ? `${esc(sessionName(live))} en curso · ${esc(clockShort(clockOf(state)))}` : "sin partida"}${cloudMode ? "" : " · demostración"}</span></div>
     ${me ? `<nav class="nav" aria-label="Secciones">${ROUTES.filter(x => !x.dmOnly || isDM(state)).map(x => `<a href="#${x.id}" ${x.id === r ? 'aria-current="page"' : ""}>${x.label}${x.id === "partida" && live ? ` <i class="livedot" title="Partida en curso"></i>` : ""}${x.id === "personajes" && isDM(state) && pendingCount(state) ? ` <i class="pendot" title="Cambios de fichas por revisar">${pendingCount(state)}</i>` : ""}${x.soon ? ` <span class="soon">· hito ${x.soon}</span>` : ""}</a>`).join("")}</nav>

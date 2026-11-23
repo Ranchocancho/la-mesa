@@ -786,3 +786,9 @@ En combate, el jugador juega su turno desde una **barra abajo, sobre la mesa** (
 - **Estados con icono**: cada estado tiene su icono (⤵ derribado, ☠ envenenado, 🛡 Escudo, 😡 Furia…). Sobre cada figura sale una fila de iconos con los turnos que les quedan (2D y 3D), en la iniciativa y en las fichas, en vez de anillos de colores apilados y carteles de texto.
 - **Empujón contado desde quien empuja**: «🤚 ¡Derribado!» / «¡Apartado!» o «Resiste el empujón» (antes salía «✓ Salva», que parecía un éxito tuyo cuando era del enemigo).
 - Los avisos (toasts) ya no tapan la barra de acciones.
+
+## Hito 59 · Barra organizada como BG3 y solo juega quien está en la escena
+- **Pestañas como BG3** a la izquierda de los iconos: ▦ Todo · ⚔ Armas · ✨ Hechizos · ★ Habilidades (Furia, Inspiración bárdica, Acción astuta, rasgos y acciones del perfil de las criaturas) · ⚙ Comunes (Correr, Destrabarse, Esquivar, Esconderse, Ayudar, Buscar, Empujón, Lanzar objeto, subirse, empujar objetos, abrir cofres).
+- Fuera de la barra lo que no es de combate (Estudiar, Influir, Preparar una acción, Utilizar): se hacen como pruebas desde la ficha.
+- La fase del turno solo con símbolos, como BG3: ● acción, ▲ acción adicional, barra de movimiento, ◆ reacción y los espacios de conjuro.
+- **Solo juega quien está en la escena**: en una escena táctica, un jugador cuyo personaje no está en la mesa ve la mesa pero no tiene barra, ni dados, ni pruebas («no está en esta escena»). El «Ver como» del máster y «Pedir una tirada» solo ofrecen a los personajes que están en la mesa.

@@ -1,6 +1,7 @@
 // Tiradas a petición del máster: «Todos, Sabiduría (Percepción)», «Brena, salvación de Destreza CD 14»…
 // Valen en combate y en roleplay. Al jugador le aparece un tapete con su bonificador y el botón de tirar;
 // si son varios a la vez, los dados caen juntos en la misma bandeja (dicecam agrupa por petición).
+import { presentationFor } from "../core/sesiones.js";
 import { store, uid } from "../core/store.js";
 import { isDM, currentUser } from "../core/session.js";
 import { publish } from "../core/dados.js";
@@ -78,7 +79,9 @@ let pick = { type: "skill", key: "percepcion", ab: "sab", dc: "", hideDC: true, 
 export function openAskDialog(only = null) {
   const s = store.get(), dm = isDM(s); if (!dm) return;
   if (only && only.length) { pick.who = "some"; pick.chars = [...only]; }
-  const pcs = s.characters.filter(c => c.owner || (s.tokens || []).some(t => t.kind === "pc" && t.char === c.id));
+  // En una escena táctica, solo a quien está en la mesa
+  const pf = presentationFor(s), tac = pf && pf.type === "tactical" && s.board;
+  const pcs = s.characters.filter(c => tac ? (s.tokens || []).some(t => t.kind === "pc" && t.char === c.id) : c.owner || (s.tokens || []).some(t => t.kind === "pc" && t.char === c.id));
   const ov = document.createElement("div"); ov.className = "modal reqdlg";
   const draw = () => {
     const opts = pick.type === "skill" ? SKILLS.map(([k, n, a]) => [k, `${n}`, a]) : ABILITIES.map(([k, n]) => [k, n, k]);

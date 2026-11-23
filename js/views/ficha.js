@@ -12,6 +12,7 @@ import { rageInfo, rage, extendRage, bardicInfo, inspirable, inspire } from "../
 import { rxOpen, answerRx, RX } from "../core/reacciones.js";
 import { durText, durTag } from "../core/duraciones.js";
 import { barOn } from "./barra.js";
+import { presentationFor } from "../core/sesiones.js";
 import { store } from "../core/store.js";
 import { currentUser, isDM } from "../core/session.js";
 import { publish } from "../core/dados.js";
@@ -38,6 +39,11 @@ export function renderSheet(el) {
   if (!list.length) { el.innerHTML = `<p class="empty">No tienes personaje en este mundo. <a href="#personajes">Crea tu ficha</a>.</p>`; return; }
   const c = list.find(x => x.id === charSel) || list[0]; charSel = c.id;
   const tok = (s.tokens || []).find(t => t.kind === "pc" && t.char === c.id);
+  // Escena táctica sin tu personaje: no actúas ni tiras hasta que el máster te ponga en la mesa
+  { const pf = presentationFor(s); if (pf && pf.type === "tactical" && s.board && !tok) {
+    el.innerHTML = `<header class="fhead"><div class="fport" style="--c:${esc(c.color || "#888")}">${esc(c.name.slice(0, 2).toUpperCase())}</div><div><b>${esc(c.name)}</b><small>${esc(c.cls)} ${c.level}</small></div></header>
+      <p class="fbarnote">🚪 ${esc(c.name.split(" ")[0])} no está en esta escena. Puedes mirar la mesa, pero no actuar ni tirar dados hasta que el máster te ponga en ella.</p>`;
+    return; } }
   const hpPct = Math.max(0, Math.min(100, c.hp.cur / Math.max(1, c.hp.max) * 100));
   const conds = tok ? (tok.conds || []) : [];
   const d = c.death || { s: 0, f: 0 }, pip = (on, cls) => Array.from({ length: 3 }, (_, i) => `<i class="pip ${cls} ${i < on ? "on" : ""}"></i>`).join("");

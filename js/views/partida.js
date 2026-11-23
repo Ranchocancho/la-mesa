@@ -135,7 +135,10 @@ function draw() {
   el.classList.toggle("withpanel", (dm && !panelHidden) || !dm);
   // Jugadores: columna fija con su ficha y su tapete de dados (la iniciativa entra cuando hay mesa táctica)
   const plp = $("#plp", el); plp.hidden = dm;
-  if (!dm) { renderSheet($("#pl-sheet", el)); renderRolls($("#pl-dice", el), { log: false, by: () => { const st = store.get(), u = currentUser(st); const t = u && (st.tokens || []).find(x => x.kind === "pc" && x.owner === u.id); return t ? t.id : null; } }); }
+  // Un jugador cuyo personaje no está en la escena táctica no tira dados
+  const outScene = !dm && tactical(state) && !(state.tokens || []).some(t => t.kind === "pc" && t.owner === (currentUser(state) || {}).id);
+  $("#pl-dice", el).hidden = outScene;
+  if (!dm) { renderSheet($("#pl-sheet", el)); if (!outScene) renderRolls($("#pl-dice", el), { log: false, by: () => { const st = store.get(), u = currentUser(st); const t = u && (st.tokens || []).find(x => x.kind === "pc" && x.owner === u.id); return t ? t.id : null; } }); }
   const typing = box => box && box.contains(document.activeElement) && /INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName);
   if (!typing($("#sbar", el))) $("#sbarinfo", el).innerHTML = `${live ? `<b>${esc(sessionName(live))}</b> en curso${live.test ? ` · <span class="tag secret">SOLO MÁSTERES</span>` : ""}` : "No hay ninguna partida en curso"}
     ${live ? `<span class="quicknote"><input id="qnote" placeholder="📜 Anotar en la crónica…" aria-label="Nota para la crónica"><button class="btn small" id="qnotego">Anotar</button></span>` : ""}

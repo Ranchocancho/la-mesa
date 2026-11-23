@@ -61,6 +61,10 @@ function spellIcon(d, m) {
   return DT_ICON[(m.dt || "").toLowerCase()] || (m.conds && m.conds.length ? "🌀" : "✨");
 }
 const ACT_ICON = { Correr: "🏃", Destrabarse: "💨", Esquivar: "🤸", Ayudar: "🤝", Esconderse: "🫥", Buscar: "🔎", Estudiar: "📖", Influir: "🗣", "Preparar una acción": "⏳", Utilizar: "🧰" };
+// Como en BG3: en la barra solo las acciones de combate de verdad (Estudiar, Influir… se hacen como pruebas desde la ficha)
+const COMMON = ["Correr", "Destrabarse", "Esquivar", "Esconderse", "Ayudar", "Buscar"];
+const CATS = [["all", "Todo", "▦"], ["arm", "Armas", "⚔"], ["spell", "Hechizos", "✨"], ["hab", "Habilidades", "★"], ["com", "Comunes", "⚙"]];
+let hbTab = "all";
 const COST = { act: { t: "Acción", k: "act" }, bonus: { t: "Acción adicional", k: "bonus" }, react: { t: "Reacción", k: "react" }, free: { t: "Gratis", k: "free" }, move: { t: "Movimiento", k: "move" } };
 
 function mySpells(c) {
@@ -115,7 +119,7 @@ function entries(s, c, tok) {
   F.filter(f => { const t = (f.name + " " + (f.text || "")).toLowerCase(); return /acci[oó]n adicional/.test(t) && !/Acci[oó]n astuta|^Furia$|^Inspiraci[oó]n b[aá]rdica/i.test(f.name); })
     .forEach((f, i) => G.feat.push({ id: "f" + i, ico: "★", name: f.name, cost: "bonus", why: whyBonus, tip: [String(f.text || "").slice(0, 220)], run: () => { spend(tok.id, "bonus"); toast(`${f.name}: acción adicional gastada. El máster aplica el efecto.`); } }));
   // Acciones del manual
-  ACCIONES.filter(([n]) => n !== "Atacar" && n !== "Magia").forEach(([n, t]) => { const hw = n === "Esconderse" ? hideCheck(s, tok) : null;
+  ACCIONES.filter(([n]) => COMMON.includes(n)).forEach(([n, t]) => { const hw = n === "Esconderse" ? hideCheck(s, tok) : null;
     G.act.push({ id: "a:" + n, ico: ACT_ICON[n] || "•", name: n, cost: "act", why: whyAct || (hw && !hw.ok ? hw.why : ""), tip: [t], run: () => basic(tok.id, n) }); });
   if (ids.includes("ardiendo")) G.act.push({ id: "douse", ico: "🧯", name: "Apagarse", cost: "act", why: whyAct, tip: ["SRD «Fuego»: con una acción apagas el fuego rodando por el suelo y quedas derribado."], run: () => import("../core/peligros.js").then(m => m.douse(tok.id)) });
   const moveWhy = incap || notTurn;
@@ -195,7 +199,7 @@ function npcEntries(s, t) {
     }
   }
   const whyAct = incap || notTurn || (live && e.act ? "Ya ha usado su acción" : "");
-  out.push(["Comunes", ACCIONES.filter(([n]) => n !== "Atacar" && n !== "Magia").map(([n, d]) => { const hw = n === "Esconderse" ? hideCheck(s, t) : null;
+  out.push(["Comunes", ACCIONES.filter(([n]) => COMMON.includes(n)).map(([n, d]) => { const hw = n === "Esconderse" ? hideCheck(s, t) : null;
     return { id: "a:" + n, ico: ACT_ICON[n] || "•", name: n, cost: "act", why: whyAct || (hw && !hw.ok ? hw.why : ""), tip: [d], run: () => basic(t.id, n) }; })]);
   return out;
 }
@@ -250,10 +254,10 @@ function resHTML(s, tok, mine, extra = "") {
   const live = phase(s) === "live", e = eco(s, tok), max = moveBudget(s, tok), left = Math.max(0, max - (mine ? e.mov : 0)), stuck = (tok.conds || []).some(x => NOMOVE.includes(x.id));
   if (!live) return extra ? `<div class="hbres">${extra}</div>` : "";
   return `<div class="hbres">
-    <span class="hbr r-act ${e.act && !(e.atkLeft > 0) || !mine ? "used" : ""}" title="Acción"><i></i>Acción${e.act && e.atkLeft > 0 ? ` <small>×${e.atkLeft}</small>` : ""}</span>
-    <span class="hbr r-bonus ${e.bonus || !mine ? "used" : ""}" title="Acción adicional"><i></i>Adicional</span>
+    <span class="hbr r-act ${e.act && !(e.atkLeft > 0) || !mine ? "used" : ""}" title="Acción"><i></i>${e.act && e.atkLeft > 0 ? ` <small>×${e.atkLeft}</small>` : ""}</span>
+    <span class="hbr r-bonus ${e.bonus || !mine ? "used" : ""}" title="Acción adicional"><i></i></span>
     <span class="hbr r-move ${!mine || stuck || !left ? "used" : ""}" title="Movimiento: arrastra la figura"><span class="hbmv"><i style="width:${stuck ? 0 : Math.min(100, left / Math.max(1, max) * 100)}%"></i></span>${stuck ? "0" : fm(left)}/${fm(max)} m${e.dash ? " · corre" : ""}</span>
-    <span class="hbr r-react ${e.react ? "used" : ""}" title="Reacción: vuelve al empezar su turno"><i></i>Reacción</span>${extra}</div>`;
+    <span class="hbr r-react ${e.react ? "used" : ""}" title="Reacción: vuelve al empezar su turno"><i></i></span>${extra}</div>`;
 }
 function endHTML(s, tok, who) {
   const live = phase(s) === "live", mine = live && s.board.turn === tok.id;
@@ -262,10 +266,16 @@ function endHTML(s, tok, who) {
   const cur = s.tokens.find(t => t.id === s.board.turn), cn = cur ? (cur.kind === "pc" ? (s.characters.find(x => x.id === cur.char) || cur).name : cur.hidden && !isDM(s) ? "?" : cur.name) : "—";
   return `<p class="hbmsg">Turno de<br><b>${esc(String(cn).split(" ")[0])}</b></p>`;
 }
-function frame(cls, top, port, res, groups, end) {
+function frame(cls, top, port, res, items, end) {
+  // items: [{ ...icono, cat: "arm" | "spell" | "hab" | "com" }]. Pestañas como las de BG3 a la izquierda de los iconos.
   let k = 0; const all = [];
-  const body = groups.filter(([, L]) => L.length).map(([t, L]) => `<div class="hbrow ${L.length <= 2 ? "one" : ""}" title="${esc(t)}">${L.map(x => { all.push(x); return iconHTML(x, k++); }).join("")}</div>`).join("");
-  return { html: `<div class="hotbar ${cls}"><div class="hbtop">${top}</div>${port}<div class="hbmid">${res}<div class="hbicons">${body}</div></div><div class="hbend">${end}</div><div class="hbtip" hidden></div></div>`, all };
+  const has = c => items.some(x => x.cat === c);
+  if (hbTab !== "all" && !has(hbTab)) hbTab = "all";
+  const cats = CATS.filter(([c]) => c === "all" || has(c));
+  const shown = hbTab === "all" ? cats.filter(([c]) => c !== "all").map(([c, n]) => [n, items.filter(x => x.cat === c)]) : [[CATS.find(x => x[0] === hbTab)[1], items.filter(x => x.cat === hbTab)]];
+  const body = shown.filter(([, L]) => L.length).map(([t, L]) => `<div class="hbrow ${L.length <= 2 ? "one" : ""}" title="${esc(t)}">${L.map(x => { all.push(x); return iconHTML(x, k++); }).join("")}</div>`).join("");
+  const tabs = `<div class="hbtabs" role="tablist">${cats.map(([c, n, i]) => `<button role="tab" data-hbtab="${c}" aria-selected="${hbTab === c}" title="${n}">${i}</button>`).join("")}</div>`;
+  return { html: `<div class="hotbar ${cls}"><div class="hbtop">${top}</div>${port}<div class="hbmid">${res}<div class="hbicons">${tabs}${body}</div></div><div class="hbend">${end}</div><div class="hbtip" hidden></div></div>`, all };
 }
 
 /** Lo que pinta la barra ahora: { html, all (iconos), tok, c } */
@@ -281,7 +291,7 @@ export function build(s, o) {
     const dead = c.hp.cur <= 0 && !(c.death && (c.death.stable || c.death.dead));
     const top = promptHTML(s, tok) + (pop && pop.spell ? castPanel(s, c, tok) : pop && pop.bard ? bardPanel(s, tok) : "");
     const end = (mine && dead ? `<button class="btn gold" data-hbdeath>💀 Salvación</button>` : "") + endHTML(s, tok);
-    const f = frame(mine ? "mine" : live ? "wait" : "explore", top, port, resHTML(s, tok, mine, extra), [["Ataques", G.atk], ["Conjuros", G.spell], ["Rasgos", G.feat], ["Acciones", G.act]], end);
+    const f = frame(mine ? "mine" : live ? "wait" : "explore", top, port, resHTML(s, tok, mine, extra), [...G.atk.map(x => ({ ...x, cat: /^sh/.test(x.id) || /Objeto lanzado/.test(x.name) ? "com" : "arm" })), ...G.spell.map(x => ({ ...x, cat: "spell" })), ...G.feat.map(x => ({ ...x, cat: "hab" })), ...G.act.map(x => ({ ...x, cat: "com" }))], end);
     return { ...f, tok, c };
   }
   // Máster: la criatura que tiene el turno o la que ha elegido en la pestaña PNJ
@@ -296,7 +306,7 @@ export function build(s, o) {
   if (A && A.kind === "npcact" && A.tok === t.id) top += `<div class="hbpop hbkit">${kitArmed(s, t)}</div>`;
   if (A && A.kind === "atk" && A.tok === t.id) { const adv = o.getAdv ? o.getAdv() : null; top += `<div class="hbpop"><b>🎯 Toca al objetivo</b><button class="btn small ${adv === 1 ? "gold" : ""}" data-hbadv="1">Ventaja</button><button class="btn small ${adv === -1 ? "gold" : ""}" data-hbadv="-1">Desventaja</button><button class="ib" data-hbx aria-label="Cancelar">✕</button></div>`; }
   const port = portHTML(s, t, t.name, hp, t.kind === "npc" ? "#7d8fe0" : "#b33a2e", t.portrait) .replace('<div class="hbwho">', `<div class="hbwho">${t.hidden ? `<small class="hbhid" title="Oculto a los jugadores">🙈 oculto</small>` : ""}`);
-  const f = frame(`dm ${mine ? "mine" : live ? "wait" : "explore"}`, top, port, resHTML(s, t, mine, extra), npcEntries(s, t), endHTML(s, t));
+  const f = frame(`dm ${mine ? "mine" : live ? "wait" : "explore"}`, top, port, resHTML(s, t, mine, extra), npcEntries(s, t).flatMap(([g, L]) => L.map(x => ({ ...x, cat: g === "Ataques" ? "arm" : g === "Comunes" ? "com" : /^ks/.test(x.id) ? "spell" : "hab" }))), endHTML(s, t));
   return { ...f, tok: t, c: null };
 }
 const e0 = (s, t) => eco(s, t);
@@ -334,6 +344,7 @@ export function mountHotbar(tac, o = {}) {
     });
     bindKit(box, redraw, () => (o.getAdv ? o.getAdv() : null)); // acciones del perfil de la criatura (las mismas de la pestaña PNJ)
     const on = (sel, fn) => $$(sel, box).forEach(b => b.onclick = () => { fn(b); redraw(); });
+    on("[data-hbtab]", b => { hbTab = b.dataset.hbtab; });
     on("[data-hbend]", () => { arm(null); pop = null; endTurn(); });
     on("[data-hbinit]", () => rollInit(tok.id));
     on("[data-hbdeath]", () => deathSave(tok.id));
