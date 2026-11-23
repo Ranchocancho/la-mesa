@@ -780,3 +780,9 @@ En combate, el jugador juega su turno desde una **barra abajo, sobre la mesa** (
 - **Columna derecha = ventana «Táctica»**: al tocar una figura (o un objeto) su información aparece ahí, no encima del mapa. El jugador tiene «Personaje» (ficha para consultar y tirar pruebas), «Táctica» y «Tiradas»; el máster, «Iniciativa», «Tiradas» y «Táctica» (la criatura que lleva, con vida, estados y editar; o el personaje que toque).
 - **Controles de la mesa** (cámara, 2D/3D, colores) en la barra de abajo de la página: arriba queda la explicación del turno y la iniciativa.
 - **Barra de acciones más baja**: la fase del turno (acción, adicional, movimiento, reacción, espacios) va en una pastilla flotante encima del centro de la barra; la barra solo lleva retrato, iconos y terminar turno.
+
+## Hito 58 · Feedback visual como en BG3
+- **Cambio de turno**: sin cartel grande en mitad del mapa. Una cinta discreta bajo la barra superior («Turno de Mirra»), más vistosa y dorada cuando es el tuyo («⚔ Tu turno»), y la barra de acciones se ilumina una vez. El aviso «Te toca…» ya no tapa el mapa: parpadea el panel de arriba a la izquierda.
+- **Estados con icono**: cada estado tiene su icono (⤵ derribado, ☠ envenenado, 🛡 Escudo, 😡 Furia…). Sobre cada figura sale una fila de iconos con los turnos que les quedan (2D y 3D), en la iniciativa y en las fichas, en vez de anillos de colores apilados y carteles de texto.
+- **Empujón contado desde quien empuja**: «🤚 ¡Derribado!» / «¡Apartado!» o «Resiste el empujón» (antes salía «✓ Salva», que parecía un éxito tuyo cuando era del enemigo).
+- Los avisos (toasts) ya no tapan la barra de acciones.

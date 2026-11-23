@@ -212,13 +212,13 @@ export function createBoard(host, opts) {
       return `<g class="tok ${down ? "down" : ""} ${k.hidden ? "hid" : ""} ${selected === k.id ? "sel" : ""} ${opts.canMove(k) ? "mov" : ""} ${(shakeUntil.get(k.id) || 0) > Date.now() ? "shake" : ""}" data-tok="${k.id}" transform="translate(${x},${y})">
         <clipPath id="cp-${k.id}"><circle r="${rad - 2}"/></clipPath>
         <circle r="${rad + 3}" class="halo"/>
-        ${(k.conds || []).map((cd, i) => { const e = estado(cd.id); return e ? `<circle r="${rad + 5 + i * 3.5}" fill="none" stroke="${e.c}" stroke-width="3"/>` : ""; }).join("")}
+
         <circle r="${rad}" fill="${dk.color || "#777"}" stroke="${ring}" stroke-width="3"/>
         ${img ? `<image href="${img}" x="${-rad}" y="${-rad}" width="${rad * 2}" height="${rad * 2}" clip-path="url(#cp-${k.id})" preserveAspectRatio="xMidYMid slice"/>` : `<text class="ini" y="5">${esc((dk.name || "?").replace(/\s*\(.*?\)/g, "").split(/\s+/).map(w => w.replace(/[^\p{L}\p{N}]/gu, "")[0]).filter(Boolean).slice(0, 2).join("").toUpperCase() || "?")}</text>`}
         ${hp ? `<rect x="${-rad}" y="${rad + 3}" width="${rad * 2}" height="6" rx="2" class="hpbg"/><rect x="${-rad}" y="${rad + 3}" width="${rad * 2 * pct}" height="6" rx="2" class="hpfg ${pct <= .25 ? "low" : pct <= .5 ? "mid" : ""}"/>` : ""}
         ${dk.isTurn ? `<circle r="${rad + 7}" class="turn"/>` : ""}
         ${topOfTok(grid, k) ? `<g class="altb top" transform="translate(${-rad * 0.72},${-rad * 0.78})"><rect x="-17" y="-8" width="34" height="16" rx="8"/><text y="4">⤒${String(topOfTok(grid, k)).replace(".", ",")}</text></g>` : ""}
-        ${(() => { const S0 = store.get(), L = (k.conds || []).filter(cd => cd.dur && estado(cd.id)).map(cd => ({ cd, n: leftOf(S0, cd) })).sort((a, b) => a.n - b.n)[0]; return L ? `<g class="durb" transform="translate(${-rad * 0.72},${rad * 0.62})"><title>${esc(estado(L.cd.id).n)}: ${L.n} turno${L.n === 1 ? "" : "s"}</title><rect x="-15" y="-8" width="30" height="16" rx="8" style="fill:${estado(L.cd.id).c}"/><text y="4">⏳${L.n}</text></g>` : ""; })()}
+        ${condIcons(k, rad)}
         ${altOf(k) ? `<g class="altb" transform="translate(${rad * 0.72},${-rad * 0.78})"><rect x="-17" y="-8" width="34" height="16" rx="8"/><text y="4">↑${String(altOf(k)).replace(".", ",")}</text></g>` : ""}
       </g>`;
     }).join("");
@@ -238,6 +238,14 @@ export function createBoard(host, opts) {
     world.innerHTML = `<g class="cells">${cells}</g><g>${dif}</g>${relief.under}<g filter="url(#wsh)">${walls}</g>${grid2}${relief.over}${start}<g class="props">${props}</g><g class="fog">${fogSvg}</g><g class="reach">${reach}</g><g class="trange">${tgt.under}</g><g class="tmpl"></g><g class="toks">${toks}</g><g class="tmarks">${tgt.over}</g><g class="aim">${aimSvg}</g><g class="ghost"></g>`;
     if (TG && TG.kind === "tmpl") drawTmpl();
     ghost();
+  }
+  /** Estados como iconos encima de la figura (como BG3 sobre la vida), con los turnos que les quedan. */
+  function condIcons(k, rad) {
+    const S0 = store.get(), L = (k.conds || []).filter(cd => estado(cd.id) && cd.id !== "encima");
+    if (!L.length) return "";
+    const show = L.slice(0, 5), w = 19, x0 = -(show.length * w) / 2 + w / 2, y = -rad - 13;
+    return `<g class="cicons">${show.map((cd, i) => { const e = estado(cd.id), n = cd.dur ? leftOf(S0, cd) : null;
+      return `<g transform="translate(${x0 + i * w},${y})"><title>${esc(e.n)}${n != null ? ` · ${n} turno${n === 1 ? "" : "s"}` : ""}</title><circle r="9" style="fill:${e.c}"/><text y="4">${e.i || "•"}</text>${n != null ? `<text class="cin" x="7" y="10">${n}</text>` : ""}</g>`; }).join("")}${L.length > 5 ? `<text class="cimore" x="${x0 + 5 * w}" y="${y + 4}">+${L.length - 5}</text>` : ""}</g>`;
   }
   function propSvg(p, grid, wallAt) {
     const v = PROPS[p.k] || { i: "?", n: p.k }, [x, y] = center(p.c, p.r), hid = p.hidden ?? v.hidden, sel = selProp === p.id ? " sel" : "";

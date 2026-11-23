@@ -190,6 +190,7 @@ function title(s, r) {
 }
 function pill(r, dm, pend) {
   if (r.kind === "attack" && r.result && (dm || !pend)) return `<span class="pill ${r.result}">${RESULT[r.result]}</span>`;
+  if (r.kind === "save" && r.result && r.apply && r.apply.type === "shove") return `<span class="pill ${r.result === "fail" ? "hit" : "miss"}">${r.result === "fail" ? "🤚 ¡Sí!" : "Resiste"}</span>`;
   if ((r.kind === "save" || r.kind === "death") && r.result) return `<span class="pill ${r.result === "save" ? "hit" : "miss"}">${r.result === "save" ? "✓" : "✗"}${r.dc ? ` CD ${r.dc}` : ""}</span>`;
   if (r.kind === "heal") return `<span class="pill heal">+${r.total}</span>`;
   return "";
@@ -225,7 +226,8 @@ function rowHTML(s, r, dm, me, hasDamage, dmgRow) {
     if (r.note && r.kind === "attack" && /Escudo|Esquiva/.test(r.note)) out.push(`<small class="rxnote">${esc(r.note)}</small>`);
   }
   if (r.kind === "damage" && !dmgRow) out.push(r.applied != null ? `<span class="dmgd ok">🩸 <b>−${r.applied}</b> PG a ${esc(who(s, r.target))}</span>` : `<span class="wait">⏳ ${dm ? "aplica el daño" : "el máster lo aplica"}</span>`);
-  if ((r.kind === "save" || r.kind === "death") && r.result) out.push(`<span class="pill ${r.result === "save" ? "hit" : "miss"}">${r.result === "save" ? "✓ Salva" : "✗ Falla"}${r.dc ? ` · CD ${r.dc}` : ""}</span>`);
+  if (r.kind === "save" && r.result && r.apply && r.apply.type === "shove") out.push(`<span class="pill ${r.result === "fail" ? "hit" : "miss"}">${r.result === "fail" ? (r.apply.mode === "prone" ? "🤚 ¡Derribado!" : "🤚 ¡Apartado 1,5 m!") : "🛡 Resiste el empujón"} · CD ${r.dc}</span>${r.result === "fail" && !r.applied ? ` <span class="wait">se aplica…</span>` : ""}`);
+  else if ((r.kind === "save" || r.kind === "death") && r.result) out.push(`<span class="pill ${r.result === "save" ? "hit" : "miss"}">${r.result === "save" ? "✓ Salva" : "✗ Falla"}${r.dc ? ` · CD ${r.dc}` : ""}</span>`);
   if (r.kind === "heal") out.push(`<span class="pill heal">✚ +${r.total} PG</span>`);
   if (r.inits) out.push(r.inits.map(x => `<span class="rqans">${esc(x.name.split(" ")[0])} <b>${x.total}</b></span>`).join(" "));
   if (r.kind === "death" && r.note) out.push(`<small>${esc(r.note)}</small>`);

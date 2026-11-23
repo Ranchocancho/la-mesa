@@ -2349,3 +2349,21 @@ button.spip{cursor:pointer}
 .tacinfo .empty{margin:4px 0}
 .hud.inpanel{background:none;border:0;box-shadow:none;padding:0}
 .hud.inpanel:not(:has(.hudbody > *)){display:none}
+/* Hito 58: feedback como BG3 — cinta de turno discreta, iconos de estado, aviso que parpadea */
+.turnbanner{top:10px;transform:translateX(-50%);font-size:15px;font-family:var(--display);padding:5px 18px;border-radius:999px;background:rgba(14,10,8,.88);border:1px solid var(--linea);color:var(--hueso);text-shadow:none;animation:ribbon 1.8s ease both;white-space:nowrap}
+.turnbanner b{color:#fff}.turnbanner span{color:var(--tenue)}
+.turnbanner.mine{font-size:20px;padding:7px 26px;background:linear-gradient(90deg,rgba(60,40,12,.95),rgba(110,78,24,.95),rgba(60,40,12,.95));border-color:var(--oro);box-shadow:0 0 0 2px rgba(214,170,78,.25),0 0 30px rgba(214,170,78,.45)}
+.turnbanner.mine b{color:#ffe7a8;letter-spacing:.06em}
+@keyframes ribbon{0%{opacity:0;transform:translate(-50%,-14px)}12%{opacity:1;transform:translate(-50%,0)}80%{opacity:1}100%{opacity:0;transform:translate(-50%,-6px)}}
+.taskcall{display:none!important}
+.tb-now.flash{animation:nowflash 1.2s ease 2}
+@keyframes nowflash{50%{background:rgba(214,170,78,.38);box-shadow:inset 4px 0 0 var(--oro),0 0 18px rgba(214,170,78,.5)}}
+.cicons circle{stroke:rgba(255,255,255,.9);stroke-width:1.5}
+.cicons text{font-size:11px;text-anchor:middle;pointer-events:none}
+.cicons .cin{font:800 8px system-ui,sans-serif;fill:#fff;paint-order:stroke;stroke:#000;stroke-width:2.5px}
+.cicons .cimore{font:700 10px system-ui,sans-serif;fill:#fff;paint-order:stroke;stroke:#000;stroke-width:2px}
+.hotbar.flash{animation:barturn 1.4s ease 1}
+@keyframes barturn{0%{box-shadow:0 -8px 24px rgba(0,0,0,.45),inset 0 0 0 0 rgba(214,170,78,0)}40%{box-shadow:0 -8px 30px rgba(214,170,78,.5),inset 0 2px 0 0 var(--oro)}}
+.tbconds{height:auto;gap:1px}.tbconds i{width:auto;height:auto;border-radius:6px;font-style:normal;font-size:10px;line-height:12px;padding:0 1px;background:var(--c);box-shadow:0 0 2px #000}
+body:has(.tactical.withbar) #toast{bottom:140px}
+.turnbanner{top:76px;z-index:9}

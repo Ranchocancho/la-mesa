@@ -237,20 +237,19 @@ function namePlate(name, pct, txt, color, hl, pxH = 48) {
   s.scale.set(PLATE_H * Wu / U, PLATE_H, 1); s.center.set(0.5, 0); s.renderOrder = 9; return s;
 }
 function condTag(conds) {
-  const list = conds.map(cd => ({ e: estado(cd.id || cd), lvl: cd.lvl, left: cd.left })).filter(x => x.e);
-  const c = document.createElement("canvas"), rowH = 50; c.width = 400; c.height = rowH * list.length + 10;
-  const g = c.getContext("2d"); g.font = "bold 30px Georgia"; g.textAlign = "center";
-  list.forEach(({ e, lvl, left }, i) => {
-    const y = 5 + i * rowH; g.shadowColor = "rgba(0,0,0,.8)"; g.shadowBlur = 8;
-    g.fillStyle = e.c; g.beginPath(); g.roundRect(14, y, 372, rowH - 8, 20); g.fill(); g.shadowBlur = 0;
-    g.strokeStyle = "rgba(255,255,255,.75)"; g.lineWidth = 3; g.stroke();
-    const lum = new THREE.Color(e.c), dark = (lum.r * 0.3 + lum.g * 0.59 + lum.b * 0.11) > 0.55;
-    g.lineWidth = 5; g.strokeStyle = dark ? "rgba(255,255,255,.5)" : "rgba(0,0,0,.65)"; const txt = etiqueta(e.id, lvl).toUpperCase() + (left != null ? ` ⏳${left}` : "");
-    g.strokeText(txt, 200, y + 32);
-    g.fillStyle = dark ? "#1a140c" : "#fff"; g.fillText(txt, 200, y + 32);
+  // Estados como iconos redondos en fila (como BG3 sobre la vida), con los turnos que les quedan
+  const list = conds.map(cd => ({ e: estado(cd.id || cd), left: cd.left })).filter(x => x.e && x.e.id !== "encima").slice(0, 6);
+  const D = 64, c = document.createElement("canvas"); c.width = Math.max(1, list.length) * (D + 8); c.height = D + 8;
+  const g = c.getContext("2d"); g.textAlign = "center"; g.textBaseline = "middle";
+  list.forEach(({ e, left }, i) => {
+    const x = 4 + i * (D + 8) + D / 2, y = 4 + D / 2;
+    g.shadowColor = "rgba(0,0,0,.8)"; g.shadowBlur = 8; g.fillStyle = e.c; g.beginPath(); g.arc(x, y, D / 2 - 2, 0, Math.PI * 2); g.fill(); g.shadowBlur = 0;
+    g.lineWidth = 4; g.strokeStyle = "rgba(255,255,255,.85)"; g.stroke();
+    g.font = "34px sans-serif"; g.fillStyle = "#fff"; g.fillText(e.i || "•", x, y + 2);
+    if (left != null) { g.fillStyle = "#111"; g.beginPath(); g.arc(x + D / 2 - 12, y + D / 2 - 12, 13, 0, Math.PI * 2); g.fill(); g.font = "bold 20px system-ui,sans-serif"; g.fillStyle = "#fff"; g.fillText(String(left), x + D / 2 - 12, y + D / 2 - 11); }
   });
   const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(c), depthTest: false, transparent: true }));
-  s.scale.set(3.6, 3.6 * c.height / 400, 1); s.renderOrder = 11; s.center.set(0.5, 0);
+  const h = 0.9; s.scale.set(h * c.width / c.height, h, 1); s.renderOrder = 11; s.center.set(0.5, 0);
   return s;
 }
 
@@ -670,11 +669,8 @@ export function createBoard3D(host, opts) {
       if (condKey !== rec.condKey) {
         rec.condKey = condKey;
         (rec.rings || []).forEach(o => rec.root.remove(o)); rec.rings = [];
-        conds.forEach((cd, i) => {
-          const e = estado(cd.id || cd); if (!e) return;
-          const ring = new THREE.Mesh(new THREE.TorusGeometry(1.7 + i * 0.16, 0.075, 8, 48), new THREE.MeshStandardMaterial({ color: e.c, emissive: e.c, emissiveIntensity: 0.35, roughness: 0.4 }));
-          ring.rotation.x = Math.PI / 2; ring.position.y = 0.1 + i * 0.03; rec.root.add(ring); rec.rings.push(ring);
-        });
+        // Un solo anillo fino del color del primer estado (los iconos van encima de la figura)
+        { const e = conds.map(cd => estado(cd.id || cd)).find(x => x && x.id !== "encima"); if (e) { const ring = new THREE.Mesh(new THREE.TorusGeometry(1.7, 0.06, 8, 48), new THREE.MeshStandardMaterial({ color: e.c, emissive: e.c, emissiveIntensity: 0.4, roughness: 0.4 })); ring.rotation.x = Math.PI / 2; ring.position.y = 0.1; rec.root.add(ring); rec.rings.push(ring); } }
         if (rec.tag) { rec.root.remove(rec.tag); rec.tag = null; }
         if (conds.length) { rec.tag = condTag(conds.map(cd => cd.dur ? { ...cd, left: leftOf(S0, cd) } : cd)); rec.root.add(rec.tag); }
         const has = id => conds.some(cd => (cd.id || cd) === id);

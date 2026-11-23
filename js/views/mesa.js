@@ -349,8 +349,8 @@ export function mountTactical(host, opts = {}) {
     // Aviso momentáneo cuando algo pasa a depender de ti (tirar daño, decidir una reacción, confirmar…)
     const key = N.mine ? N.text : null;
     if (key && key !== lastTaskKey && lastTaskKey !== undefined && !/^Te queda|^Lo has gastado/.test(key)) {
-      const t = $(".taskcall", host); t.textContent = `👉 ${N.text}`; t.hidden = false; t.classList.remove("go"); void t.offsetWidth; t.classList.add("go");
-      clearTimeout(t._h); t._h = setTimeout(() => (t.hidden = true), 2600);
+      // Como BG3: nada de carteles encima del mapa; parpadea el aviso de arriba a la izquierda
+      const t = $(".tb-now", host); if (t) { t.classList.remove("flash"); void t.offsetWidth; t.classList.add("flash"); }
     }
     lastTaskKey = key;
   }
@@ -379,7 +379,7 @@ export function mountTactical(host, opts = {}) {
         <i class="tbav" style="background:${(c || t).color || "#777"}">${esc(initials(nm))}${t.init != null && ph === "live" ? `<sup>${t.init}</sup>` : ""}</i>
         ${now ? `<em>${esc((w => w.length > 1 && /^(hermano|hermana|sir|lady|lord|fray|sor|don|doña)$/i.test(w[0]) ? w[1] : w[0])(String(nm).replace(/\s*\(.*?\)/g, "").trim().split(/\s+/)))}</em>` : ""}
         ${h ? `<span class="ihb ${shown <= 0.25 ? "low" : shown <= 0.5 ? "mid" : ""}"><i style="width:${Math.round(shown * 100)}%"></i></span>` : ""}
-        <span class="tbconds">${(t.conds || []).slice(0, 4).map(cd => { const e = estado(cd.id); return e ? `<i style="background:${e.c}"></i>` : ""; }).join("")}</span></span>`;
+        <span class="tbconds">${(t.conds || []).slice(0, 4).map(cd => { const e = estado(cd.id); return e ? `<i style="--c:${e.c}" title="${esc(e.n)}">${e.i || ""}</i>` : ""; }).join("")}</span></span>`;
     };
     const stripHTML = seq.map(chip).join("") || `<span class="tbidle">Esperando iniciativas…</span>`;
     if (stripHTML !== lastStrip) {
@@ -392,9 +392,9 @@ export function mountTactical(host, opts = {}) {
       const first = lastTurnSeen === null; lastTurnSeen = s.board.seq;
       if (!first) {
         const mineNow = cur.owner === me();
-        banner.textContent = mineNow ? "¡Es tu turno!" : `Turno de ${nameOf(s, cur)}`;
+        banner.innerHTML = mineNow ? `<b>⚔ Tu turno</b>` : `<span>Turno de</span> <b>${esc(nameOf(s, cur).split(" ")[0])}</b>`;
         banner.className = "turnbanner" + (mineNow ? " mine" : ""); banner.hidden = false;
-        clearTimeout(banner._h); banner._h = setTimeout(() => (banner.hidden = true), 2200);
+        clearTimeout(banner._h); banner._h = setTimeout(() => (banner.hidden = true), mineNow ? 1800 : 1300);
         if (mineNow) import("../core/sonido.js").then(m => m.sound.play("holy"));
         else { const N = nowState(s, me(), isDM(s)); if (N.nextMine) toast("Prepárate: después te toca a ti"); }
         if (board && board.select && mineNow) { sel = null; }
@@ -560,7 +560,9 @@ export function mountTactical(host, opts = {}) {
       if (r.kind === "attack" && r.target && r.result && (r.status !== "pending" || isDM(s))) {
         const p = screenOf(r.target); if (p) floatAt(p[0], p[1], r.result === "crit" ? "¡Crítico!" : r.result === "miss" ? "Fallo" : "Impacto", r.result === "crit" ? "crit" : r.result === "miss" ? "miss" : "hit", { delay: wait });
       }
-      if (r.kind === "save" && r.tok && r.result) { const p = screenOf(r.tok); if (p) floatAt(p[0], p[1], r.result === "save" ? "✓ Salva" : "✗ Falla", r.result === "save" ? "save" : "fail", { delay: wait }); }
+      // Empujón: se cuenta desde quien empuja («¡Derribado!» / «Resiste»), que es lo que importa en la mesa
+      if (r.kind === "save" && r.tok && r.result && r.apply && r.apply.type === "shove") { const p = screenOf(r.tok); if (p) floatAt(p[0], p[1], r.result === "fail" ? (r.apply.mode === "prone" ? "¡Derribado!" : "¡Apartado!") : "Resiste el empujón", r.result === "fail" ? "crit" : "miss", { delay: wait, big: r.result === "fail" }); }
+      else if (r.kind === "save" && r.tok && r.result) { const p = screenOf(r.tok); if (p) floatAt(p[0], p[1], r.result === "save" ? "✓ Salva" : "✗ Falla", r.result === "save" ? "save" : "fail", { delay: wait }); }
       if (r.saves && r.status === "pending") r.saves.forEach(sv => { if (sv.auto) return; const p = screenOf(sv.t); if (p) floatAt(p[0], p[1], sv.ok ? "✓ Salva" : "✗ Falla", sv.ok ? "save" : "fail", { delay: wait }); });
       if (r.kind === "oa" && r.status === "pending") { const p = screenOf(r.tok); if (p) floatAt(p[0], p[1], "¡Oportunidad!", "crit"); }
       if (r.kind === "death" && r.result) { const p = screenOf(r.tok); if (p) floatAt(p[0], p[1], r.result === "save" ? "✓ Resiste" : "✗ Se apaga", r.result === "save" ? "save" : "fail", { delay: wait }); }
@@ -636,9 +638,9 @@ function condBlock(t, canEdit) {
   const conds = t.conds || [];
   if (!conds.length && !canEdit) return "";
   const s = store.get(), dm = isDM(s);
-  return `<div class="conds">${conds.map(cd => { const e = estado(cd.id); if (!e) return ""; return `<span class="cond" style="--c:${e.c}" title="${esc(e.t)}${cd.dur ? " · " + esc(durText(s, cd)) : ""}">${esc(etiqueta(cd.id, cd.lvl))}${cd.dur ? ` <i class="cdur">${durTag(s, cd)}</i>` : ""}${dm && canEdit ? `<select class="cdsel" data-cdur="${t.id}|${cd.id}" title="Duración en turnos: se quita sola" aria-label="Duración de ${esc(e.n)}">${DUR_OPTS.map(([k, n]) => `<option value="${k}" ${durKey(cd) === k ? "selected" : ""}>${n}</option>`).join("")}${cd.dur && !DUR_OPTS.some(([k]) => k === durKey(cd)) ? `<option value="${durKey(cd)}" selected>⏳ ${leftOf(s, cd)}</option>` : ""}</select>` : ""}${canEdit && e.levels ? `<button data-condlvl="${t.id}|${cd.id}|-1" aria-label="Bajar nivel">−</button><button data-condlvl="${t.id}|${cd.id}|1" aria-label="Subir nivel">+</button>` : ""}${canEdit ? `<button data-cond="${t.id}|${cd.id}" aria-label="Quitar ${esc(e.n)}">✕</button>` : ""}</span>`; }).join("")}
+  return `<div class="conds">${conds.map(cd => { const e = estado(cd.id); if (!e) return ""; return `<span class="cond" style="--c:${e.c}" title="${esc(e.t)}${cd.dur ? " · " + esc(durText(s, cd)) : ""}">${e.i || ""} ${esc(etiqueta(cd.id, cd.lvl))}${cd.dur ? ` <i class="cdur">${durTag(s, cd)}</i>` : ""}${dm && canEdit ? `<select class="cdsel" data-cdur="${t.id}|${cd.id}" title="Duración en turnos: se quita sola" aria-label="Duración de ${esc(e.n)}">${DUR_OPTS.map(([k, n]) => `<option value="${k}" ${durKey(cd) === k ? "selected" : ""}>${n}</option>`).join("")}${cd.dur && !DUR_OPTS.some(([k]) => k === durKey(cd)) ? `<option value="${durKey(cd)}" selected>⏳ ${leftOf(s, cd)}</option>` : ""}</select>` : ""}${canEdit && e.levels ? `<button data-condlvl="${t.id}|${cd.id}|-1" aria-label="Bajar nivel">−</button><button data-condlvl="${t.id}|${cd.id}|1" aria-label="Subir nivel">+</button>` : ""}${canEdit ? `<button data-cond="${t.id}|${cd.id}" aria-label="Quitar ${esc(e.n)}">✕</button>` : ""}</span>`; }).join("")}
       ${canEdit ? `<button class="btn small" data-addcond="${t.id}">${condPick === t.id ? "Cerrar" : "+ Estado"}</button>` : ""}</div>
-    ${condPick === t.id ? `<div class="condpick">${ESTADOS.map(e => `<button class="cond ${conds.some(c => c.id === e.id) ? "on" : ""}" style="--c:${e.c}" data-cond="${t.id}|${e.id}" title="${esc(e.t)}">${e.n}</button>`).join("")}</div>` : ""}
+    ${condPick === t.id ? `<div class="condpick">${ESTADOS.map(e => `<button class="cond ${conds.some(c => c.id === e.id) ? "on" : ""}" style="--c:${e.c}" data-cond="${t.id}|${e.id}" title="${esc(e.t)}">${e.i || ""} ${e.n}</button>`).join("")}</div>` : ""}
     ${conds.length ? `<ul class="condtxt">${conds.map(cd => { const e = estado(cd.id); return e ? `<li><b style="color:${e.c}">${esc(etiqueta(cd.id, cd.lvl))}:</b> ${esc(e.t)}</li>` : ""; }).join("")}</ul>` : ""}`;
 }
 /* Tarjeta del turno: movimiento, acción, acción adicional, reacción y acciones del manual */

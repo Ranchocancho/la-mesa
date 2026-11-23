@@ -244,7 +244,7 @@ function portHTML(s, tok, name, hp, color, portrait) {
   const conds = (tok.conds || []).map(x => ({ x, e: ESTADOS.find(y => y.id === x.id) })).filter(o => o.e);
   return `<div class="hbport"><div class="hbface" style="--c:${esc(color || "#888")};${imgUrl[portrait] ? `background-image:url('${imgUrl[portrait]}')` : ""}">${imgUrl[portrait] ? "" : esc(String(name).slice(0, 2).toUpperCase())}</div>
     <div class="hbwho"><b>${esc(String(name).split(" ")[0])}</b>${hp ? `<div class="hbhp ${pct < 34 ? "low" : ""}"><i style="width:${pct}%"></i><span>${hp.cur}/${hp.max}${hp.temp ? ` +${hp.temp}` : ""}</span></div>` : ""}
-      <div class="hbconds">${conds.map(({ x, e: E }) => `<span class="hbcond" style="--c:${E.c}" title="${esc(E.n)}: ${esc(E.t)}${x.dur ? " · " + esc(durText(s, x)) : ""}">${esc(E.n.split(" ")[0])}${x.dur ? `<sub>${durTag(s, x).replace("⏳", "")}</sub>` : ""}</span>`).join("")}</div></div></div>`;
+      <div class="hbconds">${conds.map(({ x, e: E }) => `<span class="hbcond" style="--c:${E.c}" title="${esc(E.n)}: ${esc(E.t)}${x.dur ? " · " + esc(durText(s, x)) : ""}">${E.i || ""} ${esc(E.n.split(" ")[0])}${x.dur ? `<sub>${durTag(s, x).replace("⏳", "")}</sub>` : ""}</span>`).join("")}</div></div></div>`;
 }
 function resHTML(s, tok, mine, extra = "") {
   const live = phase(s) === "live", e = eco(s, tok), max = moveBudget(s, tok), left = Math.max(0, max - (mine ? e.mov : 0)), stuck = (tok.conds || []).some(x => NOMOVE.includes(x.id));
@@ -305,7 +305,7 @@ const loadImg = key => { imgUrl[key] = null; getImage(key).then(u => { imgUrl[ke
 /** Monta la barra dentro de la mesa táctica. o: { npc() → id elegido por el máster, getAdv(), setAdv(v), redraw() } */
 export function mountHotbar(tac, o = {}) {
   const box = document.createElement("div"); box.className = "hbbox"; tac.appendChild(box);
-  let all = [], sig = "", seen = false, born = Date.now(); // la firma es de ESTA barra: si la mesa se vuelve a montar, se pinta de nuevo
+  let all = [], sig = "", seen = false, born = Date.now(), flashSeq = null; // la firma es de ESTA barra: si la mesa se vuelve a montar, se pinta de nuevo
   const render = () => {
     // La mesa puede montarse antes de entrar en la página: solo se desmonta si ya estuvo y ha desaparecido
     if (!box.isConnected) { if (seen || Date.now() - born > 15000) { off(); offA(); removeEventListener("resize", render); clearInterval(iv); } return; }
@@ -317,6 +317,8 @@ export function mountHotbar(tac, o = {}) {
     if (pop && pop.spell && !armedNow()) { pop = null; return render(); } // se canceló en la mesa (Esc, clic derecho) o ya se lanzó
     if (B.html === sig) return;
     sig = B.html; box.innerHTML = B.html; all = B.all;
+    // Empieza tu turno: la barra se ilumina una vez (y suena en la mesa)
+    { const hb = box.querySelector(".hotbar.mine"); if (hb && s.board && s.board.seq !== flashSeq) { flashSeq = s.board.seq; hb.classList.add("flash"); } }
     tac.style.setProperty("--hb-h", (box.offsetHeight || 110) + "px");
     bind(B.tok, B.c);
   };
