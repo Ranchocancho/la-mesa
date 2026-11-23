@@ -14,10 +14,15 @@ export const STEP = 1.5;
 export const LEVELS = [-6, -4.5, -3, -1.5, 0, 1.5, 3, 4.5, 6, 7.5, 9, 12];
 const key = (c, r) => c + "," + r;
 
+// Altura de lo alto de los objetos a los que se puede subir (metros). El SRD no da estas medidas: regla de campaña.
+export const TOPS = { mesa: 1, mesalarga: 1, mesapiedra: 1, cama: 0.5, barril: 1, tonel: 1.5, caja: 1.5, baul: 0.5, cofre: 0.5, altar: 1, sarcofago: 1, roca: 1, penasco: 3, tocon: 0.5,
+  arbol: 4.5, arbolmuerto: 3, arbolgigante: 9, estatua: 3, estatuaelfica: 3, ancestro: 3, yunque: 1, vagoneta: 1.5, fuente: 1, carro: 1.5, barricada: 1.5 };
+/** Lo que sube una figura subida a un objeto (estado «encima»). */
+export const topOfTok = (g, t) => { const on = t && (t.conds || []).find(c => c.id === "encima"); const p = on && g && (g.props || []).find(x => x.id === on.p); return p && p.c === t.c && p.r === t.r ? TOPS[p.k] || 0 : 0; };
 export const elevAt = (g, c, r) => (g && g.elev ? +g.elev[key(c, r)] || 0 : 0);
 export const altOf = t => (t && +t.alt) || 0;
 /** Altura absoluta de una figura (suelo de su casilla + lo que vuela) o de una casilla. */
-export const zOf = (g, p) => elevAt(g, p.c, p.r) + altOf(p);
+export const zOf = (g, p) => elevAt(g, p.c, p.r) + altOf(p) + topOfTok(g, p);
 export const hasElev = g => !!(g && g.elev && Object.values(g.elev).some(v => +v));
 /** Distancia en casillas teniendo en cuenta la altura (como la cuadrícula: la mayor de las tres). */
 export const dist3 = (g, a, b) => Math.max(Math.abs(a.c - b.c), Math.abs(a.r - b.r), Math.round(Math.abs(zOf(g, a) - zOf(g, b)) / STEP));

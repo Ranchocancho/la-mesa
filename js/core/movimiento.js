@@ -4,7 +4,7 @@
 // encima). Más allá de tu velocidad solo llegas Corriendo, que gasta tu acción.
 import { TERRAIN, PROPS, isDoor } from "../data/mapas.js";
 import { eco, speedOf, hasCond } from "./turnos.js";
-import { climbExtra, elevAt, altOf } from "./alturas.js";
+import { climbExtra, elevAt, altOf, topOfTok } from "./alturas.js";
 
 const key = (c, r) => c + "," + r;
 const STOP = ["agarrado", "apresado", "paralizado", "aturdido", "inconsciente", "petrificado", "muerto"];
@@ -41,7 +41,7 @@ export function reachMap(s, t, { dm = false } = {}) {
       if (blocked(nc, nr) || foeAt(nc, nr)) continue;
       if (dc && dr && (blocked(c + dc, r) && blocked(c, r + dr))) continue; // no se cuelan esquinas entre muros
       const dif = !!(TERRAIN[T[key(nc, nr)]] && TERRAIN[T[key(nc, nr)]].dif);
-      const up = climbExtra(g, { c, r }, { c: nc, r: nr }, { dif, climber });
+      const up = climbExtra(g, { c, r }, { c: nc, r: nr }, { dif, climber }) + (c === t.c && r === t.r && !climber ? topOfTok(g, t) : 0); // bajar del objeto al que estás subido
       const step = 1.5 * (dif ? 2 : 1) * (prone ? 2 : 1) + up, nCost = Math.round((cost + step) * 10) / 10;
       if (nCost > max + 0.01) continue;
       const prev = cells.get(key(nc, nr));

@@ -87,3 +87,21 @@ export function templateOk(s, caster, aim, area, rng) {
   return Math.max(Math.abs(aim.c - caster.c), Math.abs(aim.r - caster.r)) * 1.5 <= (rng.n || 0) + 0.01;
 }
 export { dist, eco };
+
+/** Ataques de oportunidad que provocaría moverse por este camino (SRD): sales del alcance de un enemigo que te ve,
+ *  que puede reaccionar y que tiene un ataque cuerpo a cuerpo. Destrabarse, o estar oculto (invisible), lo evita. */
+export function oaThreats(s, t, path) {
+  if (!path || path.length < 2 || !s.board) return [];
+  if ((t.conds || []).some(c => c.id === "destrabado" || c.id === "invisible")) return [];
+  const out = [];
+  for (const h of s.tokens) {
+    if (h.id === t.id || h.hidden || (h.kind === "pc") === (t.kind === "pc")) continue;
+    const hp = h.kind === "pc" ? null : h.hp; if (hp != null && hp <= 0) continue;
+    if ((h.conds || []).some(c => ["incapacitado", "inconsciente", "aturdido", "paralizado", "petrificado", "muerto", "cegado"].includes(c.id))) continue;
+    if (phase(s) === "live" && eco(s, h).react) continue;
+    const melee = attacksOf(s, h).filter(w => !w.rng || !w.rng.ranged || w.rng.melee); if (!melee.length) continue;
+    const reach = Math.max(1, ...melee.map(w => Math.round(((w.rng && w.rng.n) || 1.5) / 1.5)));
+    for (let i = 1; i < path.length; i++) if (gap(path[i - 1], h) <= reach && gap(path[i], h) > reach) { out.push(h.id); break; }
+  }
+  return out;
+}
