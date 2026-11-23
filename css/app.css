@@ -2327,3 +2327,25 @@ button.spip{cursor:pointer}
 .hbkit .karmed{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:0;padding:0;border:0;background:none}
 .hbkit .karmed .row{display:flex;gap:6px;margin:0}
 .hbmid{align-items:center}.hbres,.hbicons{justify-content:center;max-width:100%}
+/* Hito 57: la fase (recursos) flota encima de la barra; controles de la mesa abajo; consulta en «Táctica» */
+.hotbar .hbmid{position:static}
+.hotbar .hbres{position:absolute;bottom:100%;left:50%;transform:translate(-50%,-5px);width:max-content;max-width:96%;padding:2px 8px;border-radius:999px;background:rgba(14,10,8,.9);border:1px solid rgba(214,170,78,.4);box-shadow:0 4px 14px rgba(0,0,0,.45);z-index:3;flex-wrap:nowrap}
+.hotbar .hbres .hbr{background:transparent;border:0}
+.hbtop{bottom:calc(100% + 32px)}
+.hbtip{bottom:calc(100% + 32px)}
+.hotbar{padding:4px 8px}
+.stagebar{padding:4px 10px;gap:8px}
+.stagebar .sbinfo{display:flex;align-items:center;gap:10px;flex:1 1 auto;min-width:0;flex-wrap:wrap}
+.stagebar .sbctl{flex:0 0 auto;display:flex;align-items:center}
+.stagebar .sbctl:empty{display:none}
+.stagebar .tb-right{padding:0}
+.colpop{top:auto;bottom:10px}
+.hud.inpanel{position:static;max-width:none;pointer-events:auto;margin:0}
+.hud.inpanel .hudtoggle{display:none}
+.hud.inpanel .hudbody{max-width:none}
+.hud.inpanel .hudcard{position:static;max-width:none;width:auto;margin:0 0 8px}
+.tacinfo{padding:8px 10px}
+.tacinfo:empty{display:none}
+.tacinfo .empty{margin:4px 0}
+.hud.inpanel{background:none;border:0;box-shadow:none;padding:0}
+.hud.inpanel:not(:has(.hudbody > *)){display:none}

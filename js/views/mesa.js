@@ -54,6 +54,9 @@ let hudOpen = !(window.matchMedia && window.matchMedia("(max-width: 900px)").mat
 export function mountTactical(host, opts = {}) {
   host.innerHTML = `<div class="tactical"><div class="boardwrap"></div><aside class="sidecol"><div class="sidetabs" role="tablist"><button role="tab" data-side="ini">Iniciativa</button><button role="tab" data-side="tir">🎲 Tiradas</button></div><div class="initcol" aria-label="Iniciativa"></div><div class="rollcol" hidden></div></aside><div class="hud"></div>
     <div class="topbar"><div class="tb-now" aria-live="polite"></div><div class="turnbar"></div><div class="tb-right"><div class="tb-ctl"></div><button class="btn small" id="v3d" title="Cambiar entre la mesa en 3D y el plano en 2D"></button><button class="btn small" id="vcol" title="Colores del movimiento, el alcance, los objetivos y las áreas">🎨</button></div></div><div class="editbadge" hidden>✏️ El máster está retocando la mesa…</div><div class="turnbanner" hidden></div><div class="taskcall" hidden></div></div>`;
+  // Controles de la mesa (cámara, 2D/3D, colores): pueden ir en la barra de abajo de la página (opts.ctlHost)
+  const TBR = $(".tb-right", host);
+  if (opts.ctlHost) { opts.ctlHost.innerHTML = ""; opts.ctlHost.appendChild(TBR); }
   // Para los jugadores, la iniciativa va en su columna fija de la derecha (opts.sideHost) y el tablero ocupa todo el ancho
   if (opts.sideHost) { $(".sidecol", host).remove(); $(".tactical", host).classList.add("noside"); opts.sideHost.innerHTML = `<div class="initcol" aria-label="Iniciativa"></div>`; }
   const sideRoot = opts.sideHost || host;
@@ -98,7 +101,7 @@ export function mountTactical(host, opts = {}) {
   const S = () => store.get();
   const me = () => (currentUser(S()) || {}).id;
   const bopts = {
-    controlsHost: $(".tb-ctl", host),
+    controlsHost: $(".tb-ctl", TBR),
     model: () => ({ grid: S().board, tokens: S().tokens }),
     dm: isDM(S()), edit: !!opts.edit && isDM(S()),
     // En combate, cada uno mueve su figura solo en su turno; el máster, siempre
@@ -181,13 +184,13 @@ export function mountTactical(host, opts = {}) {
   function mountBoard() {
     if (board && board.dispose) board.dispose();
     bw.innerHTML = ""; bw.className = "boardwrap"; board = null;
-    const tg = $("#v3d", host); $(".tb-right", host).appendChild(tg); // vuelve a su sitio antes de vaciar los controles
-    $(".tb-ctl", host).innerHTML = ""; tg.textContent = use3d() ? "2D" : "3D"; tg.title = use3d() ? "Ver el plano en 2D" : "Ver la mesa en 3D"; tg.hidden = !!opts.edit;
-    if (use3d()) import("./tablero3d.js").then(m => { if (!m.webglOK) throw new Error("sin WebGL"); board = m.createBoard3D(bw, bopts); const col = $(".tb-ctl .camst", host); if (col) col.appendChild($("#v3d", host)); if (sel) board.select(sel); drawHud(); })
+    const tg = $("#v3d", TBR); TBR.appendChild(tg); // vuelve a su sitio antes de vaciar los controles
+    $(".tb-ctl", TBR).innerHTML = ""; tg.textContent = use3d() ? "2D" : "3D"; tg.title = use3d() ? "Ver el plano en 2D" : "Ver la mesa en 3D"; tg.hidden = !!opts.edit;
+    if (use3d()) import("./tablero3d.js").then(m => { if (!m.webglOK) throw new Error("sin WebGL"); board = m.createBoard3D(bw, bopts); const col = $(".tb-ctl .camst", TBR); if (col) col.appendChild($("#v3d", TBR)); if (sel) board.select(sel); drawHud(); })
       .catch(e => { console.warn("Vista 3D no disponible", e); want3d = false; mountBoard(); });
     else board = createBoard(bw, bopts);
   }
-  $("#v3d", host).onclick = () => { want3d = !want3d; mountBoard(); };
+  $("#v3d", TBR).onclick = () => { want3d = !want3d; mountBoard(); };
   combatEvents(); // toma nota de lo que ya había: solo se ve lo que pase a partir de ahora
   mountBoard();
 
@@ -427,11 +430,17 @@ export function mountTactical(host, opts = {}) {
         ${canHurt && board && board.pick ? `<details class="castbox"><summary title="Solo dibuja el efecto en la mesa: no tira dados ni aplica daño">✨ Efecto visual (sin reglas)</summary><div class="castlist">${Object.entries(EFECTOS).map(([k, e]) => `<button class="btn small" data-cast="${t.id}|${k}" title="${e.hint || ""}">${e.n}</button>`).join("")}</div></details>` : ""}
         ${dm && t.kind !== "pc" ? `<details class="tkdetails" ${editOpen ? "open" : ""}><summary>Editar ${t.kind === "npc" ? "PNJ" : "enemigo"}</summary>${tokenEditor(t)}</details>` : ""}</div>`;
     };
+    // Con la barra de abajo, la consulta deja el mapa y va a la columna derecha («Táctica»), como una ventana de información
+    const inPanel = !!(opts.infoHost && barOn(s));
+    if (inPanel && hud.parentNode !== opts.infoHost) opts.infoHost.prepend(hud);
+    if (!inPanel && hud.parentNode !== $(".tactical", host)) $(".tactical", host).appendChild(hud);
+    hud.classList.toggle("inpanel", inPanel);
+    if (inPanel) hudOpen = true;
     hud.classList.toggle("open", hudOpen);
     const cur = current(s), live = phase(s) === "live";
     // Abajo, en la mesa: solo consulta (nadie lanza nada desde aquí)
     hud.innerHTML = `<button class="hudtoggle" id="hudt" aria-expanded="${hudOpen}">${hudOpen ? "▾ Ocultar" : "▸ Consultar ficha"}</button>
-      ${hudOpen ? `<div class="hudbody">${propCard(s)}${areaBlock(s)}${target ? infoCard(s, target, dm, me()) : `<p class="empty">Toca una figura (en la mesa o en la iniciativa) para consultar su estado.</p>`}</div>` : ""}`;
+      ${hudOpen ? `<div class="hudbody">${propCard(s)}${areaBlock(s)}${target && !(inPanel && dm && target.kind !== "pc") ? infoCard(s, target, dm, me()) : inPanel && dm ? "" : `<p class="empty">Toca una figura (en la mesa o en la iniciativa) para consultar su estado.</p>`}</div>` : ""}`;
     // A la derecha: lo que puedes hacer tú (jugador: tu turno y tu objetivo; máster: la criatura que lleva)
     if (actHost) {
       let html = "";
@@ -580,7 +589,7 @@ export function mountTactical(host, opts = {}) {
   document.addEventListener("keydown", onKey);
   host.addEventListener("contextmenu", e => { if (armedNow() && e.target.closest(".boardwrap")) { e.preventDefault(); arm(null); actSig = ""; drawHud(); } });
   // Colores de la mesa (cada jugador, en su navegador)
-  $("#vcol", host).onclick = e => {
+  $("#vcol", TBR).onclick = e => {
     e.stopPropagation();
     let pop = $(".colpop", host); if (pop) { pop.remove(); return; }
     pop = document.createElement("div"); pop.className = "colpop"; $(".tactical", host).appendChild(pop);

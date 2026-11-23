@@ -138,6 +138,7 @@ import("./core/comercio.js").then(m => m.watchChests());
 import("./core/tiempolibre.js").then(m => m.watchFree());
 import("./core/acciones.js").then(m => m.watchEffects());
 import("./core/reacciones.js").then(m => m.watchReactions());
+import("./core/combate.js").then(m => { m.watchAutoResolve(); m.watchAutoDamage(); });
 import("./core/duraciones.js").then(m => m.watchDurations());
 window.addEventListener("hashchange", render);
 window.addEventListener("lamesa:login", () => { presence.beat(); current = null; render(); });

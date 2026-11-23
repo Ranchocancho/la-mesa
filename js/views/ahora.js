@@ -74,13 +74,9 @@ export function nowState(s, me, dm) {
   if (rx) { const a = tok(rx.tok), o = ownerOf(a), mine = o ? o === me : dm, X = RX[rx.rx] || { n: "Reacción", i: "⚡", q: "" };
     return task(a ? N(a) : "?", `⏸ Reacción de ${a ? N(a) : "?"}: ${X.q} ${o ? "" : "(Decide el máster.) "}Después sigue el turno de ${cur ? N(cur) : "—"}.`, mine,
       (mine || dm) ? [{ k: "rx", id: rx.id, label: `${X.i} ${X.n}`, gold: true }, { k: "rxno", id: rx.id, label: "No" }] : [], "alert"); }
-  const atk = rolls.find(r => r.kind === "attack" && r.status === "pending");
-  if (atk) return task("Máster", `Confirma el ataque de ${N(tok(atk.tok))} a ${N(tok(atk.target))}: ${atk.total} contra CA ${atk.ac ?? "?"} → ${atk.result === "miss" ? "falla" : atk.result === "crit" ? "¡crítico!" : "impacta"}.`, dm,
-    dm ? [{ k: "ok", id: atk.id, label: "✓ Vale", gold: true }, { k: "flip", id: atk.id, label: atk.result === "miss" ? "Que impacte" : "Que falle" }] : [], "wait");
-  const dmg = rolls.find(r => r.kind === "damage" && r.status === "pending");
-  if (dmg) return task("Máster", `Aplica ${dmg.total} de daño${dmg.dtype ? " " + dmg.dtype : ""} a ${N(tok(dmg.target))}.`, dm, dm ? [{ k: "ok", id: dmg.id, label: `✓ Aplicar ${dmg.total}`, gold: true }, { k: "half", id: dmg.id, label: "½" }, { k: "rolls", label: "Más…" }] : [], "wait");
-  const sp = rolls.find(r => r.saves && r.status === "pending");
-  if (sp) return task("Máster", `Resuelve el conjuro de ${N(tok(sp.tok))}: salvaciones y daño.`, dm, dm ? [{ k: "rolls", label: "Resolver", gold: true }] : []);
+  // Nada que validar: el ataque, el daño y los conjuros se resuelven solos. Solo espera por el máster la Resistencia legendaria.
+  const sp = rolls.find(r => r.saves && r.status === "pending" && r.applied == null && Date.now() - (r.at || 0) > 2500);
+  if (sp) return task("Máster", `¿Gasta la Resistencia legendaria contra ${(sp.label.match(/lanza (.+?)(?: \(|·|$)/) || [, "el conjuro"])[1].trim()}? Decídelo en Tiradas.`, dm, dm ? [{ k: "rolls", label: "Decidir", gold: true }] : []);
   const hit = rolls.find(r => r.kind === "attack" && (r.status === "ok" || r.status === "mod") && r.result && r.result !== "miss" && r.dmg && !hasDmg(r.id) && r.seq === s.board.seq);
   if (hit && !reactionPending(s, hit.id)) { const a = tok(hit.tok), mine = hit.who === me || (dm && (!a || a.kind !== "pc")), S = sneakInfo(s, hit), M = smiteInfo(s, hit);
     const extra = [S ? `🗡 Ataque furtivo: +${S.dice} (${S.why})` : "", M ? `✨ Castigo divino: gasta un espacio y la acción adicional (${M.dice(M.slots[0])} radiante)` : ""].filter(Boolean);

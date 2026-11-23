@@ -11,6 +11,7 @@ import { toast } from "./ui.js";
 import { kitOf, kitAttacks, gate, spendKit, condsIn, sizeOk } from "./criaturas.js";
 import { masteryOf, onHit, onDamage } from "./maestria.js";
 import { weaponKind, rageDamage, extendRage, sneakInfo, smiteInfo, paySmite } from "./rasgos.js";
+import { damageTraits, suggestedAction, lrLeft } from "./defensas.js";
 
 const num = s => { const m = String(s || "").match(/[+-−]?\s*\d+/); return m ? +m[0].replace(/\s|−/g, s => s === "−" ? "-" : "") : 0; };
 /** "1d8+4 perforante" → { expr: "1d8+4", type: "perforante" } */
@@ -177,4 +178,46 @@ export function answerOA(oaId, go) {
     store.commit("roll", st => { st.rolls.push({ id: "oap" + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), at: Date.now(), who: me ? me.id : null, whoName: me ? me.name : "", kind: "oapass",
       label: `${nameOf(s, h)} deja pasar a ${nameOf(s, t)}`, expr: "", dice: [], total: null, status: "ok", secret: false, link: r.id, tok: h.id, target: r.target }); });
   }
+}
+
+/* ---------- Todo se resuelve al tirar (como en BG3) ----------
+   Nadie valida tiradas: el ataque ya sale resuelto; el daño, los conjuros con salvación y las maestrías los aplica
+   el cliente del máster en cuanto los ve (en la nube solo él puede tocar fichas ajenas). El máster puede corregir
+   después (✎ cambiar, ✕ anular). Solo espera por él lo que es una decisión suya: la Resistencia legendaria. */
+export function watchAutoResolve() {
+  const done = new Set();
+  const run = () => {
+    const s = store.get(); if (!isDM(s)) return;
+    const now = Date.now();
+    for (const r of s.rolls || []) {
+      if (done.has(r.id) || r.status === "void" || now - (r.at || 0) > 600000) continue;
+      if (r.kind === "attack" && r.status === "pending") { done.add(r.id); decide(r.id, "ok"); continue; }
+      if (r.kind === "attack" && r.mas && !r.masAuto && (r.result === "hit" || r.result === "crit")) { done.add(r.id); store.commit("roll", st => onHit(st, st.rolls.find(x => x.id === r.id))); continue; }
+      if (r.kind === "damage" && r.status === "pending" && r.applied == null && r.total != null) {
+        done.add(r.id); decide(r.id, suggestedAction(damageTraits(s.tokens.find(x => x.id === r.target), r.dtype))); continue; }
+      if (r.saves && r.status === "pending" && r.applied == null) {
+        const lr = r.saves.some(sv => !sv.auto && !sv.ok && !sv.lr && lrLeft(s.tokens.find(x => x.id === sv.t) || {}) > 0);
+        if (lr) continue; // el máster decide si gasta la Resistencia legendaria
+        done.add(r.id); import("./hechizos.js").then(m => m.applySpell(r.id)); continue; }
+      if (r.kind === "mastery" && r.status === "pending" && r.link) { done.add(r.id); import("./maestria.js").then(m => m.applyMastery(r.link, r.id)); }
+    }
+  };
+  store.subscribe(() => queueMicrotask(run)); setInterval(run, 1500);
+}
+/** Quien ataca tira el daño solo si no hay nada que elegir (Ataque furtivo, Castigo divino) ni reacción pendiente. */
+export function watchAutoDamage() {
+  const done = new Set();
+  const run = () => {
+    const s = store.get(), me = currentUser(s); if (!me) return;
+    for (const r of s.rolls || []) {
+      if (r.kind !== "attack" || r.who !== me.id || done.has(r.id) || !r.dmg || r.status === "pending" || r.status === "void") continue;
+      if (!(r.result === "hit" || r.result === "crit") || Date.now() - (r.at || 0) > 90000) continue;
+      if (Date.now() - (r.at || 0) < 700) continue; // deja que la mesa pregunte antes por las reacciones (y que se vea el dado)
+      if ((s.rolls || []).some(x => x.link === r.id && x.kind === "damage" && x.status !== "void")) { done.add(r.id); continue; }
+      if (reactionPending(s, r.id)) continue; // primero, la reacción (Escudo puede convertirlo en fallo)
+      if (sneakInfo(s, r) || smiteInfo(s, r)) { done.add(r.id); continue; } // hay que elegir: botones en la tirada y en «Ahora»
+      done.add(r.id); damageFor(r.id);
+    }
+  };
+  store.subscribe(() => queueMicrotask(run)); setInterval(run, 1200);
 }

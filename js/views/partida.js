@@ -33,15 +33,15 @@ let dmMode = "rol", dmTab = "ini", plTab = "pj", wasTac = null, rollsSeen = 0;
 export function mount(root) {
   el = document.createElement("div");
   el.className = "partida";
-  el.innerHTML = `<section class="stagebox"><div id="stage" class="stage-area"></div><div class="stagebar" id="sbar"></div></section>
+  el.innerHTML = `<section class="stagebox"><div id="stage" class="stage-area"></div><div class="stagebar" id="sbar"><div class="sbinfo" id="sbarinfo"></div><div class="sbctl" id="sbarctl"></div></div></section>
     <aside class="dmpanel" id="dmp" aria-label="Panel del máster"><div class="dmmode" role="tablist"><button role="tab" data-mode="tac">⚔️ Táctica de combate</button><button role="tab" data-mode="rol">🎭 Roleplay</button></div>
-      <div class="dm-tac" id="dm-tac"><div class="dmtools" id="dmtools"></div><div class="sidetabs" role="tablist"><button role="tab" data-dtab="ini">Iniciativa</button><button role="tab" data-dtab="tir">🎲 Tiradas</button><button role="tab" data-dtab="npc">👹 PNJ</button></div>
-        <section class="dm-ini" id="dm-ini"></section><section class="dm-dice" id="dm-dice" hidden></section><section class="dm-npc" id="dm-npc" hidden><div class="dm-npcact" id="dm-npcact"></div><div class="dm-npctray" id="dm-npctray"></div></section></div>
+      <div class="dm-tac" id="dm-tac"><div class="dmtools" id="dmtools"></div><div class="sidetabs" role="tablist"><button role="tab" data-dtab="ini">Iniciativa</button><button role="tab" data-dtab="tir">🎲 Tiradas</button><button role="tab" data-dtab="npc">🎯 Táctica</button></div>
+        <section class="dm-ini" id="dm-ini"></section><section class="dm-dice" id="dm-dice" hidden></section><section class="dm-npc" id="dm-npc" hidden><div class="tacinfo" id="dm-tacinfo"></div><div class="dm-npcact" id="dm-npcact"></div><div class="dm-npctray" id="dm-npctray"></div></section></div>
       <div class="dm-rol" id="dm-rol"></div></aside>
     <aside class="plpanel" id="plp" aria-label="Tu columna: personaje e iniciativa" hidden>
-      <div class="sidetabs pltabs" role="tablist"><button role="tab" data-ptab="pj">🧙 Personaje</button><button role="tab" data-ptab="ini">⚔️ Iniciativa</button><button role="tab" data-ptab="tir">🎲 Tiradas</button></div>
+      <div class="sidetabs pltabs" role="tablist"><button role="tab" data-ptab="pj">🧙 Personaje</button><button role="tab" data-ptab="ini">🎯 Táctica</button><button role="tab" data-ptab="tir">🎲 Tiradas</button></div>
       <section class="pl-pj" id="pl-pj"><div class="pl-act" id="pl-act" hidden></div><div class="pl-sheet" id="pl-sheet"></div><div class="pl-dice" id="pl-dice"></div></section>
-      <section class="pl-ini" id="pl-ini" hidden></section><section class="pl-log" id="pl-log" hidden></section></aside>`;
+      <section class="pl-ini" id="pl-ini" hidden><div class="tacinfo" id="pl-tacinfo"></div></section><div id="pl-inihid" hidden></div><section class="pl-log" id="pl-log" hidden></section></aside>`;
   if (offAim) offAim(); offAim = onAim(() => { if (el && !isDM(store.get())) renderSheet($("#pl-sheet", el)); });
   $$("[data-mode]", el).forEach(b => b.onclick = () => { dmMode = b.dataset.mode; tabs(); });
   $$("[data-dtab]", el).forEach(b => b.onclick = () => { dmTab = b.dataset.dtab; tabs(); });
@@ -100,17 +100,19 @@ function drawStage(force) {
   if (tactical(s)) {
     st.classList.add("tac");
     const k = "tac" + tacEdit + dm;
-    const side = dm ? $("#dm-ini", el) : $("#pl-ini", el);
-    if (!tac || lastKey !== k) { lastKey = k; tac = mountTactical(st, { edit: tacEdit, sideHost: side, actHost: dm ? $("#dm-npcact", el) : $("#pl-act", el), onWantRolls: wantRolls, onSelect: id => {
+    const side = dm ? $("#dm-ini", el) : $("#pl-inihid", el);
+    if (!tac || lastKey !== k) { lastKey = k; tac = mountTactical(st, { edit: tacEdit, sideHost: side, ctlHost: $("#sbarctl", el), infoHost: dm ? $("#dm-tacinfo", el) : $("#pl-tacinfo", el), actHost: dm ? $("#dm-npcact", el) : $("#pl-act", el), onWantRolls: wantRolls, onSelect: id => {
       const s2 = store.get(), t = s2.tokens.find(x => x.id === id);
-      if (isDM(s2)) { if (t && t.kind !== "pc") { dmMode = "tac"; dmTab = "npc"; tabs(); } if (floorsOpen) { $("#dmtools", el).innerHTML = toolsBlock(s2); bind(s2); } } } }); }
+      if (!isDM(s2) && t && !(t.kind === "pc" && t.owner === (currentUser(s2) || {}).id)) { plTab = "ini"; tabs(); } // jugador: la ficha de lo que tocas, en «Táctica»
+      if (isDM(s2)) { if (t) { dmMode = "tac"; dmTab = "npc"; tabs(); } if (floorsOpen) { $("#dmtools", el).innerHTML = toolsBlock(s2); bind(s2); } } } }); }
     else tac.update();
     // Empieza el turno de un PNJ o enemigo: el máster pasa a su pestaña para llevarlo
     if (dm && s.board && s.board.combat === "live" && s.board.seq !== npcTurnSeen) { npcTurnSeen = s.board.seq; const cur = s.tokens.find(t => t.id === s.board.turn); if (cur && cur.kind !== "pc" && !(dmMode === "tac" && dmTab === "npc")) { dmMode = "tac"; dmTab = "npc"; tabs(); } }
     return;
   }
   tac = null; st.classList.remove("tac");
-  const pi = $("#pl-ini", el); if (pi) pi.innerHTML = "";
+  { const sc = $("#sbarctl", el); if (sc) sc.innerHTML = ""; } // sin mesa táctica, sin sus controles
+  const pi = $("#pl-tacinfo", el); if (pi) pi.innerHTML = "";
   const pa = $("#pl-act", el); if (pa) pa.innerHTML = ""; const dn = $("#dm-npcact", el); if (dn) dn.innerHTML = `<p class="empty" style="padding:6px 2px">Cuando haya mesa táctica, aquí verás lo que puede hacer el PNJ o enemigo que elijas.</p>`;
   // Tiempo libre: cada jugador elige a dónde va; el máster ve quién va a cada sitio
   const pf = presentationFor(s);
@@ -135,7 +137,7 @@ function draw() {
   const plp = $("#plp", el); plp.hidden = dm;
   if (!dm) { renderSheet($("#pl-sheet", el)); renderRolls($("#pl-dice", el), { log: false, by: () => { const st = store.get(), u = currentUser(st); const t = u && (st.tokens || []).find(x => x.kind === "pc" && x.owner === u.id); return t ? t.id : null; } }); }
   const typing = box => box && box.contains(document.activeElement) && /INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName);
-  if (!typing($("#sbar", el))) $("#sbar", el).innerHTML = `${live ? `<b>${esc(sessionName(live))}</b> en curso${live.test ? ` · <span class="tag secret">SOLO MÁSTERES</span>` : ""}` : "No hay ninguna partida en curso"}
+  if (!typing($("#sbar", el))) $("#sbarinfo", el).innerHTML = `${live ? `<b>${esc(sessionName(live))}</b> en curso${live.test ? ` · <span class="tag secret">SOLO MÁSTERES</span>` : ""}` : "No hay ninguna partida en curso"}
     ${live ? `<span class="quicknote"><input id="qnote" placeholder="📜 Anotar en la crónica…" aria-label="Nota para la crónica"><button class="btn small" id="qnotego">Anotar</button></span>` : ""}
     <span class="grow"></span>${dm ? `<button class="btn small" id="togglepanel">${panelHidden ? "Mostrar panel" : "Ocultar panel"}</button>` : ""}<a class="btn small" href="#mundo">Mapa del mundo</a>`;
   const qn = $("#qnote", el), qg = $("#qnotego", el);
