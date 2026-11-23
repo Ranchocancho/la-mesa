@@ -196,6 +196,7 @@ function refresh() {
     sessions: c.sessions || [], presentation: c.presentation || null, clock: c.clock || null, backdrop: c.backdrop || null, bestiary: c.bestiary || {},
     loot: c.loot || null, shopAdj: +c.shopAdj || 0, freeLog: c.freeLog || [], showOdds: c.showOdds !== false,
     freeTime: c.freeTime ? { ...c.freeTime, spots: (c.freeTime.spots || []).map(x => ({ ...x, secret: (cache.secrets.get("ft-" + x.id) || {}).secret || "" })) } : null,
+    mando: cache.secrets.get("mando") || null, // centro de mando del máster (solo él lo lee)
     whispers: [...cache.whispers.entries()].map(([id, x]) => ({ id, ...x })).sort((a, b) => a.at - b.at),
     lore: [...cache.lore.entries()].map(([id, x]) => ({ id, ...x, secret: (cache.secrets.get(id) || {}).secret || "", ...((cache.secrets.get(id) || {}).combat ? { combat: cache.secrets.get(id).combat } : {}) })).sort((a, b) => (a.order ?? 0) - (b.order ?? 0) || (a.at || 0) - (b.at || 0)),
     scenes: [...cache.scenes.entries()].map(([id, x]) => ({ id, ...x })).sort((a, b) => (a.order || 0) - (b.order || 0)).map(x => strip(x, "order")),
@@ -234,6 +235,7 @@ function docsOf(s, dm) {
   (s.whispers || []).forEach(w => { const { id, ...rest } = w; out.set("whispers/" + id, rest); });
   if (dm && s.freeTime) (s.freeTime.spots || []).forEach(x => out.set("secrets/ft-" + x.id, { secret: x.secret || "" }));
   if (dm) (s.world.regions || []).forEach(r => out.set("secrets/" + r.id, { secret: r.secret || "" }));
+  if (dm && s.mando) out.set("secrets/mando", s.mando);
   // La ficha de combate de un PNJ va con los secretos: los jugadores no ven sus números
   (s.lore || []).forEach(e => { const { id, secret, combat, ...rest } = e; out.set("lore/" + id, rest); if (dm) out.set("secrets/" + id, { secret: secret || "", ...(combat ? { combat } : {}) }); });
   s.world.places.forEach((p, i) => {

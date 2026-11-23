@@ -16,6 +16,7 @@ import * as reglas from "./views/reglas.js";
 import { preload } from "./core/srd.js";
 import { visibleRolls } from "./views/tiradas.js";
 import * as lore from "./views/lore.js";
+import * as mando from "./views/mando.js";
 import { clockOf, clockShort } from "./core/lore.js";
 
 const ROUTES = [
@@ -26,7 +27,8 @@ const ROUTES = [
   { id: "personajes", label: "Personajes", view: personajes },
   { id: "reglas", label: "Reglas", view: reglas },
   { id: "lore", label: "Lore", view: lore },
-  { id: "cronica", label: "Crónica", view: cronica }
+  { id: "cronica", label: "Crónica", view: cronica },
+  { id: "mando", label: "Mando", view: mando, dmOnly: true }
 ];
 
 let current = null, mounted = null, cloudMod = null;

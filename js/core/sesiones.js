@@ -39,7 +39,8 @@ export function presentationTitle(s, p) {
 export function startSession(test) {
   store.commit("session", s => {
     const id = uid("ses");
-    s.sessions.push({ id, n: test ? null : nextNumber(s), title: "", recap: "", status: "open", test: !!test, date: new Date().toISOString().slice(0, 10) });
+    s.sessions.push({ id, n: test ? null : nextNumber(s), title: "", recap: "", status: "open", test: !!test, date: new Date().toISOString().slice(0, 10),
+      at: Date.now(), xp0: Object.fromEntries(s.characters.map(c => [c.id, c.xp || 0])) }); // xp0: para contar los PX de la sesión (centro de mando)
     s.live = id;
     s.presentation = lastClosed(s) ? { type: "recap" } : { type: "world" };
   });

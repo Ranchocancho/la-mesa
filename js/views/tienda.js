@@ -105,7 +105,7 @@ export function lootHTML(s) {
       <div class="row"><input id="lname" list="lcat" placeholder="Objeto (del SRD o el que quieras)" style="flex:2"><input id="lqty" type="number" min="1" value="1" style="width:64px" aria-label="Cantidad">
         <label class="mini"><input type="checkbox" id="lmagic"> mágico</label><label class="mini"><input type="checkbox" id="latt"> sintonización</label></div>
       <div class="row"><input id="lfrom" placeholder="De dónde sale (el jefe goblin, el cofre del sótano…)" style="flex:1"><button class="btn small gold" id="ladd">Añadir</button></div>
-      <datalist id="lcat">${catalog().map(x => `<option value="${esc(x.n)}">`).join("")}</datalist></div></details>` : ""}
+      <datalist id="lcat">${catalog().map(x => `<option value="${esc(x.n)}">`).join("")}</datalist></details>` : ""}
   </section>`;
 }
 export function bindLoot(el) {

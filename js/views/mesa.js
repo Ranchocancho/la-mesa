@@ -28,6 +28,7 @@ import { computeVision, explored, visionOn, tokenSeen, unseenFn, LIGHT_ITEMS } f
 import { renderRolls, visibleRolls } from "./tiradas.js";
 import { attacksOf, attack, acOf, nameOf, damageFor, answerOA, decide } from "../core/combate.js";
 import { prefForTok } from "../core/reacciones.js";
+import { glyph, COND } from "../data/iconos.js";
 import { canActNow, phase, current, pending, beginCombat, rollInit, startRounds, endTurn, stopCombat, eco, moveBudget, speedOf, spend, toggle, ACCIONES, rangeOf, inRange, cover, modifiers, dist, metres, gap } from "../core/turnos.js";
 import { durFor, durText, durTag, leftOf } from "../core/duraciones.js";
 import { mountHotbar, barOn } from "./barra.js";
@@ -393,7 +394,7 @@ export function mountTactical(host, opts = {}) {
         <i class="tbav" style="background:${(c || t).color || "#777"}">${esc(initials(nm))}${t.init != null && ph === "live" ? `<sup>${t.init}</sup>` : ""}</i>
         ${now ? `<em>${esc((w => w.length > 1 && /^(hermano|hermana|sir|lady|lord|fray|sor|don|doña)$/i.test(w[0]) ? w[1] : w[0])(String(nm).replace(/\s*\(.*?\)/g, "").trim().split(/\s+/)))}</em>` : ""}
         ${h ? `<span class="ihb ${shown <= 0.25 ? "low" : shown <= 0.5 ? "mid" : ""}"><i style="width:${Math.round(shown * 100)}%"></i></span>` : ""}
-        <span class="tbconds">${(t.conds || []).slice(0, 4).map(cd => { const e = estado(cd.id); return e ? `<i style="--c:${e.c}" title="${esc(e.n)}">${e.i || ""}</i>` : ""; }).join("")}</span></span>`;
+        <span class="tbconds">${(t.conds || []).slice(0, 4).map(cd => { const e = estado(cd.id); return e ? `<i style="--c:${e.c}" title="${esc(e.n)}">${COND[cd.id] ? glyph([COND[cd.id], "#fff"]) : e.i || ""}</i>` : ""; }).join("")}</span></span>`;
     };
     const stripHTML = seq.map(chip).join("") || `<span class="tbidle">Esperando iniciativas…</span>`;
     if (stripHTML !== lastStrip) {

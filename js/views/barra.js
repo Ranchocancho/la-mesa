@@ -31,6 +31,7 @@ import { dmOnline, awaitsDM, alliesHit } from "../core/avisos.js";
 import { oaOpen, answerOA } from "../core/combate.js";
 import { durText, durTag } from "../core/duraciones.js";
 import { getImage } from "../core/images.js";
+import { siluetaFor, siluetaURL } from "../data/siluetas.js";
 import { glyph, TINT, weaponGlyph, spellGlyph, ACTION, MISC, TABS, COND, DAMAGE } from "../data/iconos.js";
 import { $, $$, esc, toast } from "../core/ui.js";
 
@@ -253,8 +254,10 @@ function offlineHTML(s, tok) {
 function portHTML(s, tok, name, hp, color, portrait) {
   const pct = hp ? Math.max(0, Math.min(100, hp.cur / Math.max(1, hp.max) * 100)) : 0;
   const conds = (tok.conds || []).map(x => ({ x, e: ESTADOS.find(y => y.id === x.id) })).filter(o => o.e);
-  return `<div class="hbport"><div class="hbface" style="--c:${esc(color || "#888")};${imgUrl[portrait] ? `background-image:url('${imgUrl[portrait]}')` : ""}">${imgUrl[portrait] ? "" : esc(String(name).slice(0, 2).toUpperCase())}</div>
-    <div class="hbwho"><b>${esc(String(name).split(" ")[0])}</b>${hp ? `<div class="hbhp ${pct < 34 ? "low" : ""}"><i style="width:${pct}%"></i><span>${hp.cur}/${hp.max}${hp.temp ? ` +${hp.temp}` : ""}</span></div>` : ""}
+  // Retrato grande junto a los iconos, como en BG3. Sin imagen: la silueta de su clase o criatura (las mismas que las peanas)
+  const ch = tok.kind === "pc" ? charOf(s, tok) : null, sil = tok.icon || (ch ? siluetaFor(`${ch.cls} ${ch.species}`) : siluetaFor(name));
+  return `<div class="hbport"><div class="hbface ${imgUrl[portrait] ? "img" : ""}" style="--c:${esc(color || "#888")};${imgUrl[portrait] ? `background-image:url('${imgUrl[portrait]}')` : ""}">${imgUrl[portrait] ? "" : `<i class="hbsil" style="-webkit-mask-image:url(${siluetaURL(sil)});mask-image:url(${siluetaURL(sil)})"></i>`}${hp ? `<div class="hbhp ${pct < 34 ? "low" : ""}"><i style="width:${pct}%"></i><span>${hp.cur}/${hp.max}${hp.temp ? ` +${hp.temp}` : ""}</span></div>` : ""}</div>
+    <div class="hbwho"><b>${esc(String(name).split(" ")[0])}</b>
       <div class="hbconds">${conds.map(({ x, e: E }) => `<span class="hbcond" style="--c:${E.c}" title="${esc(E.n)}: ${esc(E.t)}${x.dur ? " · " + esc(durText(s, x)) : ""}">${COND[x.id] ? glyph([COND[x.id], "#fff"], "cg") : E.i || ""} ${esc(E.n.split(" ")[0])}${x.dur ? `<sub>${durTag(s, x).replace("⏳", "")}</sub>` : ""}</span>`).join("")}</div></div></div>`;
 }
 function resHTML(s, tok, mine, extra = "") {

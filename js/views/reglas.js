@@ -8,6 +8,7 @@ import { TYPES, typeOf, withCustom } from "../core/bestiario.js";
 import { isWallT } from "../data/mapas.js";
 import { getImage } from "../core/images.js";
 import { INDICE, ACCESOS } from "../data/indice.js";
+import { mandoOf, addRule, dropRule } from "../core/mando.js";
 import { XP_BY_CR } from "../core/srd.js";
 import { difficulty, partyOf, HINT } from "../core/encuentro.js";
 
@@ -15,11 +16,22 @@ let el = null, tab = "libro", page = 5, q = "", sel = null, filt = { lvl: "", cl
 let sortM = "az", mfOpen = matchMedia("(min-width: 761px)").matches, mf = { vdr: "", ty: "", sz: "", mv: "", tr: "", df: "", or: "" }, gf = "", anchor = null, here = null, side = false, openCh = null;
 const CLASES = ["bardo", "brujo", "clérigo", "druida", "explorador", "hechicero", "mago", "paladín"];
 
+/** Máster: «📌 A mano» lleva esta regla a los accesos del centro de mando. */
+function pinBtn(k, ref, label) {
+  const st = store.get(); if (!isDM(st)) return "";
+  const on = mandoOf(st).rules.some(r => r.k === k && r.ref === ref);
+  return ` <button class="btn small rpin ${on ? "on" : ""}" data-rpin="${k}|${esc(ref)}|${esc(label)}" title="${on ? "Ya está en tus reglas a mano (Mando). Pulsa para quitarla." : "Añadir a tus reglas a mano (Mando)"}">📌${on ? " ✓" : " A mano"}</button>`;
+}
 export function mount(root) {
   el = document.createElement("div"); el.className = "reglas"; root.appendChild(el);
+  el.addEventListener("click", e => { const b = e.target.closest("[data-rpin]"); if (!b) return; e.preventDefault(); e.stopPropagation();
+    const [k, ref, label] = b.dataset.rpin.split("|"), r = mandoOf(store.get()).rules.find(x => x.k === k && x.ref === ref);
+    if (r) dropRule(r.id); else addRule(k, ref, label); const on = !r; b.classList.toggle("on", on); b.textContent = on ? "📌 ✓" : "📌 A mano"; toast(on ? "Añadida a tus reglas a mano (Mando)." : "Quitada de tus reglas a mano."); }, true);
   draw();
   return { update() {}, unmount() { el = null; } };
 }
+/** Abre el libro en una página (y resalta un apartado): para los accesos del centro de mando. */
+export function openRulePage(p, a) { tab = "libro"; page = +p || 1; anchor = a || null; here = a ? [a, page] : null; sel = null; q = ""; side = false; openCh = null; location.hash = "reglas"; if (el) draw(); }
 export function openRules(t, item) { tab = t; sel = item; q = ""; side = false; location.hash = "reglas"; if (el) draw(); }
 
 async function draw() {
@@ -165,7 +177,7 @@ function glosario(body, G, P) {
       <div class="azbar">${letters.map(L => `<button data-az="${L}">${L}</button>`).join("")}</div>
       <div class="places">${letters.map(L => `<h4 class="lvh" id="az-${L}">${L}</h4>` + list.filter(k => letterOf(k) === L).map(k => `<button class="place ${cur === k ? "on" : ""}" data-g="${esc(k)}"><span>${esc(k)}</span>${G[k].tipo ? `<small class="gtag">${esc(G[k].tipo)}</small>` : ""}</button>`).join("")).join("") || `<p class="empty">Nada con ese filtro.</p>`}</div>
       <p class="note" style="margin:0">${list.length} términos del glosario de reglas</p>
-    </aside><article class="rpage">${backBtn()}${cur ? `<div class="scard gloss"><h2>${esc(cur)}${G[cur].tipo ? ` <span class="btag">${esc(G[cur].tipo)}</span>` : ""}</h2>
+    </aside><article class="rpage">${backBtn()}${cur ? `<div class="scard gloss"><h2>${esc(cur)}${G[cur].tipo ? ` <span class="btag">${esc(G[cur].tipo)}</span>` : ""}${pinBtn("g", cur, cur)}</h2>
       <div class="stext">${linkify(bookHTML(G[cur].txt, q.length > 2 ? esc(q) : ""))}</div>
       <p class="gfoot"><button class="btn small" data-book="${pageOf(cur)}">📖 Ver en el libro · p. ${pageOf(cur)}</button></p></div>`
       : `<div class="scard gloss"><h2>Glosario de reglas</h2><div class="stext">${bookHTML(G["Convenciones del glosario"].txt.split("Abreviaciones.")[0])}</div><p>Elige un término de la lista o filtra por estados, acciones, áreas, peligros o actitudes.</p></div>`}</article>`;
@@ -180,7 +192,7 @@ function glosario(body, G, P) {
 }
 
 export function spellCard(s) {
-  return `<div class="scard spell lv${s.lvl}"><h2>${esc(s.n)}</h2><p class="smeta">${s.lvl ? `${s.esc[0].toUpperCase() + s.esc.slice(1)} de nivel ${s.lvl}` : `Truco de ${s.esc}`} (${esc(s.cls)})</p>
+  return `<div class="scard spell lv${s.lvl}"><h2>${esc(s.n)}${pinBtn("c", s.n, s.n)}</h2><p class="smeta">${s.lvl ? `${s.esc[0].toUpperCase() + s.esc.slice(1)} de nivel ${s.lvl}` : `Truco de ${s.esc}`} (${esc(s.cls)})</p>
     <dl><dt>Tiempo de lanzamiento</dt><dd>${esc(s.t)}</dd><dt>Alcance</dt><dd>${esc(s.al)}</dd><dt>Componentes</dt><dd>${esc(s.co)}</dd><dt>Duración</dt><dd>${esc(s.du)}</dd></dl>
     <div class="stext">${bookHTML(s.txt)}</div>${s.sup ? `<p class="sup">${rich(s.sup)}</p>` : ""}</div>`;
 }
@@ -268,7 +280,7 @@ function monsterParts(txt) {
 }
 export function monsterCard(m, withAdd) {
   const mod = v => { const x = Math.floor((v - 10) / 2); return (x >= 0 ? "+" : "−") + Math.abs(x); };
-  return `<div class="scard statblock"><h2>${esc(m.n)}</h2><p class="smeta">${esc(m.tipo)}</p>
+  return `<div class="scard statblock"><h2>${esc(m.n)}${pinBtn("m", m.n, m.n)}</h2><p class="smeta">${esc(m.tipo)}</p>
     <div class="mstats"><span><b>CA</b> ${m.ca}</span><span><b>PG</b> ${m.pg} (${esc(m.pgd)})</span><span><b>Iniciativa</b> ${esc(m.ini)}</span><span><b>Velocidad</b> ${esc(m.vel)}</span><span><b>VD</b> ${esc(m.vd)}</span></div>
     <div class="mab">${Object.entries(m.ab).map(([k, v]) => `<div><small>${k.toUpperCase()}</small><b>${v}</b><em>${mod(v)}</em></div>`).join("")}</div>
     ${m.atk.length ? `<div class="matk">${m.atk.map(a => `<span>⚔️ <b>${esc(a.name)}</b> ${rich(a.atk)} · ${rich(a.dmg)}</span>`).join("")}</div>` : ""}

@@ -1,6 +1,8 @@
 // La Partida: el escenario común y, para el máster, el panel con el que decide qué tenéis delante.
 import { store } from "../core/store.js";
 import { isDM, currentUser } from "../core/session.js";
+import { pendingFor, closeXPNotes, mandoOf } from "../core/mando.js";
+import { draw as drawMando } from "./mando.js";
 import { liveSession, visibleLive, lastClosed, sessionName, startSession, closeSession, show, presentationFor, addEntry } from "../core/sesiones.js";
 import { loadScene, blankBoard, clearBoard, saveBoardAsScene, addPC, removePC } from "../core/mesa.js";
 import { presence } from "../core/presence.js";
@@ -28,16 +30,16 @@ let npcTurnSeen = null;
 let el, closing = false, tac = null, tacEdit = false, panelHidden = false, lastKey = null;
 // Panel del máster: dos modos (Táctica de combate | Roleplay); pestañas Iniciativa | Tiradas en táctica y en la columna del jugador
 let floorsOpen = false, offAim = null;
-let dmMode = "rol", dmTab = "ini", plTab = "pj", wasTac = null, rollsSeen = 0;
+let dmMode = "rol", dmTab = "npc", plTab = "pj", wasTac = null, rollsSeen = 0;
 
 export function mount(root) {
   el = document.createElement("div");
   el.className = "partida";
   el.innerHTML = `<section class="stagebox"><div id="stage" class="stage-area"></div><div class="stagebar" id="sbar"><div class="sbinfo" id="sbarinfo"></div><div class="sbctl" id="sbarctl"></div></div></section>
-    <aside class="dmpanel" id="dmp" aria-label="Panel del máster"><div class="dmmode" role="tablist"><button role="tab" data-mode="tac">⚔️ Táctica de combate</button><button role="tab" data-mode="rol">🎭 Roleplay</button></div>
-      <div class="dm-tac" id="dm-tac"><div class="dmtools" id="dmtools"></div><div class="sidetabs" role="tablist"><button role="tab" data-dtab="ini">Iniciativa</button><button role="tab" data-dtab="tir">🎲 Tiradas</button><button role="tab" data-dtab="npc">🎯 Táctica</button></div>
+    <aside class="dmpanel" id="dmp" aria-label="Panel del máster"><div class="dmmode" role="tablist"><button role="tab" data-mode="tac">⚔️ Táctica de combate</button><button role="tab" data-mode="rol">🎭 Roleplay</button><button role="tab" data-mode="man" title="Centro de mando: estado del grupo, experiencia, botín, notas y reglas a mano (también en la pestaña «Mando» de arriba)">🎛</button></div>
+      <div class="dm-tac" id="dm-tac"><div class="dmtools" id="dmtools"></div><div class="sidetabs" role="tablist"><button role="tab" data-dtab="npc">🎯 Táctica</button><button role="tab" data-dtab="ini">Iniciativa</button><button role="tab" data-dtab="tir">🎲 Tiradas</button></div>
         <section class="dm-ini" id="dm-ini"></section><section class="dm-dice" id="dm-dice" hidden></section><section class="dm-npc" id="dm-npc" hidden><div class="tacinfo" id="dm-tacinfo"></div><div class="dm-npcact" id="dm-npcact"></div><div class="dm-npctray" id="dm-npctray"></div></section></div>
-      <div class="dm-rol" id="dm-rol"></div></aside>
+      <div class="dm-rol" id="dm-rol"></div><div class="dm-man mando" id="dm-man" hidden></div></aside>
     <aside class="plpanel" id="plp" aria-label="Tu columna: personaje e iniciativa" hidden>
       <div class="sidetabs pltabs" role="tablist"><button role="tab" data-ptab="pj">🧙 Personaje</button><button role="tab" data-ptab="ini">🎯 Táctica</button><button role="tab" data-ptab="tir">🎲 Tiradas</button></div>
       <section class="pl-pj" id="pl-pj"><div class="pl-act" id="pl-act" hidden></div><div class="pl-sheet" id="pl-sheet"></div><div class="pl-dice" id="pl-dice"></div></section>
@@ -77,7 +79,8 @@ function tabs() {
   const s = store.get(), dm = isDM(s), tacOn = !!tactical(s);
   const sel = (q, v, attr) => $$(q, el).forEach(b => b.setAttribute("aria-selected", b.dataset[attr] === v));
   sel("[data-mode]", dmMode, "mode"); sel("[data-dtab]", dmTab, "dtab");
-  $("#dm-tac", el).hidden = dmMode !== "tac"; $("#dm-rol", el).hidden = dmMode !== "rol";
+  $("#dm-tac", el).hidden = dmMode !== "tac"; $("#dm-rol", el).hidden = dmMode !== "rol"; $("#dm-man", el).hidden = dmMode !== "man";
+  if (dm && dmMode === "man") drawMando($("#dm-man", el), true);
   $("#dm-ini", el).hidden = dmTab !== "ini"; $("#dm-dice", el).hidden = dmTab !== "tir"; $("#dm-npc", el).hidden = dmTab !== "npc";
   if (!tacOn && plTab === "ini") plTab = "pj";
   sel("[data-ptab]", plTab, "ptab");
@@ -151,12 +154,12 @@ function draw() {
   panel.hidden = !dm || panelHidden;
   // Al aparecer la mesa táctica, el panel pasa solo a «Táctica»; al retirarla, vuelve a «Roleplay»
   const tacOn = !!tactical(state);
-  if (wasTac !== null && tacOn !== wasTac && dm) dmMode = tacOn ? "tac" : "rol";
+  if (wasTac !== null && tacOn !== wasTac && dm && dmMode !== "man") dmMode = tacOn ? "tac" : "rol";
   if (wasTac === null && dm) dmMode = tacOn ? "tac" : "rol";
   wasTac = tacOn;
   if (dm && !panelHidden && !typing(rol)) {
     const open = [...$$("details[open]", rol)].map(d => d.dataset.k);
-    rol.innerHTML = sessionBlock(state) + hereBlock(state) + (liveSession(state) ? freeDMBlock(state) : "") + levelBlock(state) + directionBlock(state) + tacticalBlock(state) + showBlock(state);
+    rol.innerHTML = sessionBlock(state) + hereBlock(state) + (liveSession(state) ? freeDMBlock(state) : "") + directionBlock(state) + tacticalBlock(state) + showBlock(state);
     open.forEach(k => { const d = $(`details[data-k="${k}"]`, rol); if (d) d.open = true; });
     if (!typing($("#dmtools", el))) $("#dmtools", el).innerHTML = toolsBlock(state);
     bind(state); bindFreeDM(rol);
@@ -179,12 +182,13 @@ function toolsBlock(state) {
     ${q("qtmon", "👹", "Añadir criaturas")}
     ${q("data-askroll", "🎲", "Pedir una tirada (habilidad, característica o salvación)")}
     ${q("data-lsearch", "🔎", "Buscar en el lore (tecla /)")}
+    <button class="qb" id="qtfloor" aria-pressed="${floorsOpen}" title="Plantas del mapa (torres, sótanos…). Ahora: ${esc(floorName(b))}${floorsOf(b).length > 1 ? ` · ${floorsOf(b).length} plantas` : ""}">🏰${floorsOf(b).length > 1 ? `<small class="qn">${floorsOf(b).length}</small>` : ""}</button>
     ${q("qtfog", "👁", visionOn(b) ? "Visión de los personajes: activada. Los jugadores solo ven lo que sus personajes ven (muros, puertas cerradas y luz). Pulsa para que lo vean todo." : "Visión de los personajes: desactivada (los jugadores ven todo el mapa)", visionOn(b))}
     <select class="qsel" id="qtlight" title="Luz de la escena (reglas): brillante, tenue (desventaja en Percepción para ver) u oscuridad (no se ve sin visión en la oscuridad ni luz)" aria-label="Nivel de luz">${Object.entries(LEVELS).map(([k, n]) => `<option value="${k}" ${ambientLevel(b) === k ? "selected" : ""}>${n}</option>`).join("")}</select>
     ${(state.tokens || []).some(t => t.hidden) ? `<button class="qb wide" id="qtreveal" title="Los jugadores podrán verlas (si sus personajes alcanzan a verlas)">🙈 Mostrar ocultas <small>${state.tokens.filter(t => t.hidden).length}</small></button>` : ""}
     <select class="qsel" id="qtluz" title="Luz de la mesa" aria-label="Luz">${Object.entries(LUCES).map(([k, n]) => `<option value="${k}" ${(b.ambient || "interior") === k ? "selected" : ""}>${n}</option>`).join("")}</select>
     <select class="qsel" id="qtsnd" title="Música y sonido ambiente" aria-label="Sonido ambiente">${Object.entries(AMBIENTES).map(([k, n]) => `<option value="${k}" ${(b.sound || "") === k ? "selected" : ""}>🎵 ${n}</option>`).join("")}</select>
-    <button class="qb wide" id="qtfloor" aria-pressed="${floorsOpen}" title="Plantas del mapa: torres, sótanos…">🏰 ${esc(floorName(b))}${floorsOf(b).length > 1 ? ` <small>${floorsOf(b).length}</small>` : ""}</button></div>
+</div>
     ${floorsOpen ? `<div class="dmfloors">${floorsHTML(state, tac && tac.selected ? tac.selected() : null)}</div>` : ""}`;
 }
 
@@ -238,11 +242,12 @@ function sessionBlock(state) {
     ${changesBlock(state)}
     <h2 class="sec" style="margin-top:14px">Experiencia</h2>
     <div class="xpgrid xpall"><input type="number" id="xpall" min="0" placeholder="PX" aria-label="PX para todos"><input id="xpwhy" placeholder="Motivo (p. ej. derrotar a los esqueletos)" aria-label="Motivo"><button class="btn small" id="xpfill">A todos</button></div>
-    <div class="xplist">${state.characters.map(c => `<div class="xpgrid"><span>${esc(c.name)}</span><input type="number" min="0" data-xpc="${c.id}" placeholder="0" aria-label="PX para ${esc(c.name)}"><input data-xpr="${c.id}" placeholder="Motivo" aria-label="Motivo para ${esc(c.name)}"></div>`).join("")}</div>`}
+    <div class="xplist">${state.characters.map(c => { const P = pendingFor(state, c.id); return `<div class="xpgrid"><span>${esc(c.name)}</span><input type="number" min="0" data-xpc="${c.id}" placeholder="0" value="${P.xp || ""}" aria-label="PX para ${esc(c.name)}"><input data-xpr="${c.id}" placeholder="Motivo" value="${esc(P.why)}" aria-label="Motivo para ${esc(c.name)}"></div>`; }).join("")}</div>
+    ${mandoOf(state).xpn.some(n => !n.done) ? `<p class="note" style="margin:6px 0 0">Relleno con las notas de experiencia del centro de mando que aún no habías concedido.</p>` : ""}`}
     <div class="row" style="margin-top:12px"><button class="btn gold" id="doclose">${live.test ? "Terminar la prueba" : "Guardar y cerrar"}</button><button class="btn" id="cancelclose">Seguir jugando</button></div></div>`;
   return `<div class="panel"><h2 class="sec">${esc(sessionName(live))} en curso</h2>
     ${live.test ? `<p class="note" style="margin:0 0 12px">Los jugadores no ven esta sesión ni lo que muestres en ella.</p>` : ""}
-    <div class="row"><button class="btn gold" data-askroll title="Pide a todos o a alguien una tirada de habilidad, característica o salvación">🎲 Pedir tirada</button><button class="btn" data-give title="Sellos, regalos, reliquias…">🎁 Dar objeto</button><button class="btn" id="close">Cerrar sesión</button></div></div>`;
+    <div class="row oneline"><button class="btn small gold" data-askroll title="Pide a todos o a alguien una tirada de habilidad, característica o salvación">🎲 Pedir tirada</button><button class="btn small" data-give title="Sellos, regalos, reliquias…">🎁 Dar objeto</button><button class="btn small" id="close">Cerrar sesión</button></div></div>`;
 }
 
 // Dirección: reloj de campaña y la carpeta de escenas preparadas para esta sesión, a un clic
@@ -311,7 +316,7 @@ function bind(state) {
     const t = $("#ctitle", el), r = $("#crecap", el);
     if (r && !r.value.trim()) { toast("Escribe un pequeño resumen: será el «Anteriormente…» de la próxima sesión"); r.focus(); return; }
     const xp = $$("[data-xpc]", el).map(i => ({ char: i.dataset.xpc, amount: +i.value || 0, reason: ($(`[data-xpr="${i.dataset.xpc}"]`, el) || {}).value || "" }));
-    closing = false; closeSession(t ? t.value.trim() : "", r ? r.value.trim() : "", xp);
+    closing = false; closeXPNotes(); closeSession(t ? t.value.trim() : "", r ? r.value.trim() : "", xp);
     const total = xp.reduce((a, x) => a + x.amount, 0);
     toast(total ? `Sesión cerrada · ${total} PX repartidos` : "Sesión cerrada");
   });

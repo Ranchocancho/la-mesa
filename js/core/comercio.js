@@ -73,12 +73,19 @@ export function applyBasket(c0, buy, sell, adj = 0) {
 }
 
 /* ---------- Botín del grupo ---------- */
+/** Lo encontrado en la sesión en curso, apuntado en la propia sesión (para el centro de mando). */
+function sessLoot(s, coins, items, from) {
+  const l = (s.sessions || []).find(x => x.id === s.live && x.status === "open"); if (!l) return;
+  const cp = toCp(coins); if (!cp && !items.length) return;
+  l.loot = l.loot || []; l.loot.push({ at: Date.now(), cp, items: items.map(x => `${x.name}${(+x.qty || 1) > 1 ? " ×" + x.qty : ""}`), from: from || "" });
+}
 export const lootOf = s => s.loot || { coins: {}, items: [] };
 /** El máster añade monedas u objetos al botín. */
 export function addLoot(coins, items = [], from = "") {
   store.commit("loot", s => {
     const L = s.loot = s.loot || { coins: {}, items: [] };
     L.coins = addCoins(L.coins, coins);
+    sessLoot(s, coins, items, from);
     items.forEach(x => L.items.push({ id: uid("bt"), name: x.name, qty: +x.qty || 1, weight: +x.weight || 0, notes: x.notes || "", magic: !!x.magic, attune: !!x.attune, from: from || x.from || "", at: Date.now() }));
   });
 }
@@ -120,6 +127,7 @@ export function openChest(propId, by = "") {
     const ch = p.chest || { coins: {}, items: [] }, name = p.label || "Cofre";
     const L = s.loot = s.loot || { coins: {}, items: [] };
     L.coins = addCoins(L.coins, ch.coins);
+    sessLoot(s, ch.coins, ch.items || [], name);
     (ch.items || []).forEach(x => L.items.push({ id: uid("bt"), name: x.name, qty: +x.qty || 1, weight: +x.weight || 0, notes: x.notes || "", magic: !!x.magic, attune: !!x.attune, from: name, at: Date.now() }));
     p.opened = true; p.hidden = false;
     const lines = [toCp(ch.coins) ? COINS.filter(([k]) => +(ch.coins || {})[k]).map(([k]) => `${+ch.coins[k]} ${k}`).join(" ") : "", ...(ch.items || []).map(x => `${x.name}${x.qty > 1 ? " ×" + x.qty : ""}`), p.loot || ""].filter(Boolean);
