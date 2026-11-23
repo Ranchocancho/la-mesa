@@ -2404,3 +2404,51 @@ body:has(.tactical.withbar) #toast{bottom:140px}
 .cptabs{display:flex;gap:6px;padding:0 14px 8px}.cptabs button{padding:5px 12px;border-radius:999px;border:1px solid var(--linea);background:transparent;color:var(--hueso);cursor:pointer}
 .cptabs button[aria-pressed="true"]{background:#3a2c17;border-color:var(--oro);color:var(--oro)}
 .npclore{margin:6px 0;gap:6px;display:flex;flex-wrap:wrap}
+
+/* ---------- Hito 66: reacciones configurables, máster desconectado, confirmar lo arriesgado ---------- */
+button.hbr{font:inherit;color:inherit;cursor:pointer}
+button.hbr:hover{box-shadow:0 0 0 1px var(--react,#c9a0ff)}
+.hbrxb{font-size:18px;opacity:.75}.hbrxb:hover{opacity:1}
+.hbcfg{flex-direction:column;align-items:stretch;gap:6px;min-width:330px}
+.hbcfg>b,.hbcfg>small{align-self:flex-start}.hbcfg>.ib{position:absolute;top:6px;right:8px}
+.hbcfg{position:relative}
+.hbcfgrow{display:flex;justify-content:space-between;align-items:center;gap:12px}
+.hbseg{display:inline-flex;border:1px solid rgba(255,255,255,.18);border-radius:999px;overflow:hidden}
+.hbseg button{font:inherit;font-size:12px;padding:2px 9px;background:transparent;color:var(--tenue,#a99);border:0;cursor:pointer}
+.hbseg button+button{border-left:1px solid rgba(255,255,255,.12)}
+.hbseg button.on{background:var(--oro,#d6aa4e);color:#1a120c;font-weight:600}
+.hbask.warn{border-color:#e0a03a;animation:none}
+.hbask.off{border-color:#7d8fe0;animation:none;font-size:13px}
+.rpend{display:block;font-size:12px;color:#9fb3ff;margin-top:2px}
+.sync.nodm i{background:#e0a03a;box-shadow:0 0 6px #e0a03a}
+.sync.offline i{background:#e05a4a;box-shadow:0 0 6px #e05a4a}
+
+/* ---------- Hito 67: iconos grabados (game-icons.net) teñidos, como los símbolos del mapa ---------- */
+.gi{display:inline-block;filter:drop-shadow(0 1px 0 rgba(0,0,0,.9)) drop-shadow(0 0 3px rgba(0,0,0,.6))}
+.gi>i{display:block;width:100%;height:100%;-webkit-mask-position:center;mask-position:center;-webkit-mask-size:contain;mask-size:contain;-webkit-mask-repeat:no-repeat;mask-repeat:no-repeat;
+  background:linear-gradient(170deg,#fff 0%,var(--tint) 38%,color-mix(in srgb,var(--tint) 55%,#3a2a18) 100%)}
+.hbi{background:radial-gradient(circle at 50% 30%,color-mix(in srgb,var(--tint,#6a5030) 22%,#3a2c20) 0%,#17110c 78%);
+  box-shadow:inset 0 0 0 1px rgba(0,0,0,.7),inset 0 1px 0 rgba(255,235,190,.12)}
+.hbg.gi{display:block;width:70%;height:70%;margin:15% auto 0}
+.hbi:hover .hbg.gi{filter:drop-shadow(0 1px 0 rgba(0,0,0,.9)) drop-shadow(0 0 6px color-mix(in srgb,var(--tint) 70%,transparent))}
+.hbi.on .hbg.gi{filter:drop-shadow(0 0 7px #ffd76a)}
+.hbtabs .tabg{width:15px;height:15px;vertical-align:middle;filter:none}
+.hbtabs button[aria-selected="true"] .tabg{filter:drop-shadow(0 0 3px rgba(255,215,106,.7))}
+.hbtabs button:not([aria-selected="true"]) .tabg{opacity:.6}
+.hbcond .cg{width:11px;height:11px;vertical-align:-2px;filter:drop-shadow(0 1px 0 rgba(0,0,0,.6))}
+/* Registro por rondas (Hito 67) */
+.rround{font:700 11px var(--display,serif);letter-spacing:.08em;text-transform:uppercase;color:var(--oro,#d6aa4e);padding:8px 2px 3px;border-bottom:1px solid rgba(214,170,78,.25);margin-bottom:3px}
+.rround.F{color:var(--tenue,#a99)}
+.rfilter{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:4px 0 2px;font-size:13px}
+.rfilter select{font-size:13px}.rfilter small{color:var(--tenue,#a99)}
+.rcalc{font-size:13px;margin:4px 0;font-variant-numeric:tabular-nums}
+.rcalc .drop{text-decoration:line-through;opacity:.5}
+.rcalc .cvs{color:var(--tenue,#a99)}.rcalc b.hit,.rcalc b.crit{color:#7ec850}.rcalc b.miss{color:#e05a4a}
+/* Desglose de pruebas en la ficha (Hito 67) */
+.fsk .fpk,.fsklegend .fpk{font-style:normal;display:inline-block;width:13px;color:var(--tenue,#a99);font-size:10px}
+.fsk.lv1 .fpk{color:var(--oro,#d6aa4e)}.fsk.lv2 .fpk{color:#ffd76a;text-shadow:0 0 4px rgba(255,215,106,.6)}
+.fsk.lv1 span,.fsk.lv2 span{color:var(--hueso)}.fsk.lv0 span{opacity:.75}
+.fsk small{font-size:10px;color:var(--tenue,#a99)}
+.fsklegend{font-size:11px;color:var(--tenue,#a99);margin:4px 0 0}
+.fsaves .fpr{border-color:var(--oro,#d6aa4e)}
+.hbr .rg{width:14px;height:14px;vertical-align:-2px}

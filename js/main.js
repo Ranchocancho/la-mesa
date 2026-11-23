@@ -4,6 +4,7 @@ import { pendingCount } from "./core/propuestas.js";
 import { session, currentUser, realUser, isDM, isEditor, viewingAs, ROLE } from "./core/session.js";
 import { visibleLive, sessionName, presentationFor, presentationTitle } from "./core/sesiones.js";
 import { presence } from "./core/presence.js";
+import { dmOnline } from "./core/avisos.js";
 import { $, esc, avatar } from "./core/ui.js";
 import * as inicio from "./views/inicio.js";
 import * as partida from "./views/partida.js";
@@ -55,7 +56,7 @@ function topbar(state) {
   return `<header class="top">
     <div class="brand"><b>La Mesa</b><span>${esc(state.campaign.name)} · ${live ? `${esc(sessionName(live))} en curso · ${esc(clockShort(clockOf(state)))}` : "sin partida"}${cloudMode ? "" : " · demostración"}</span></div>
     ${me ? `<nav class="nav" aria-label="Secciones">${ROUTES.filter(x => !x.dmOnly || isDM(state)).map(x => `<a href="#${x.id}" ${x.id === r ? 'aria-current="page"' : ""}>${x.label}${x.id === "partida" && live ? ` <i class="livedot" title="Partida en curso"></i>` : ""}${x.id === "personajes" && isDM(state) && pendingCount(state) ? ` <i class="pendot" title="Cambios de fichas por revisar">${pendingCount(state)}</i>` : ""}${x.soon ? ` <span class="soon">· hito ${x.soon}</span>` : ""}</a>`).join("")}</nav>
-    <span class="sync" title="Conectados ahora"><i></i>${presence.count()} conectado${presence.count() === 1 ? "" : "s"}</span>
+    ${syncHTML(state)}
     ${isEditor(state) && players.length ? `<label class="viewas">Ver como<select id="viewas" class="btn small"><option value="">${esc(ROLE[real.role])}</option>${players.map(p => `<option value="${p.id}" ${va && va.id === p.id ? "selected" : ""}>${esc(p.name)}</option>`).join("")}</select></label>` : ""}
     <div class="me">${avatar(real)}<div>${esc(real.name)}<small>${esc(ROLE[real.role] || "Jugador")}</small></div>
       ${cloudMode ? `<button class="btn small" id="campaigns">Mundos</button>` : `<button class="btn small" id="switchme">Cambiar</button>`}</div>` : ""}
@@ -110,8 +111,17 @@ store.subscribe((state, label, remote) => {
   render();
   if (wasReady && mounted && mounted.update) mounted.update(state, label, remote);
 });
+/** Conectados, y los dos avisos que importan (Hito 66): sin conexión, o (para los jugadores) el máster fuera,
+ *  porque el daño y los efectos sobre otros los aplica su navegador. */
+function syncHTML(state) {
+  const n = presence.count(), off = navigator.onLine === false, nodm = !off && !isDM(state) && !dmOnline(state);
+  const tip = off ? "Sin conexión: lo que hagas se guardará al volver la conexión" : nodm ? "El máster no está conectado: tus tiradas se hacen, pero el daño y los efectos sobre otros se aplicarán cuando vuelva" : "Conectados ahora";
+  return `<span class="sync ${off ? "offline" : nodm ? "nodm" : ""}" title="${tip}"><i></i>${off ? "Sin conexión" : `${n} conectado${n === 1 ? "" : "s"}${nodm ? " · máster fuera" : ""}`}</span>`;
+}
+const refreshSync = () => { const s = $(".sync"); if (s) s.outerHTML = syncHTML(store.get()); };
+addEventListener("online", refreshSync); addEventListener("offline", refreshSync);
 presence.subscribe(() => {
-  const s = $(".sync"); if (s) { const n = presence.count(); s.innerHTML = `<i></i>${n} conectado${n === 1 ? "" : "s"}`; }
+  refreshSync();
   if (mounted && mounted.presence) mounted.presence();
 });
 // Inicio del turno de una criatura (recarga, Regeneración, legendarias): si el turno lo pasó un jugador, lo aplica el máster

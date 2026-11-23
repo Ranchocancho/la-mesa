@@ -64,7 +64,7 @@ export function publish(r) {
   const out = roll(r.expr, { adv: r.adv, crit: r.crit });
   const e = {
     id: uid("tir"), at: Date.now(), who: me ? me.id : null, whoName: me ? me.name : "", label: r.label || r.expr, expr: r.expr,
-    kind: r.kind || "free", char: r.char || null, dc: r.dc ?? null, seq: s.board && s.board.combat === "live" ? s.board.seq || 0 : null, adv: r.adv || 0, crit: !!r.crit, tok: r.by || null, target: r.target || null, link: r.link || null,
+    kind: r.kind || "free", char: r.char || null, dc: r.dc ?? null, seq: s.board && s.board.combat === "live" ? s.board.seq || 0 : null, round: s.board && s.board.combat === "live" ? s.board.round || 1 : null, adv: r.adv || 0, crit: !!r.crit, tok: r.by || null, target: r.target || null, link: r.link || null,
     dice: out.dice, total: out.total, nat: out.nat, secret: !!r.secret, status: "pending", dmg: r.dmg || null, dtype: r.dtype || null, ac: r.ac ?? null, why: r.why || null, cov: r.cov || null, auto: r.auto || null, skin: r.skin || mySkin(), throw: r.throw || null, mas: r.mas || null, wname: r.wname || null, cleaveOf: r.cleaveOf || null, apply: r.apply || null, dc: r.dc ?? null,
     wk: r.wk || null, sneak: r.sneak || null, smite: r.smite || null, note: r.note || null
   };

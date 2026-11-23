@@ -27,6 +27,7 @@ import { EFECTOS } from "../data/efectos.js";
 import { computeVision, explored, visionOn, tokenSeen, unseenFn, LIGHT_ITEMS } from "../core/vision.js";
 import { renderRolls, visibleRolls } from "./tiradas.js";
 import { attacksOf, attack, acOf, nameOf, damageFor, answerOA, decide } from "../core/combate.js";
+import { prefForTok } from "../core/reacciones.js";
 import { canActNow, phase, current, pending, beginCombat, rollInit, startRounds, endTurn, stopCombat, eco, moveBudget, speedOf, spend, toggle, ACCIONES, rangeOf, inRange, cover, modifiers, dist, metres, gap } from "../core/turnos.js";
 import { durFor, durText, durTag, leftOf } from "../core/duraciones.js";
 import { mountHotbar, barOn } from "./barra.js";
@@ -37,7 +38,7 @@ import { spellDC } from "../core/salud.js";
 import { nowState } from "./ahora.js";
 import { armedNow, arm, togglePick, picked, clearPicks, onAim } from "../core/apuntar.js";
 import { hide, search, shove, shovePreview } from "../core/acciones.js";
-import { oaThreats, oaThreatsAt, weaponTargeting, attackPreview, hitChance, dmgRange, templateCells, tokensIn, templateOk } from "../core/objetivo.js";
+import { failChance, dmgVs, oaThreats, oaThreatsAt, weaponTargeting, attackPreview, hitChance, dmgRange, templateCells, tokensIn, templateOk } from "../core/objetivo.js";
 import { npcArmedArea } from "./accionesnpc.js";
 import { colors, setColor, resetColors, onColors, COLOR_KEYS, DEFAULT_COLORS } from "../core/colores.js";
 import { floorIdx } from "../core/plantas.js";
@@ -203,6 +204,15 @@ export function mountTactical(host, opts = {}) {
     const st = s.tokens.find(t => t.id === sel); return st && st.kind !== "pc" ? st : cur;
   }
   /** Lo que la mesa dibuja al apuntar (BG3): alcance, objetivos con su probabilidad, o una plantilla de área. */
+  /** Salvación de un conjuro contra t: % de que falle y daño (con su resistencia), y si puede caer. */
+  function spellOdds(s, t, m, dc, range) {
+    const fail = m.save && dc != null ? Math.round(failChance(s, t, m.save, dc, true) * 100) : null;
+    let D = range ? dmgVs(s, t, range, m.dt) : null;
+    // con salvación y «mitad si la supera», lo seguro es la mitad del mínimo
+    if (D && m.save && m.half) D = { ...D, kill: D.dmg[0] / 2 >= ((hpOf(s, t) || {}).cur || 1e9) ? 2 : D.kill ? 1 : 0 };
+    else if (D && m.save) D = { ...D, kill: D.kill ? 1 : 0 };
+    return { fail, ...(D ? { dmg: D.dmg, trait: D.trait, kill: D.kill } : {}) };
+  }
   function targeting() {
     const s = S(), A = armedNow(); if (!A || !s.board || !s.tokens) return null;
     const dm = isDM(s), hid = unseenFn(s, dm), vis = t => dm || !hid(t), odds = dm || s.showOdds !== false;
@@ -213,14 +223,17 @@ export function mountTactical(host, opts = {}) {
     if (A.kind === "spell") {
       const a = actorTok(), d = findSpell(A.name), m = d && spellMech(d); if (!a || !m || m.self) return null;
       const rng = m.touch ? { n: 1.5, l: 1.5 } : m.rng || { n: 1.5, l: 1.5 };
-      if (m.area) return { kind: "tmpl", from: a.id, area: m.area, rng, label: d.n };
+      if (m.area) { // área: por cada criatura, cuánto falla la salvación y si puede caer (lo enseña la plantilla al pasar)
+        const c0 = charOf(s, a), dc0 = c0 ? spellDC(c0) : null, sd0 = m.dmg ? dmgRange(m.dmg) : null, per = {};
+        s.tokens.filter(t => vis(t)).forEach(t => { per[t.id] = spellOdds(s, t, m, dc0, sd0); });
+        return { kind: "tmpl", from: a.id, area: m.area, rng, label: d.n, per, odds }; }
       const sw = attacksOf(s, a).find(x => x.spell && x.name === "✨ " + d.n), sdmg = sw ? dmgRange(sw.expr) : m.dmg ? dmgRange(m.dmg) : null; // trucos: el daño que toca a tu nivel
       const c = charOf(s, a), ab = c && classInfo(c.cls).cast, bonus = c && ab ? prof(c.level) + mod(c.abilities[ab]) : 0, dc = c ? spellDC(c) : null;
       const targets = s.tokens.filter(t => vis(t)).map(t => { const st = inRange(rng, a, t), cv = st === "out" ? null : cover(s, a, t);
         if (st === "out") return { id: t.id, state: "out", far: Math.round(gap(a, t) * 15) / 10, ally: (t.kind === "pc") === (a.kind === "pc") };
         if (cv.level === "total") return { id: t.id, state: "cover", ally: (t.kind === "pc") === (a.kind === "pc") };
         const mods = modifiers(s, a, t, rng), pct = m.atk ? Math.round(hitChance(bonus, acOf(s, t) + (cv.bonus || 0), mods.net) * 100) : null;
-        return { id: t.id, state: st, ally: (t.kind === "pc") === (a.kind === "pc"), pct, picked: picked.has(t.id), save: m.save ? `CD ${dc} ${({ fue: "Fue", des: "Des", con: "Con", int: "Int", sab: "Sab", car: "Car" })[m.save]}` : "", dmg: sdmg, why: m.atk ? [...mods.adv.map(x => "▲ " + x), ...mods.dis.map(x => "▼ " + x)] : [], cov: cv.txt || "" }; });
+        return { id: t.id, state: st, ally: (t.kind === "pc") === (a.kind === "pc"), pct, picked: picked.has(t.id), save: m.save ? `CD ${dc} ${({ fue: "Fue", des: "Des", con: "Con", int: "Int", sab: "Sab", car: "Car" })[m.save]}` : "", dmg: sdmg, why: m.atk ? [...mods.adv.map(x => "▲ " + x), ...mods.dis.map(x => "▼ " + x)] : [], cov: cv.txt || "", ...spellOdds(s, t, m, dc, sdmg) }; });
       return { kind: "spell", from: a.id, label: d.n, rng: { n: rng.n / 1.5, l: (rng.l || rng.n) / 1.5, melee: rng.n <= 1.5 }, targets, odds, single: !!m.atk };
     }
     if (A.kind === "shove") {
@@ -839,6 +852,7 @@ export function bindTokenEditor(root, mutate) {
 function offerOA(byId, targetId, at = null) {
   const s = store.get(), h = s.tokens.find(t => t.id === byId), t = s.tokens.find(x => x.id === targetId), u = currentUser(s) || {};
   if (!h || !t) return;
+  if (h.kind === "pc" && prefForTok(s, h, "oa") === "never") return; // su jugador ha elegido «Nunca» (como en BG3)
   store.commit("roll", st => { st.rolls = st.rolls || []; st.rolls.push({ id: "oa" + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), at: Date.now(), who: u.id || null, whoName: u.name || "", kind: "oa",
     label: `${nameOf(s, t)} sale del alcance de ${nameOf(s, h)}: ataque de oportunidad`, expr: "", dice: [], total: null, nat: null, tok: h.id, target: t.id, oaAt: at || null, status: "pending", secret: false, seq: s.board ? s.board.seq : null }); });
 }

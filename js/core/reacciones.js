@@ -24,6 +24,36 @@ export const RX = {
   reprension: { n: "Reprensión infernal", i: "🔥", spell: "Reprensión infernal", slot: 1, q: "¿Lanzas Reprensión infernal? Salvación de Destreza o 2d10 de fuego (la mitad si la supera)." },
   contrahechizo: { n: "Contrahechizo", i: "🚫", spell: "Contrahechizo", slot: 3, q: "¿Lanzas Contrahechizo? Salvación de Constitución: si la falla, el conjuro se disipa." }
 };
+/* ---------- Preferencias (como BG3): Preguntar / Siempre / Nunca, por reacción y por personaje ----------
+   Se guardan en la ficha, dentro de «spells.rxPref» (la nube deja al jugador escribir ahí). «oa» = ataque de oportunidad.
+   · Nunca: la mesa ni pregunta (el aviso no llega a crearse).
+   · Siempre: contesta sola en cuanto aparece el aviso (el cliente del jugador; si no está, el del máster a los 2,5 s).
+   Las criaturas del máster tienen una sola preferencia para el ataque de oportunidad, guardada en su navegador. */
+export const PREFS = [["ask", "Preguntar"], ["always", "Siempre"], ["never", "Nunca"]];
+export const OA_X = { n: "Ataque de oportunidad", i: "⚔", q: "Cuando un enemigo sale de tu alcance." };
+export const prefOf = (c, k) => (c && c.spells && c.spells.rxPref && c.spells.rxPref[k]) || "ask";
+export function setPref(charId, k, v) {
+  store.commit("char", st => { const c = st.characters.find(x => x.id === charId); if (!c) return; c.spells = c.spells || { slots: {}, list: [] };
+    c.spells.rxPref = { ...(c.spells.rxPref || {}) }; if (v === "ask") delete c.spells.rxPref[k]; else c.spells.rxPref[k] = v; });
+}
+const NPC_KEY = "lamesa:npcOA";
+export const npcOAPref = () => { try { return localStorage.getItem(NPC_KEY) || "ask"; } catch (e) { return "ask"; } };
+export const setNpcOAPref = v => { try { v === "ask" ? localStorage.removeItem(NPC_KEY) : localStorage.setItem(NPC_KEY, v); } catch (e) { /* ignorado */ } };
+/** Reacciones que tiene este personaje (aunque ahora no le queden espacios): para el panel de preferencias. */
+export function reactionsOf(c) {
+  if (!c) return [];
+  const L = [["oa", OA_X]];
+  for (const k of ["escudo", "reprension", "contrahechizo"]) if (prepared(c, RX[k].spell)) L.push([k, RX[k]]);
+  if (/P[ií]car[oa]/.test(c.cls || "") && c.level >= 5) L.push(["esquiva", RX.esquiva]);
+  return L;
+}
+/** Preferencia que se aplica a la figura (personaje: su ficha; criatura: la del máster). */
+export function prefForTok(s, t, k) {
+  if (!t) return "ask";
+  if (t.kind === "pc") return prefOf(charOf(s, t), k);
+  return k === "oa" ? npcOAPref() : "ask";
+}
+
 const uid = p => p + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 const INCAP = ["incapacitado", "inconsciente", "paralizado", "petrificado", "aturdido", "muerto"];
 const incap = t => (t.conds || []).some(c => INCAP.includes(c.id));
@@ -72,12 +102,12 @@ function scan() {
         if (can(s, t, "escudo") && r.nat !== 20 && !hasCond(t, "escudo") && r.ac != null && r.total < r.ac + 5) list.push("escudo");
         if (can(s, t, "esquiva") && !a.hidden && !hasCond(a, "invisible")) list.push("esquiva");
       }
-      todo.push({ id: r.id, ask: list.map(rx => ({ rx, tok: t.id, target: a.id, link: r.id })) });
+      todo.push({ id: r.id, ask: list.filter(rx => prefForTok(s, t, rx) !== "never").map(rx => ({ rx, tok: t.id, target: a.id, link: r.id })) });
     }
     // Daño aplicado a un personaje por una criatura a 18 m: Reprensión infernal
     if (r.kind === "damage" && r.applied > 0) {
       const t = s.tokens.find(x => x.id === r.target), a = s.tokens.find(x => x.id === r.by || x.id === r.tok);
-      const ok = t && a && a.id !== t.id && t.kind === "pc" && can(s, t, "reprension") && gap(t, a) * 1.5 <= 18 && !a.hidden;
+      const ok = t && a && a.id !== t.id && t.kind === "pc" && can(s, t, "reprension") && prefForTok(s, t, "reprension") !== "never" && gap(t, a) * 1.5 <= 18 && !a.hidden;
       todo.push({ id: r.id, ask: ok ? [{ rx: "reprension", tok: t.id, target: a.id, link: r.id }] : [] });
     }
   }
@@ -96,7 +126,7 @@ function scan() {
 export function counterers(s, casterId, spellName) {
   const a = s.tokens.find(t => t.id === casterId), d = findSpell(spellName);
   if (!a || !d || !String(d.co || "V").trim()) return [];
-  return s.tokens.filter(t => t.kind === "pc" && can(s, t, "contrahechizo") && gap(t, a) * 1.5 <= 18 && !a.hidden);
+  return s.tokens.filter(t => t.kind === "pc" && can(s, t, "contrahechizo") && prefForTok(s, t, "contrahechizo") !== "never" && gap(t, a) * 1.5 <= 18 && !a.hidden);
 }
 /** Lo llama cast() antes de resolver el conjuro de una criatura: deja la pregunta hecha y guarda el conjuro. */
 export function deferCast(casterId, spellName, slot, targetIds, P) {
@@ -161,8 +191,27 @@ export function applyRx(st, A) {
   if (A.type === "halve") { a.halve = true; a.note = (a.note ? a.note + " · " : "") + "🌀 Esquiva asombrosa: el daño se reduce a la mitad"; }
 }
 
+/* ---------- «Siempre» y «Nunca»: se contesta solo ----------
+   Lo hace quien lleva la figura; si no está conectado, el máster pasados 2,5 s (en la nube solo él puede por otro). */
+const autoDone = new Set();
+function autoAnswer() {
+  const s = store.get(), me = currentUser(s); if (!me || !s.board) return;
+  const dm = isDM(s), now = Date.now();
+  for (const r of s.rolls || []) {
+    if ((r.kind !== "react" && r.kind !== "oa") || r.status !== "pending" || autoDone.has(r.id)) continue;
+    if (now - (r.at || 0) > 60000) continue;
+    const t = s.tokens.find(x => x.id === r.tok); if (!t) continue;
+    const mine = t.kind === "pc" ? t.owner === me.id : dm;
+    if (!mine && !(dm && now - (r.at || 0) > 2500)) continue;
+    const p = prefForTok(s, t, r.kind === "oa" ? "oa" : r.rx); if (p === "ask") continue;
+    autoDone.add(r.id);
+    if (r.kind === "oa") import("./combate.js").then(m => m.answerOA(r.id, p === "always"));
+    else answerRx(r.id, p === "always");
+  }
+}
+
 export function watchReactions() {
-  const run = () => { scan(); resolveCounters(); };
+  const run = () => { scan(); resolveCounters(); autoAnswer(); };
   store.subscribe(() => queueMicrotask(run));
   setInterval(run, 3000);
 }

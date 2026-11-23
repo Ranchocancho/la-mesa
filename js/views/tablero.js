@@ -2,7 +2,7 @@
 // Modelo: { grid: { cols, rows, terrain: {"c,r": tipo}, props: [{id,c,r,k,rot,hidden,open,label,loot,trap}] }, tokens: [...] }
 import { tokenSeen } from "../core/vision.js";
 import { elevAt, hasElev, altOf, dist3, topOfTok } from "../core/alturas.js";
-import { templateCells, templateOk } from "../core/objetivo.js";
+import { chipText, templateCells, templateOk } from "../core/objetivo.js";
 const ELEVS = [-6, -4.5, -3, -1.5, 0, 1.5, 3, 4.5, 6, 9, 12];
 const hlColor = v => v > 0 ? `hsl(38 ${40 + v * 4}% ${55 + v * 2}%)` : v < 0 ? `hsl(220 25% ${40 + v * 3}%)` : "#777";
 import { fogCanvas, fogSig } from "./niebla.js";
@@ -308,8 +308,7 @@ export function createBoard(host, opts) {
       const [x, y] = center(k.c, k.r), rad = S * 0.8 * (k.size || 1);
       const ok = g.state === "ok" || g.state === "long";
       if (g.ally && !g.picked) continue; // a los aliados no se les marca (se puede, pero no es lo normal)
-      const txt = !ok ? (g.state === "cover" ? "🛡 cobertura total" : `fuera · ${String(g.far || "").replace(".", ",")} m`)
-        : [g.approach ? `🦶${String(g.approach.cost).replace(".", ",")} m` : "", T.odds && g.pct != null ? `${g.pct}%` : "", g.save || "", g.dmg ? `${g.dmg[0]}–${g.dmg[1]}` : "", g.state === "long" ? "largo" : "", g.adv > 0 ? "▲" : g.adv < 0 ? "▼" : "", g.picked ? "✓" : ""].filter(Boolean).join(" · ");
+      const txt = chipText(g, T.odds);
       const tip = [g.approach ? `Te acercas ${String(g.approach.cost).replace(".", ",")} m y atacas` : "", ...(g.why || []), g.cov || ""].filter(Boolean).join("\n");
       over += `<g class="tmark ${ok ? (g.state === "long" ? "long" : "ok") : "no"} ${g.picked ? "picked" : ""}" transform="translate(${x},${y})"><circle r="${rad + 6}" class="tring"/>
         <g transform="translate(0,${-rad - 24})"><rect x="${-txt.length * 3.6 - 8}" y="-11" width="${txt.length * 7.2 + 16}" height="21" rx="10"/><text y="4">${esc(txt)}</text></g>${tip ? `<title>${esc(tip)}</title>` : ""}</g>`;
@@ -326,7 +325,9 @@ export function createBoard(host, opts) {
     const inT = m.tokens.filter(t => cells.has(key(t.c, t.r)) && (opts.dm || !t.hidden) && !(t.id === a.id && /cono|línea|emanación/.test(T.area.shape)));
     g.innerHTML = [...cells].map(k => { const [c, r] = k.split(",").map(Number), [x, y] = center(c, r); return `<rect x="${x - S}" y="${y - S}" width="${T_}" height="${T_}" class="tcell ${ok ? "" : "bad"}"/>`; }).join("")
       + `<path d="${outline(cells)}" class="tedge ${ok ? "" : "bad"}"/>`
-      + inT.map(t => { const [x, y] = center(t.c, t.r), rad = S * 0.8 * (t.size || 1); return `<circle cx="${x}" cy="${y}" r="${rad + 6}" class="thit"/>`; }).join("")
+      + inT.map(t => { const [x, y] = center(t.c, t.r), rad = S * 0.8 * (t.size || 1), P = (T.per || {})[t.id], ally = (t.kind === "pc") === (a.kind === "pc");
+        const txt = P ? [ally ? "⚠ aliado" : "", T.odds !== false && P.fail != null ? `falla ${P.fail}%` : "", P.dmg ? `${P.dmg[0]}–${P.dmg[1]}` : "", P.trait === "resiste" ? "½" : P.trait === "inmune" ? "inmune" : "", P.kill === 2 ? "☠ cae" : P.kill === 1 ? "☠?" : ""].filter(Boolean).join(" · ") : "";
+        return `<circle cx="${x}" cy="${y}" r="${rad + 6}" class="thit"/>${txt ? `<g class="tmark ${ally ? "no" : "ok"}" transform="translate(${x},${y - rad - 24})"><rect x="${-txt.length * 3.6 - 8}" y="-11" width="${txt.length * 7.2 + 16}" height="21" rx="10"/><text y="4">${esc(txt)}</text></g>` : ""}`; }).join("")
       + (() => { const top = Math.min(...[...cells].map(k => +k.split(",")[1]), hover.r), [x] = center(hover.c, top), y = center(hover.c, top)[1]; const al = inT.filter(t => (t.kind === "pc") === (a.kind === "pc")).length; const txt = ok ? `${inT.length} dentro${al ? ` · ⚠ ${al} aliado${al > 1 ? "s" : ""}` : ""}` : "demasiado lejos"; return `<g class="tchipa" transform="translate(${x},${y - S - 16})"><rect x="${-txt.length * 3.6 - 8}" y="-11" width="${txt.length * 7.2 + 16}" height="21" rx="10"/><text y="4">${txt}</text></g>`; })();
   }
   function placeCreatures(P, h) {

@@ -7,6 +7,9 @@
 import { inRange, cover, modifiers, gap, dist, eco, phase, hasCond } from "./turnos.js";
 import { acOf, attacksOf } from "./combate.js";
 import { reachMap } from "./movimiento.js";
+import { savePlan } from "./salud.js";
+import { hpOf } from "./mesa.js";
+import { damageTraits } from "./defensas.js";
 
 /** Probabilidad (0–1) de impactar: 20 natural siempre acierta, 1 natural siempre falla. extra = dados que suman (+1d4…). */
 export function hitChance(bonus, ac, adv = 0, extra = []) {
@@ -28,6 +31,32 @@ export function dmgRange(expr) {
 }
 const isMelee = rng => !rng.ranged || !!rng.melee;
 
+/** Probabilidad de que t FALLE una salvación (en las salvaciones el 20 natural no es éxito automático). */
+export function failChance(s, t, ab, dc, magic = false) {
+  const p = savePlan(s, t, ab, 0, { magic }); if (p.autoFail) return 1;
+  const extra = [...String(p.extra || "").matchAll(/([+-])1d(\d+)/g)].map(m => (m[1] === "-" ? -1 : 1) * +m[2]);
+  let dist0 = new Map([[0, 1]]);
+  for (const d of extra) { const n = new Map(); dist0.forEach((q, v) => { for (let i = 1; i <= Math.abs(d); i++) { const k = v + Math.sign(d) * i; n.set(k, (n.get(k) || 0) + q / Math.abs(d)); } }); dist0 = n; }
+  let ok1 = 0; dist0.forEach((q, v) => { let n = 0; for (let r = 1; r <= 20; r++) if (r + p.bonus + v >= dc) n++; ok1 += q * n / 20; });
+  const ok = p.adv > 0 ? 1 - (1 - ok1) ** 2 : p.adv < 0 ? ok1 ** 2 : ok1;
+  return 1 - ok;
+}
+/** Daño esperado contra t (con su resistencia, vulnerabilidad o inmunidad) y si puede tumbarlo:
+ *  kill 2 = cae seguro con el mínimo, 1 = puede caer con una buena tirada. */
+export function dmgVs(s, t, range, dtype) {
+  if (!range) return null;
+  const tr = dtype ? damageTraits(t, dtype) : null, f = tr ? (tr.k === "inmune" ? 0 : tr.k === "resiste" ? 0.5 : tr.k === "vulnerable" ? 2 : 1) : 1;
+  const r = [Math.floor(range[0] * f), Math.floor(range[1] * f)], hp = (hpOf(s, t) || {}).cur;
+  return { dmg: r, trait: tr ? tr.k : "", kill: hp > 0 ? (r[0] >= hp ? 2 : r[1] >= hp ? 1 : 0) : 0 };
+}
+/** Texto de la etiqueta de un objetivo (2D y 3D): lo necesario para decidir de un vistazo, como en BG3. */
+export function chipText(g, odds = true) {
+  const ok = g.state === "ok" || g.state === "long";
+  if (!ok) return g.state === "cover" ? "🛡 cobertura total" : `fuera · ${String(g.far || "").replace(".", ",")} m`;
+  return [g.approach ? `🦶${String(g.approach.cost).replace(".", ",")} m` : "", odds && g.pct != null ? `${g.pct}%` : "", g.save || "", odds && g.fail != null ? `falla ${g.fail}%` : "",
+    g.dmg ? `${g.dmg[0]}–${g.dmg[1]}` : "", g.trait === "resiste" ? "½" : g.trait === "inmune" ? "inmune" : g.trait === "vulnerable" ? "×2" : "", g.kill === 2 ? "☠ cae" : g.kill === 1 ? "☠?" : "",
+    g.state === "long" ? "largo" : "", g.adv > 0 ? "▲" : g.adv < 0 ? "▼" : "", g.picked ? "✓" : ""].filter(Boolean).join(" · ");
+}
 /** Cómo sería atacar a t con el arma w. */
 export function attackPreview(s, a, w, t, { approach = true } = {}) {
   const rng = w.rng || { n: 1.5, l: 1.5 };
@@ -47,7 +76,9 @@ export function attackPreview(s, a, w, t, { approach = true } = {}) {
   const extra = [...(hasCond(a, "bendecido") ? [4] : []), ...(hasCond(a, "perdicion") ? [-4] : [])];
   const ac = acOf(s, t) + (cov.bonus || 0);
   const pct = Math.round(hitChance(w.atk - exn, ac, mods.net, extra) * 100);
-  return { state: st, pct, adv: mods.net, why: [...mods.adv.map(x => "▲ " + x), ...mods.dis.map(x => "▼ " + x)], cov: cov.txt || "", dmg: dmgRange(w.expr), crit: mods.autoCrit, approach: appr };
+  const D = dmgVs(s, t, dmgRange(w.expr), w.type);
+  return { state: st, pct, adv: mods.net, why: [...mods.adv.map(x => "▲ " + x), ...mods.dis.map(x => "▼ " + x), ...(D && D.trait ? [`${D.trait === "resiste" ? "Resiste" : D.trait === "inmune" ? "Inmune a" : "Vulnerable a"} ese daño`] : []), ...(D && D.kill ? [D.kill === 2 ? "☠ Con este golpe cae seguro" : "☠ Puede caer con este golpe"] : [])],
+    cov: cov.txt || "", dmg: D ? D.dmg : dmgRange(w.expr), trait: D ? D.trait : "", kill: D ? D.kill : 0, crit: mods.autoCrit, approach: appr };
 }
 
 /** Lo que enseña la mesa al apuntar con un arma: alcance y, por cada criatura, cómo sería atacarla. */

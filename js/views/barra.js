@@ -26,10 +26,12 @@ import { dist } from "../core/turnos.js";
 import { hide, search, hideCheck, hideDC, shoveDC, climbables, climbOn, climbDown, pushables, pushObject } from "../core/acciones.js";
 import { topOfTok } from "../core/alturas.js";
 import { rageInfo, rage, extendRage, bardicInfo, inspirable, inspire } from "../core/rasgos.js";
-import { rxOpen, answerRx, RX } from "../core/reacciones.js";
+import { rxOpen, answerRx, RX, PREFS, reactionsOf, prefOf, setPref, npcOAPref, setNpcOAPref, OA_X } from "../core/reacciones.js";
+import { dmOnline, awaitsDM, alliesHit } from "../core/avisos.js";
 import { oaOpen, answerOA } from "../core/combate.js";
 import { durText, durTag } from "../core/duraciones.js";
 import { getImage } from "../core/images.js";
+import { glyph, TINT, weaponGlyph, spellGlyph, ACTION, MISC, TABS, COND, DAMAGE } from "../data/iconos.js";
 import { $, $$, esc, toast } from "../core/ui.js";
 
 const NOACT = ["incapacitado", "inconsciente", "aturdido", "paralizado", "petrificado", "muerto"];
@@ -45,25 +47,13 @@ export const barOn = s => tactical(s) && wide() && (isDM(s) || !!myTok(s));
 
 let pop = null, slotPick = {}, imgUrl = {};
 
-/* ---------- Iconos (dibujados con símbolos propios, sin el arte de BG3) ---------- */
-function weaponIcon(w) {
-  const n = (w.name || "").toLowerCase();
-  if (w.improv) return "🪨";
-  if (/arco/.test(n)) return "🏹"; if (/ballesta/.test(n)) return "🎯"; if (/hacha/.test(n)) return "🪓";
-  if (/martillo|maza|garrote|mangual|lucero|bast[oó]n/.test(n)) return "🔨"; if (/lanza|pica|tridente|jabalina|alabarda|guja/.test(n)) return "🔱";
-  if (/daga|dardo/.test(n)) return "🔪"; if (/honda/.test(n)) return "🪃"; if (/l[aá]tigo/.test(n)) return "➰";
-  return w.rng && w.rng.ranged && !w.rng.melee ? "🏹" : "🗡";
-}
-const DT_ICON = { fuego: "🔥", frío: "❄", relámpago: "⚡", radiante: "☀", necrótico: "💀", fuerza: "✴", psíquico: "🌀", veneno: "☠", ácido: "🧪", trueno: "💥", contundente: "🔨", cortante: "🗡", perforante: "🔱" };
-function spellIcon(d, m) {
-  if (d.n === "Escudo") return "🛡"; if (d.n === "Contrahechizo") return "🚫"; if (/Paso brumoso|Teletransporte|Puerta/.test(d.n)) return "💨";
-  if (m.heal) return "✚"; if (m.buff === "bendecido") return "🙏"; if (m.buff === "perdicion") return "🕸";
-  return DT_ICON[(m.dt || "").toLowerCase()] || (m.conds && m.conds.length ? "🌀" : "✨");
-}
-const ACT_ICON = { Correr: "🏃", Destrabarse: "💨", Esquivar: "🤸", Ayudar: "🤝", Esconderse: "🫥", Buscar: "🔎", Estudiar: "📖", Influir: "🗣", "Preparar una acción": "⏳", Utilizar: "🧰" };
+/* ---------- Iconos: grabados de game-icons.net teñidos (los mismos que los símbolos del mapa) ---------- */
+const weaponIcon = w => weaponGlyph(w);
+const spellIcon = (d, m) => spellGlyph(d, m);
+const ACT_ICON = ACTION;
 // Como en BG3: en la barra solo las acciones de combate de verdad (Estudiar, Influir… se hacen como pruebas desde la ficha)
 const COMMON = ["Correr", "Destrabarse", "Esquivar", "Esconderse", "Ayudar", "Buscar"];
-const CATS = [["all", "Todo", "▦"], ["arm", "Armas", "⚔"], ["spell", "Hechizos", "✨"], ["hab", "Habilidades", "★"], ["com", "Comunes", "⚙"]];
+const CATS = [["all", "Todo"], ["arm", "Armas"], ["spell", "Hechizos"], ["hab", "Habilidades"], ["com", "Comunes"]].map(([k, n]) => [k, n, glyph([TABS[k], "oro"], "tabg")]);
 let hbTab = "all";
 const COST = { act: { t: "Acción", k: "act" }, bonus: { t: "Acción adicional", k: "bonus" }, react: { t: "Reacción", k: "react" }, free: { t: "Gratis", k: "free" }, move: { t: "Movimiento", k: "move" } };
 
@@ -92,7 +82,7 @@ function entries(s, c, tok) {
     on: A && A.kind === "atk" && A.i === o.i && A.use === "bonus", tip: ["Propiedad Ligera: sin sumar el modificador de característica al daño (salvo negativo)."],
     run: () => { const A2 = armedNow(); arm(A2 && A2.kind === "atk" && A2.i === o.i && A2.use === "bonus" ? null : { kind: "atk", tok: tok.id, i: o.i, use: "bonus" }); pop = null; } }));
   // Empujón (en lugar de un ataque)
-  [["push", "🤚", "Empujón: apartar", "Lo apartas 1,5 m"], ["prone", "🤼", "Empujón: derribar", "Lo derribas"]].forEach(([mode, ico, name, t]) => G.atk.push({ id: "sh" + mode, ico, name, cost: "act", why: whyAtkAct,
+  [["push", MISC.push, "Empujón: apartar", "Lo apartas 1,5 m"], ["prone", MISC.prone, "Empujón: derribar", "Lo derribas"]].forEach(([mode, ico, name, t]) => G.atk.push({ id: "sh" + mode, ico, name, cost: "act", why: whyAtkAct,
     on: A && A.kind === "shove" && A.mode === mode, tip: [`${t}. En vez de un ataque de la acción Atacar.`, `Salvación de Fuerza o Destreza del objetivo, CD ${shoveDC(s, tok)}`],
     run: () => { const A2 = armedNow(); arm(A2 && A2.kind === "shove" && A2.mode === mode ? null : { kind: "shove", tok: tok.id, mode }); pop = null; } }));
   // Conjuros
@@ -110,26 +100,26 @@ function entries(s, c, tok) {
   // Rasgos de clase
   const R = rageInfo(c), B = bardicInfo(c), F = c.features || [];
   if (R) { const on = (tok.conds || []).find(x => x.id === "furia");
-    G.feat.push(on ? { id: "ragex", ico: "🔥", sub: "+", name: "Prolongar furia", cost: "bonus", why: whyBonus, tip: [`En furia: ${durText(s, on)}.`, "Atacar a un enemigo en tu turno ya la prolonga; si no, gasta la acción adicional."], run: () => extendRage(tok.id, true) }
-      : { id: "rage", ico: "🔥", name: "Furia", cost: "bonus", why: whyBonus || (!R.left ? "Sin usos: se recuperan al descansar" : ""), uses: `${R.left}/${R.max}`, tip: [`Resistencia a contundente, cortante y perforante · +${R.dmg} al daño con Fuerza · ventaja en Fuerza.`, "No puedes lanzar conjuros. Dura hasta el final de tu siguiente turno."], run: () => rage(tok.id) }); }
-  if (B) G.feat.push({ id: "bard", ico: "🎵", name: "Inspiración bárdica", cost: "bonus", why: whyBonus || (!B.left ? "Sin usos" : ""), uses: `${B.left}/${B.max}`, on: pop && pop.bard,
+    G.feat.push(on ? { id: "ragex", ico: MISC.rage, sub: "+", name: "Prolongar furia", cost: "bonus", why: whyBonus, tip: [`En furia: ${durText(s, on)}.`, "Atacar a un enemigo en tu turno ya la prolonga; si no, gasta la acción adicional."], run: () => extendRage(tok.id, true) }
+      : { id: "rage", ico: MISC.rage, name: "Furia", cost: "bonus", why: whyBonus || (!R.left ? "Sin usos: se recuperan al descansar" : ""), uses: `${R.left}/${R.max}`, tip: [`Resistencia a contundente, cortante y perforante · +${R.dmg} al daño con Fuerza · ventaja en Fuerza.`, "No puedes lanzar conjuros. Dura hasta el final de tu siguiente turno."], run: () => rage(tok.id) }); }
+  if (B) G.feat.push({ id: "bard", ico: MISC.bard, name: "Inspiración bárdica", cost: "bonus", why: whyBonus || (!B.left ? "Sin usos" : ""), uses: `${B.left}/${B.max}`, on: pop && pop.bard,
     tip: [`Das un ${B.die} a un aliado a 18 m: lo suma a una prueba con d20 que falle.`], run: () => { pop = pop && pop.bard ? null : { bard: true }; } });
   if (F.some(f => /Acci[oó]n astuta/i.test(f.name))) ["Correr", "Destrabarse", "Esconderse"].forEach(n => G.feat.push({ id: "cun" + n, ico: ACT_ICON[n], sub: "▲", name: `Acción astuta: ${n}`, cost: "bonus",
     why: whyBonus || (n === "Esconderse" ? (hideCheck(s, tok).ok ? "" : hideCheck(s, tok).why) : ""), tip: [(ACCIONES.find(a => a[0] === n) || [, ""])[1]], run: () => cunning(tok.id, n) }));
   F.filter(f => { const t = (f.name + " " + (f.text || "")).toLowerCase(); return /acci[oó]n adicional/.test(t) && !/Acci[oó]n astuta|^Furia$|^Inspiraci[oó]n b[aá]rdica/i.test(f.name); })
-    .forEach((f, i) => G.feat.push({ id: "f" + i, ico: "★", name: f.name, cost: "bonus", why: whyBonus, tip: [String(f.text || "").slice(0, 220)], run: () => { spend(tok.id, "bonus"); toast(`${f.name}: acción adicional gastada. El máster aplica el efecto.`); } }));
+    .forEach((f, i) => G.feat.push({ id: "f" + i, ico: MISC.feat, name: f.name, cost: "bonus", why: whyBonus, tip: [String(f.text || "").slice(0, 220)], run: () => { spend(tok.id, "bonus"); toast(`${f.name}: acción adicional gastada. El máster aplica el efecto.`); } }));
   // Acciones del manual
   ACCIONES.filter(([n]) => COMMON.includes(n)).forEach(([n, t]) => { const hw = n === "Esconderse" ? hideCheck(s, tok) : null;
-    G.act.push({ id: "a:" + n, ico: ACT_ICON[n] || "•", name: n, cost: "act", why: whyAct || (hw && !hw.ok ? hw.why : ""), tip: [t], run: () => basic(tok.id, n) }); });
-  if (ids.includes("ardiendo")) G.act.push({ id: "douse", ico: "🧯", name: "Apagarse", cost: "act", why: whyAct, tip: ["SRD «Fuego»: con una acción apagas el fuego rodando por el suelo y quedas derribado."], run: () => import("../core/peligros.js").then(m => m.douse(tok.id)) });
+    G.act.push({ id: "a:" + n, ico: ACT_ICON[n] || MISC.feat, name: n, cost: "act", why: whyAct || (hw && !hw.ok ? hw.why : ""), tip: [t], run: () => basic(tok.id, n) }); });
+  if (ids.includes("ardiendo")) G.act.push({ id: "douse", ico: MISC.douse, name: "Apagarse", cost: "act", why: whyAct, tip: ["SRD «Fuego»: con una acción apagas el fuego rodando por el suelo y quedas derribado."], run: () => import("../core/peligros.js").then(m => m.douse(tok.id)) });
   const moveWhy = incap || notTurn;
   // Cofres, bolsas y reliquias a tu lado: abrir o coger (lo resuelve el máster)
   const asked = new Set((s.rolls || []).filter(r => r.kind === "open" && r.status === "pending").map(r => r.prop));
   (s.board.props || []).filter(p => ((PROPS[p.k] || {}).loot || p.loot != null || p.chest) && !p.opened && !p.hidden && dist(p, tok) <= 1).forEach(p => { const v = PROPS[p.k] || {}, nm = p.label || v.n || "Cofre";
-    G.act.push({ id: "op" + p.id, ico: v.i || "🧰", name: `${v.open ? "Abrir" : "Coger"} ${nm}`, cost: "free", why: asked.has(p.id) ? "Esperando al máster…" : "", tip: ["Interacción con un objeto: el máster te dice lo que hay."], run: () => { requestOpen(p.id, tok.id); toast("Se lo pides al máster: lo verá al momento"); } }); });
-  climbables(s, tok).forEach(x => G.act.push({ id: "cl" + x.id, ico: "🧗", name: `Subirte a ${x.name}`, cost: "move", why: moveWhy, tip: [`Cuesta ${fm(x.cost)} m de movimiento. Alturas de objetos: regla de campaña.`], run: () => climbOn(tok.id, x.id) }));
-  if (topOfTok(s.board, tok)) G.act.push({ id: "down", ico: "⬇", name: "Bajar", cost: "move", why: moveWhy, tip: ["Bajar del objeto."], run: () => climbDown(tok.id) });
-  pushables(s, tok).forEach(x => G.act.push({ id: "po" + x.id, ico: "🫸", name: `Empujar ${x.name}`, cost: "act", why: whyAct || (!x.free ? "No hay sitio detrás" : ""), tip: [`Fuerza (Atletismo) CD ${x.dc} (regla de campaña): lo mueves 1,5 m.`], run: () => pushObject(tok.id, x.id) }));
+    G.act.push({ id: "op" + p.id, ico: MISC.chest, name: `${v.open ? "Abrir" : "Coger"} ${nm}`, cost: "free", why: asked.has(p.id) ? "Esperando al máster…" : "", tip: ["Interacción con un objeto: el máster te dice lo que hay."], run: () => { requestOpen(p.id, tok.id); toast("Se lo pides al máster: lo verá al momento"); } }); });
+  climbables(s, tok).forEach(x => G.act.push({ id: "cl" + x.id, ico: MISC.climb, name: `Subirte a ${x.name}`, cost: "move", why: moveWhy, tip: [`Cuesta ${fm(x.cost)} m de movimiento. Alturas de objetos: regla de campaña.`], run: () => climbOn(tok.id, x.id) }));
+  if (topOfTok(s.board, tok)) G.act.push({ id: "down", ico: MISC.down, name: "Bajar", cost: "move", why: moveWhy, tip: ["Bajar del objeto."], run: () => climbDown(tok.id) });
+  pushables(s, tok).forEach(x => G.act.push({ id: "po" + x.id, ico: MISC.pushobj, name: `Empujar ${x.name}`, cost: "act", why: whyAct || (!x.free ? "No hay sitio detrás" : ""), tip: [`Fuerza (Atletismo) CD ${x.dc} (regla de campaña): lo mueves 1,5 m.`], run: () => pushObject(tok.id, x.id) }));
   return G;
 }
 
@@ -155,6 +145,9 @@ function doCast(tokId, charId) {
   const c = s.characters.find(x => x.id === charId), d = findSpell(pop.spell), m = spellMech(d);
   const targets = m.self ? [tokId] : [...picked];
   if (!targets.length && (m.save || m.heal || m.atk || m.buff || m.dmg)) return toast("Elige al menos un objetivo en la mesa.");
+  // Solo se pide confirmación si es arriesgado: algo dañino que alcanza a aliados (o a ti)
+  const al = alliesHit(s, tokId, targets, m);
+  if (al.length && pop.okAllies !== targets.slice().sort().join()) { pop.warn = { names: al, key: targets.slice().sort().join() }; return; }
   const free = m.lvl ? freeSlots(c, m.lvl) : [0], slot = m.lvl ? (free.includes(slotPick[d.n]) ? slotPick[d.n] : free[0]) : 0;
   const r = cast(tokId, d.n, slot, targets);
   if (r !== null) { pop = null; arm(null); }
@@ -164,9 +157,9 @@ function doCast(tokId, charId) {
 const KGROUPS = [["act", "Acciones"], ["bonus", "Adicional"], ["react", "Reacciones"], ["leg", "Legendarias"]];
 const useOf = g => g === "bonus" ? "bonus" : g === "react" ? "react" : g === "leg" ? "leg" : "act";
 function kitIcon(a) {
-  if (a.type === "save") return DT_ICON[(((a.dmg || [])[0] || {}).t || "").toLowerCase()] || "💨";
-  if (a.type === "cast1") return "✨"; if (a.type === "atk") return "⚔";
-  return /cura|regenera/i.test(a.n) ? "✚" : /mueve|salta|vuela|teletransporta/i.test(a.txt || "") ? "💨" : "★";
+  if (a.type === "save") { const dt = (((a.dmg || [])[0] || {}).t || "").toLowerCase(); return DAMAGE[dt] ? [DAMAGE[dt], dt] : MISC.save; }
+  if (a.type === "cast1") return ["sparkles", "magia"]; if (a.type === "atk") return MISC.multi;
+  return /cura|regenera/i.test(a.n) ? ["healing", "cura"] : /mueve|salta|vuela|teletransporta/i.test(a.txt || "") ? MISC.move : MISC.feat;
 }
 function npcEntries(s, t) {
   const live = phase(s) === "live", turn = live && s.board.turn === t.id, e = live ? eco(s, t) : {}, A = armedNow(), kit = kitOf(t);
@@ -193,14 +186,14 @@ function npcEntries(s, t) {
       if (sp && g !== "leg") (sp.lists || []).forEach(Lx => Lx.sp.filter(x => tm(x) === g).forEach(x => {
         const d = x.srd && findSpell(x.n), m = d && spellMech(d), u = usesLeft(t, sp, x.n, Lx.u), gw = live ? gate(s, t, g) : null;
         const why = incap || (g === "act" || g === "bonus" ? notTurn : "") || gw || (!d ? "No está en el compendio: tíralo a mano" : "") || (!u.ok ? "Sin usos hoy" : "");
-        L.push({ id: `ks${x.n}`, ico: d && m ? spellIcon(d, m) : "✨", lvl: x.lv || (d && d.lvl) || 0, name: x.n, cost: g, why, uses: Lx.u !== "will" ? `${u.left}/${Lx.u}` : "", on: armedHere && A.sp === x.n,
+        L.push({ id: `ks${x.n}`, ico: d && m ? spellIcon(d, m) : ["sparkles", "magia"], lvl: x.lv || (d && d.lvl) || 0, name: x.n, cost: g, why, uses: Lx.u !== "will" ? `${u.left}/${Lx.u}` : "", on: armedHere && A.sp === x.n,
           attrs: why ? "" : `data-ksp="${t.id}|${esc(x.n)}|${Lx.u}|${x.lv || ""}"`, tip: [d ? `${d.lvl ? `Nivel ${d.lvl}` : "Truco"} · ${d.al || "—"}${sp.dc ? ` · CD ${sp.dc}` : ""}` : "", Lx.u === "will" ? "A voluntad" : `${Lx.u}/día`] }); }));
       if (L.length) out.push([gn, L]);
     }
   }
   const whyAct = incap || notTurn || (live && e.act ? "Ya ha usado su acción" : "");
   out.push(["Comunes", ACCIONES.filter(([n]) => COMMON.includes(n)).map(([n, d]) => { const hw = n === "Esconderse" ? hideCheck(s, t) : null;
-    return { id: "a:" + n, ico: ACT_ICON[n] || "•", name: n, cost: "act", why: whyAct || (hw && !hw.ok ? hw.why : ""), tip: [d], run: () => basic(t.id, n) }; })]);
+    return { id: "a:" + n, ico: ACT_ICON[n] || MISC.feat, name: n, cost: "act", why: whyAct || (hw && !hw.ok ? hw.why : ""), tip: [d], run: () => basic(t.id, n) }; })]);
   return out;
 }
 
@@ -212,8 +205,8 @@ function slotsHTML(c) {
 const COSTK = k => (COST[k] || (k === "leg" ? { t: "Acción legendaria", k: "leg" } : COST.act));
 function iconHTML(x, k) {
   const cost = COSTK(x.cost);
-  return `<button class="hbi c-${cost.k} ${x.why ? "off" : ""} ${x.on ? "on" : ""}" data-hb="${k}" ${x.attrs || ""} data-cost="${cost.k}" aria-label="${esc(x.name)}${x.why ? ": " + esc(x.why) : ""}">
-    <span class="hbg">${x.ico}</span>${x.lvl ? `<em class="hblv">${x.lvl}</em>` : ""}${x.sub ? `<em class="hbsub">${esc(x.sub)}</em>` : ""}${x.uses ? `<em class="hbuse">${esc(x.uses)}</em>` : ""}<i class="hbcost"></i></button>`;
+  return `<button class="hbi c-${cost.k} ${x.why ? "off" : ""} ${x.on ? "on" : ""}" data-hb="${k}" ${x.attrs || ""} data-cost="${cost.k}" ${Array.isArray(x.ico) ? `style="--tint:${TINT[x.ico[1]] || x.ico[1]}"` : ""} aria-label="${esc(x.name)}${x.why ? ": " + esc(x.why) : ""}">
+    ${Array.isArray(x.ico) ? glyph(x.ico, "hbg") : `<span class="hbg">${x.ico}</span>`}${x.lvl ? `<em class="hblv">${x.lvl}</em>` : ""}${x.sub ? `<em class="hbsub">${esc(x.sub)}</em>` : ""}${x.uses ? `<em class="hbuse">${esc(x.uses)}</em>` : ""}<i class="hbcost"></i></button>`;
 }
 function tipHTML(x) {
   const cost = COSTK(x.cost);
@@ -221,6 +214,7 @@ function tipHTML(x) {
 }
 function castPanel(s, c, tok) {
   const d = findSpell(pop.spell), m = spellMech(d); if (!d || !m) return "";
+  if (pop.warn) { const L = pop.warn.names, txt = L.map(n => n === "ti" ? "a ti" : n); return `<div class="hbask warn"><span>⚠ <b>${esc(d.n)}</b> alcanza ${L.length > 1 || L[0] !== "ti" ? "a tus aliados" : ""}: <b>${esc(txt.join(", ").replace(/, ([^,]*)$/, " y $1"))}</b>. ¿Lo lanzas igualmente?</span><button class="btn small gold" data-hbwarnok>⚠ Lanzar igualmente</button><button class="btn small" data-hbwarnno>Cambiar objetivos</button></div>`; }
   const free = m.lvl ? freeSlots(c, m.lvl) : [0];
   if (slotPick[d.n] == null || !free.includes(slotPick[d.n])) slotPick[d.n] = free[0];
   const nm = t => t.kind === "pc" ? (s.characters.find(x => x.id === t.char) || t).name : t.name;
@@ -243,12 +237,25 @@ function promptHTML(s, tok) {
   if (rx) { const X = RX[rx.rx]; return `<div class="hbask"><span>${X.i} <b>¡Reacción!</b> ${esc(X.q)}</span><button class="btn small gold" data-hbrx="${rx.id}">${X.i} ${esc(X.n)}</button><button class="btn small" data-hbrxno="${rx.id}">No</button></div>`; }
   return "";
 }
+/** Panel de reacciones (como el de BG3): Preguntar / Siempre / Nunca para cada una. */
+function rxCfgHTML(s, c) {
+  const seg = (k, v, set) => `<span class="hbseg">${PREFS.map(([p, n]) => `<button class="${v === p ? "on" : ""}" data-hbpref="${k}|${p}" ${set}>${n}</button>`).join("")}</span>`;
+  const rows = c ? reactionsOf(c).map(([k, X]) => `<div class="hbcfgrow"><span title="${esc(X.q)}">${X.i} ${esc(X.n)}</span>${seg(k, prefOf(c, k), "")}</div>`).join("")
+    : `<div class="hbcfgrow"><span title="Todas las criaturas que llevas">${OA_X.i} PNJ · ataque de oportunidad</span>${seg("npcoa", npcOAPref(), "")}</div>`;
+  return `<div class="hbpop hbcfg"><b>↺ Reacciones</b><small class="hbhint">«Siempre» las usa sola en cuanto se puede; «Nunca» ni pregunta.</small>${rows}<button class="ib" data-hbx aria-label="Cerrar">✕</button></div>`;
+}
+/** Si el máster no está conectado, lo que afecta a otros (daño, efectos) espera a que vuelva: se dice. */
+function offlineHTML(s, tok) {
+  if (isDM(s) || dmOnline(s)) return "";
+  const n = (s.rolls || []).filter(r => (r.tok === tok.id || r.by === tok.id) && awaitsDM(s, r)).length;
+  return `<div class="hbask off"><span>📡 <b>El máster no está conectado.</b> Tus tiradas se hacen, pero el daño y los efectos sobre otros se aplicarán cuando vuelva${n ? ` (${n} pendiente${n > 1 ? "s" : ""})` : ""}.</span></div>`;
+}
 function portHTML(s, tok, name, hp, color, portrait) {
   const pct = hp ? Math.max(0, Math.min(100, hp.cur / Math.max(1, hp.max) * 100)) : 0;
   const conds = (tok.conds || []).map(x => ({ x, e: ESTADOS.find(y => y.id === x.id) })).filter(o => o.e);
   return `<div class="hbport"><div class="hbface" style="--c:${esc(color || "#888")};${imgUrl[portrait] ? `background-image:url('${imgUrl[portrait]}')` : ""}">${imgUrl[portrait] ? "" : esc(String(name).slice(0, 2).toUpperCase())}</div>
     <div class="hbwho"><b>${esc(String(name).split(" ")[0])}</b>${hp ? `<div class="hbhp ${pct < 34 ? "low" : ""}"><i style="width:${pct}%"></i><span>${hp.cur}/${hp.max}${hp.temp ? ` +${hp.temp}` : ""}</span></div>` : ""}
-      <div class="hbconds">${conds.map(({ x, e: E }) => `<span class="hbcond" style="--c:${E.c}" title="${esc(E.n)}: ${esc(E.t)}${x.dur ? " · " + esc(durText(s, x)) : ""}">${E.i || ""} ${esc(E.n.split(" ")[0])}${x.dur ? `<sub>${durTag(s, x).replace("⏳", "")}</sub>` : ""}</span>`).join("")}</div></div></div>`;
+      <div class="hbconds">${conds.map(({ x, e: E }) => `<span class="hbcond" style="--c:${E.c}" title="${esc(E.n)}: ${esc(E.t)}${x.dur ? " · " + esc(durText(s, x)) : ""}">${COND[x.id] ? glyph([COND[x.id], "#fff"], "cg") : E.i || ""} ${esc(E.n.split(" ")[0])}${x.dur ? `<sub>${durTag(s, x).replace("⏳", "")}</sub>` : ""}</span>`).join("")}</div></div></div>`;
 }
 function resHTML(s, tok, mine, extra = "") {
   const live = phase(s) === "live", e = eco(s, tok), max = moveBudget(s, tok), left = Math.max(0, max - (mine ? e.mov : 0)), stuck = (tok.conds || []).some(x => NOMOVE.includes(x.id));
@@ -257,11 +264,11 @@ function resHTML(s, tok, mine, extra = "") {
     <span class="hbr r-act ${e.act && !(e.atkLeft > 0) || !mine ? "used" : ""}" title="Acción"><i></i>${e.act && e.atkLeft > 0 ? ` <small>×${e.atkLeft}</small>` : ""}</span>
     <span class="hbr r-bonus ${e.bonus || !mine ? "used" : ""}" title="Acción adicional"><i></i></span>
     <span class="hbr r-move ${!mine || stuck || !left ? "used" : ""}" title="Movimiento: arrastra la figura"><span class="hbmv"><i style="width:${stuck ? 0 : Math.min(100, left / Math.max(1, max) * 100)}%"></i></span>${stuck ? "0" : fm(left)}/${fm(max)} m${e.dash ? " · corre" : ""}</span>
-    <span class="hbr r-react ${e.react ? "used" : ""}" title="Reacción: vuelve al empezar su turno"><i></i></span>${extra}</div>`;
+    <button class="hbr r-react ${e.react ? "used" : ""}" data-hbrxcfg title="Reacción: vuelve al empezar su turno. Pulsa para elegir cuáles usar siempre, nunca o preguntando."><i></i></button>${extra}</div>`;
 }
 function endHTML(s, tok, who) {
   const live = phase(s) === "live", mine = live && s.board.turn === tok.id;
-  if (!live) return "";
+  if (!live) return `<button class="ib hbrxb" data-hbrxcfg title="Reacciones: preguntar, siempre o nunca">↺</button>`;
   if (mine) return `<button class="btn gold hbendb" data-hbend title="Terminar turno">Terminar<br>turno ▶</button>`;
   const cur = s.tokens.find(t => t.id === s.board.turn), cn = cur ? (cur.kind === "pc" ? (s.characters.find(x => x.id === cur.char) || cur).name : cur.hidden && !isDM(s) ? "?" : cur.name) : "—";
   return `<p class="hbmsg">Turno de<br><b>${esc(String(cn).split(" ")[0])}</b></p>`;
@@ -287,9 +294,9 @@ export function build(s, o) {
     const port = portHTML(s, tok, c.name, c.hp, c.color, c.portrait);
     if (ph === "init") return { tok, c, all: [], html: `<div class="hotbar init">${port}<div class="hbmid"><p class="hbmsg">⚔️ ¡Combate! ${tok.init == null || tok.init === "" ? "Tira tu iniciativa." : `Tu iniciativa: <b>${tok.init}</b>. Esperad al máster.`}</p></div><div class="hbend">${tok.init == null || tok.init === "" ? `<button class="btn gold" data-hbinit>🎲 Iniciativa</button>` : ""}</div></div>` };
     const G = entries(s, c, tok), R = rageInfo(c), B = bardicInfo(c);
-    const extra = `${slotsHTML(c)}${R ? `<span class="hbr r-cls" title="Usos de Furia">🔥 ${R.left}/${R.max}</span>` : ""}${B ? `<span class="hbr r-cls" title="Usos de Inspiración bárdica (${B.die})">🎵 ${B.left}/${B.max}</span>` : ""}${e0(s, tok).slotCast && mine ? `<span class="hbnote">Solo trucos este turno</span>` : ""}`;
+    const extra = `${slotsHTML(c)}${R ? `<span class="hbr r-cls" title="Usos de Furia">${glyph(MISC.rage, "rg")} ${R.left}/${R.max}</span>` : ""}${B ? `<span class="hbr r-cls" title="Usos de Inspiración bárdica (${B.die})">${glyph(MISC.bard, "rg")} ${B.left}/${B.max}</span>` : ""}${e0(s, tok).slotCast && mine ? `<span class="hbnote">Solo trucos este turno</span>` : ""}`;
     const dead = c.hp.cur <= 0 && !(c.death && (c.death.stable || c.death.dead));
-    const top = promptHTML(s, tok) + (pop && pop.spell ? castPanel(s, c, tok) : pop && pop.bard ? bardPanel(s, tok) : "");
+    const top = offlineHTML(s, tok) + promptHTML(s, tok) + (pop && pop.spell ? castPanel(s, c, tok) : pop && pop.bard ? bardPanel(s, tok) : pop && pop.rxcfg ? rxCfgHTML(s, c) : "");
     const end = (mine && dead ? `<button class="btn gold" data-hbdeath>💀 Salvación</button>` : "") + endHTML(s, tok);
     const f = frame(mine ? "mine" : live ? "wait" : "explore", top, port, resHTML(s, tok, mine, extra), [...G.atk.map(x => ({ ...x, cat: /^sh/.test(x.id) || /Objeto lanzado/.test(x.name) ? "com" : "arm" })), ...G.spell.map(x => ({ ...x, cat: "spell" })), ...G.feat.map(x => ({ ...x, cat: "hab" })), ...G.act.map(x => ({ ...x, cat: "com" }))], end);
     return { ...f, tok, c };
@@ -301,8 +308,8 @@ export function build(s, o) {
   const mine = live && s.board.turn === t.id, A = armedNow(), hp = hpOf(s, t);
   if (t.portrait && imgUrl[t.portrait] === undefined) loadImg(t.portrait);
   const kit = kitOf(t), ll = legLeft(t), e = live ? eco(s, t) : {};
-  const extra = `${kit && multiOf(kit) && live ? `<span class="hbr r-cls" title="Ataque múltiple">⚔ ${Math.min(e.n || 0, multiN(kit))}/${multiN(kit)}</span>` : ""}${ll != null ? `<span class="hbr r-leg ${ll <= 0 ? "used" : ""}" title="Acciones legendarias esta ronda">👑 ${ll}/${legMax(t)}</span>` : ""}`;
-  let top = promptHTML(s, t);
+  const extra = `${kit && multiOf(kit) && live ? `<span class="hbr r-cls" title="Ataque múltiple">${glyph(MISC.multi, "rg")} ${Math.min(e.n || 0, multiN(kit))}/${multiN(kit)}</span>` : ""}${ll != null ? `<span class="hbr r-leg ${ll <= 0 ? "used" : ""}" title="Acciones legendarias esta ronda">${glyph(["crown", "oro"], "rg")} ${ll}/${legMax(t)}</span>` : ""}`;
+  let top = promptHTML(s, t) + (pop && pop.rxcfg ? rxCfgHTML(s, null) : "");
   if (A && A.kind === "npcact" && A.tok === t.id) top += `<div class="hbpop hbkit">${kitArmed(s, t)}</div>`;
   if (A && A.kind === "atk" && A.tok === t.id) { const adv = o.getAdv ? o.getAdv() : null; top += `<div class="hbpop"><b>🎯 Toca al objetivo</b><button class="btn small ${adv === 1 ? "gold" : ""}" data-hbadv="1">Ventaja</button><button class="btn small ${adv === -1 ? "gold" : ""}" data-hbadv="-1">Desventaja</button><button class="ib" data-hbx aria-label="Cancelar">✕</button></div>`; }
   const port = portHTML(s, t, t.name, hp, t.kind === "npc" ? "#7d8fe0" : "#b33a2e", t.portrait) .replace('<div class="hbwho">', `<div class="hbwho">${t.hidden ? `<small class="hbhid" title="Oculto a los jugadores">🙈 oculto</small>` : ""}`);
@@ -348,10 +355,14 @@ export function mountHotbar(tac, o = {}) {
     on("[data-hbend]", () => { arm(null); pop = null; endTurn(); });
     on("[data-hbinit]", () => rollInit(tok.id));
     on("[data-hbdeath]", () => deathSave(tok.id));
-    on("[data-hbx]", () => { pop = null; arm(null); });
+    on("[data-hbx]", () => { if (pop && pop.rxcfg) { pop = null; return; } pop = null; arm(null); });
+    on("[data-hbrxcfg]", () => { if (pop && pop.spell) arm(null); pop = pop && pop.rxcfg ? null : { rxcfg: true }; });
+    on("[data-hbpref]", b => { const [k, v] = b.dataset.hbpref.split("|"); if (k === "npcoa") setNpcOAPref(v); else if (c) setPref(c.id, k, v); });
     on("[data-hbadv]", b => { const v = +b.dataset.hbadv; if (o.setAdv) o.setAdv(o.getAdv && o.getAdv() === v ? null : v); });
     if (c) {
       on("[data-hbcast]", () => doCast(tok.id, c.id));
+      on("[data-hbwarnok]", () => { if (!pop || !pop.warn) return; pop.okAllies = pop.warn.key; pop.warn = null; doCast(tok.id, c.id); });
+      on("[data-hbwarnno]", () => { if (pop) pop.warn = null; });
       on("[data-hbarea]", () => { const st = store.get(), d = findSpell(pop.spell), m = spellMech(d), center = st.tokens.find(t => t.id === [...picked][0]);
         if (!center && !/cono|línea|emanación/.test(m.area.shape)) return toast("Marca primero la criatura del centro del área.");
         inArea(st, m, tok, center).forEach(id => picked.add(id)); });

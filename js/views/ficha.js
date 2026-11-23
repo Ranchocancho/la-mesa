@@ -9,7 +9,8 @@ import { sheetFreeHTML, whispersHTML, bindSheetFree } from "./tiempolibre.js";
 import { whispersFor } from "../core/tiempolibre.js";
 import { condImmune } from "../core/defensas.js";
 import { rageInfo, rage, extendRage, bardicInfo, inspirable, inspire } from "../core/rasgos.js";
-import { rxOpen, answerRx, RX } from "../core/reacciones.js";
+import { rxOpen, answerRx, RX, PREFS, reactionsOf, prefOf, setPref } from "../core/reacciones.js";
+import { alliesHit } from "../core/avisos.js";
 import { durText, durTag } from "../core/duraciones.js";
 import { barOn } from "./barra.js";
 import { presentationFor } from "../core/sesiones.js";
@@ -29,6 +30,7 @@ import { getImage } from "../core/images.js";
 import { $, $$, esc, toast } from "../core/ui.js";
 
 let tesOpen = false, cuaOpen = false, whOpen = false, phOpen = {}, phSeq = null;
+let allyOk = null, allyWarn = null; // confirmación de un conjuro dañino que alcanza a aliados (Hito 66)
 let condOpen = false, charSel = null, openSpell = null, slotPick = {}, accOpen = false, restOpen = false, hdN = 1, testsOpen = false;
 
 const myChars = s => { const u = currentUser(s); return s.characters.filter(c => c.owner === (u && u.id)); };
@@ -74,8 +76,11 @@ export function renderSheet(el) {
     ${tok && barOn(s) ? "" : ab && !(tok && phase(s) === "live") ? spellsBlock(s, c, tok) : ab ? slotsLine(c) : ""}
 
     <details class="fsec" data-k="sv" ${testsOpen ? "open" : ""}><summary>Salvaciones y pruebas</summary>
-      <div class="fsaves">${ABILITIES.map(([k]) => `<button class="btn small" data-save="${k}">${AB_SHORT[k]} ${sign(saveBonus(c, k))}</button>`).join("")}</div>
-      <div class="fskills">${SKILLS.map(([k, n, a]) => `<button class="fsk" data-skill="${k}|${a}|${esc(n)}"><span>${esc(n)}</span><b>${sign(skillBonus(c, k, a))}</b></button>`).join("")}</div>
+      <div class="fsaves">${ABILITIES.map(([k, an]) => { const pr = (c.saves || []).includes(k); return `<button class="btn small ${pr ? "fpr" : ""}" data-save="${k}" title="${esc(an)} ${sign(mod(c.abilities[k]))}${pr ? ` · competencia ${sign(prof(c.level))}` : " · sin competencia"} = ${sign(saveBonus(c, k))}">${pr ? "● " : ""}${AB_SHORT[k]} ${sign(saveBonus(c, k))}</button>`; }).join("")}</div>
+      <div class="fskills">${SKILLS.map(([k, n, a]) => { const lv = +((c.skills || {})[k] || 0), m0 = mod(c.abilities[a]), pb = prof(c.level) * lv;
+        const why = `${(ABILITIES.find(x => x[0] === a) || [, a])[1]} ${sign(m0)}${lv === 2 ? ` · pericia ${sign(pb)} (competencia ×2)` : lv === 1 ? ` · competencia ${sign(pb)}` : " · sin competencia"} = ${sign(skillBonus(c, k, a))}`;
+        return `<button class="fsk lv${lv}" data-skill="${k}|${a}|${esc(n)}" title="${esc(why)}"><span><i class="fpk" aria-label="${lv === 2 ? "pericia" : lv === 1 ? "competente" : "sin competencia"}">${lv === 2 ? "◆" : lv === 1 ? "●" : "○"}</i>${esc(n)} <small>${AB_SHORT[a]}</small></span><b>${sign(skillBonus(c, k, a))}</b></button>`; }).join("")}</div>
+      <p class="fsklegend"><i class="fpk">○</i> sin competencia · <i class="fpk">●</i> competente · <i class="fpk">◆</i> pericia (doble). Pasa el ratón para ver el cálculo.</p>
     </details>
 
 
@@ -172,7 +177,8 @@ function turnBlock(s, c, tok) {
     const cur = s.tokens.find(t => t.id === s.board.turn), N = cur ? (cur.kind === "pc" ? (s.characters.find(x => x.id === cur.char) || cur).name : (cur.hidden ? "?" : cur.name)) : "—";
     const reactBody = incap ? `<p class="phno">Estás ${incap}: no puedes usar reacciones.</p>` : `<p class="phhint">Se usa durante el turno de otro, cuando ocurre su desencadenante.</p>
       <ul class="phlist"><li><b>Ataque de oportunidad</b>: si un enemigo sale de tu alcance, la mesa te lo ofrecerá.</li>${fUse("react").map(f => `<li><b>${esc(f.name)}</b>: ${esc(f.text || "")}</li>`).join("")}</ul>
-      ${byT("react").length ? `<small class="phsub">Conjuros de reacción</small>${spellRows(s, c, tok, byT("react"), e, incap)}` : ""}`;
+      ${byT("react").length ? `<small class="phsub">Conjuros de reacción</small>${spellRows(s, c, tok, byT("react"), e, incap)}` : ""}
+      <details class="phpre"><summary>↺ Preguntar, siempre o nunca</summary>${reactionsOf(c).map(([k, X]) => `<div class="hbcfgrow"><span>${X.i} ${esc(X.n)}</span><span class="hbseg">${PREFS.map(([p, n]) => `<button class="${prefOf(c, k) === p ? "on" : ""}" data-fpref="${k}|${p}">${n}</button>`).join("")}</span></div>`).join("")}</details>`;
     // Solo se destaca si AHORA MISMO hay algo a lo que reaccionar (una oportunidad ofrecida por la mesa)
     const oaNow = (s.rolls || []).find(r => r.kind === "oa" && r.status === "pending" && r.tok === tok.id && (r.seq == null || r.seq === s.board.seq))
       || (s.rolls || []).find(r => r.tok === tok.id && rxOpen(s, r));
@@ -264,7 +270,8 @@ function castBox(s, c, tok, d, m) {
     ${m.lvl ? (free.length ? `<label class="field">Espacio<select data-slotpick="${esc(d.n)}">${free.map(l => `<option value="${l}" ${slotPick[d.n] === l ? "selected" : ""}>Nivel ${l}${l > m.lvl && m.up ? ` (+${m.up} por nivel)` : ""}</option>`).join("")}</select></label>` : `<p class="note warn">No te quedan espacios de nivel ${m.lvl} o superior.</p>`) : ""}
     ${onBoard && !m.self ? `<div class="ftargets"><small>Objetivos · tócalos en la mesa</small><div class="fpicks">${[...picked].map(id => { const t = s.tokens.find(x => x.id === id); return t ? `<button class="cchip" style="--c:#d6aa4e" data-unpick="${id}" title="Quitar">${esc(nm(t))} ✕</button>` : ""; }).join("") || `<em>Ninguno todavía</em>`}</div>
       ${m.area ? `<button class="btn small" id="farea" title="Marca a todas las criaturas dentro del área (centrada en el primer objetivo, o en ti si es un cono, línea o emanación)">◎ Marcar los del área</button>` : ""}</div>` : !onBoard ? `<p class="note">Fuera de la mesa: se gasta el espacio y queda anotado.</p>` : ""}
-    <button class="btn gold small" id="fcastgo" ${m.lvl && !free.length ? "disabled" : ""}>Lanzar ${esc(d.n)}</button></div>`;
+    ${allyWarn ? `<p class="note warn">⚠ Alcanza a ${esc(allyWarn.names.map(n => n === "ti" ? "ti" : n).join(", "))}. ¿Lo lanzas igualmente?</p>` : ""}
+    <button class="btn gold small" id="fcastgo" ${m.lvl && !free.length ? "disabled" : ""}>${allyWarn ? "⚠ Lanzar igualmente" : `Lanzar ${esc(d.n)}`}</button></div>`;
 }
 
 function bind(el, s, c, tok) {
@@ -284,7 +291,7 @@ function bind(el, s, c, tok) {
     publish({ kind: "check", label: `${n} de ${c.name}`, expr: `1d20${bonus >= 0 ? "+" : ""}${bonus}`, by: tok ? tok.id : null });
   });
   $$("[data-slot]", el).forEach(b => b.onclick = () => { const [l, dlt] = b.dataset.slot.split("|"); useSlot(c.id, +l, +dlt); });
-  $$("[data-spell]", el).forEach(b => b.onclick = () => { openSpell = openSpell === b.dataset.spell ? null : b.dataset.spell; arm(openSpell ? { kind: "spell", name: openSpell, go: doCast } : null); renderSheet(el); });
+  $$("[data-spell]", el).forEach(b => b.onclick = () => { allyWarn = null; openSpell = openSpell === b.dataset.spell ? null : b.dataset.spell; arm(openSpell ? { kind: "spell", name: openSpell, go: doCast } : null); renderSheet(el); });
   $$("[data-unpick]", el).forEach(b => b.onclick = () => togglePick(b.dataset.unpick));
   $$("[data-arm]", el).forEach(b => b.onclick = () => { const i = +b.dataset.arm, use = b.dataset.use || "act", A = armedNow(); openSpell = null; arm(A && A.kind === "atk" && A.i === i && (A.use || "act") === use ? null : { kind: "atk", tok: tok.id, i, use }); renderSheet(el); });
   $$("[data-fbon]", el).forEach(b => b.onclick = () => {
@@ -331,6 +338,7 @@ function bind(el, s, c, tok) {
     inArea(s, m, tok, center).forEach(id => picked.add(id)); renderSheet(el);
   });
   on("fcastgo", () => doCast());
+  $$("[data-fpref]", el).forEach(b => b.onclick = () => { const [k, v] = b.dataset.fpref.split("|"); setPref(c.id, k, v); });
   // Lanzar: desde el botón o, como en BG3, al colocar el área o tocar al objetivo de un ataque de conjuro
   function doCast() {
     const s = store.get(); if (!openSpell) return;
@@ -342,6 +350,9 @@ function bind(el, s, c, tok) {
     }
     const targets = m.self ? [tok.id] : [...picked];
     if (!targets.length && (m.save || m.heal || m.atk || m.buff || m.dmg)) return toast("Elige al menos un objetivo.");
+    const key = targets.slice().sort().join(), al = alliesHit(s, tok.id, targets, m);
+    if (al.length && !(allyWarn && allyWarn.key === key)) { allyWarn = { names: al, key }; renderSheet(el); return; }
+    allyWarn = null;
     const r = cast(tok.id, d.n, m.lvl ? slotPick[d.n] : 0, targets);
     if (r !== null) { openSpell = null; arm(null); }
   }

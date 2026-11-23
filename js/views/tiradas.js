@@ -2,6 +2,7 @@
 import { store } from "../core/store.js";
 import { isDM, currentUser } from "../core/session.js";
 import { publish, RESULT, mySkin, setMySkin, diceAnim, setDiceAnim } from "../core/dados.js";
+import { pendingTag, awaitsDM } from "../core/avisos.js";
 import { decide, damageFor, nameOf, attack, attacksOf, oaOpen, answerOA, reactionPending } from "../core/combate.js";
 import { rxOpen, answerRx, RX } from "../core/reacciones.js";
 import { sneakInfo, smiteInfo, canBardic, useBardic } from "../core/rasgos.js";
@@ -30,6 +31,17 @@ function dmgOffer(s, r) {
     + (S ? `<button class="ib gold" data-dmg="${r.id}|sneak" title="Ataque furtivo (una vez por turno): ${esc(S.why)}">🗡 + Furtivo ${S.dice}${x2}</button>` : "")
     + (M ? M.slots.slice(0, 3).map(l => `<button class="ib gold" data-dmg="${r.id}|smite|${l}" title="Castigo divino: acción adicional y un espacio de nivel ${l}. ${M.dice(l)} de daño radiante${M.extra ? " (incluye +1d8 contra infernales y muertos vivientes)" : ""}.">✨ + Castigo nv${l} ${M.dice(l)}${x2}</button>`).join("") : "");
 }
+/** El cálculo de la tirada en una línea: dados (los descartados tachados) + modificador = total, contra qué y qué salió. */
+function calcHTML(s, r) {
+  if (r.total == null || !(r.dice || []).length) return "";
+  const kept = r.dice.filter(x => !x.drop), sum = kept.reduce((a, x) => a + (+x.v || 0), 0), mod = r.total - sum;
+  const dice = r.dice.map(x => `<span class="${x.drop ? "drop" : ""}">d${x.d}·${x.v}</span>`).join(" ");
+  let vs = "";
+  if (r.kind === "attack" && r.ac != null) vs = ` <span class="cvs">contra CA ${r.ac}</span> → <b class="${r.result}">${r.nat === 20 ? "crítico (20 natural)" : r.nat === 1 ? "falla (1 natural)" : r.result === "miss" ? "falla" : r.result === "crit" ? "crítico" : "impacta"}</b>`;
+  else if ((r.kind === "save" || r.kind === "check") && r.dc != null) vs = ` <span class="cvs">contra CD ${r.dc}</span> → <b class="${r.result === "save" || r.result === "ok" ? "hit" : "miss"}">${r.result === "save" ? "la supera" : r.result === "fail" ? "falla" : r.total >= r.dc ? "la supera" : "falla"}</b>`;
+  else if (r.kind === "damage" && r.applied != null && r.applied !== r.total) vs = ` → <b>${r.applied} aplicado${r.note ? "" : ""}</b>`;
+  return `<p class="rcalc">${dice}${mod ? ` <span class="cmod">${mod > 0 ? "+" : "−"} ${Math.abs(mod)}</span>` : ""} = <b>${r.total}</b>${vs}${r.adv ? ` <small class="${r.adv > 0 ? "adv" : "dis"}">(${r.adv > 0 ? "ventaja: el mayor" : "desventaja: el menor"})</small>` : ""}</p>`;
+}
 function rollInfo(s, r) {
   const t = s.tokens.find(x => x.id === r.target), parts = [];
   if (r.why) parts.push(`<p>${r.why.map(w => `<span class="${w.startsWith("ventaja") ? "adv" : w.startsWith("desventaja") ? "dis" : ""}">${esc(w)}</span>`).join(" · ")}</p>`);
@@ -44,6 +56,7 @@ function rollInfo(s, r) {
   return parts.join("") || `<p class="empty">Sin reglas especiales.</p>`;
 }
 
+let logWho = ""; // filtro del registro por personaje (nombre)
 let adv = 0, secret = false, editing = null, pool = {}, cleavePick = null;
 const SKIN_NAMES = { rubi: "Rubí", zafiro: "Zafiro", esmeralda: "Esmeralda", amatista: "Amatista", obsidiana: "Obsidiana", oro: "Oro", hueso: "Hueso", madera: "Madera" };
 const poolExpr = mod => { const p = Object.entries(pool).filter(([, n]) => n).map(([d, n]) => `${n}d${d}`).join("+"); return (p || "") + (mod ? (mod > 0 ? "+" : "") + mod : ""); };
@@ -59,7 +72,13 @@ export function renderRolls(el, o) {
   if (o) el._ro = o; o = el._ro || {};
   if (el.contains(document.activeElement) && /INPUT|SELECT/.test(document.activeElement.tagName)) return; // no pisar lo que se escribe
   const s = store.get(), dm = isDM(s), me = currentUser(s);
-  const list = visibleRolls(s).slice(-30).reverse();
+  // Registro por rondas (Hito 67): cada tirada sabe su ronda; las que no la guardan heredan la de la anterior
+  const vis = visibleRolls(s); let carry = null; const grp = new Map();
+  for (const r of vis) { if (r.round != null) carry = r.round; else if (r.seq == null && !r.link && r.kind !== "oapass") carry = null;
+    grp.set(r.id, r.round != null ? "R" + r.round : (r.seq != null || r.link) ? (carry != null ? "R" + carry : "C") : "F"); }
+  const recent = vis.slice(-80), names = [...new Set(recent.map(r => actor(s, r).name))];
+  if (logWho && !names.includes(logWho)) logWho = "";
+  const list = recent.filter(r => !logWho || actor(s, r).name === logWho || (r.link && recent.some(x => x.id === r.link && actor(s, x).name === logWho))).slice(-40).reverse();
   const hasDamage = id => (s.rolls || []).some(x => x.link === id && x.kind === "damage" && x.status !== "void");
   const pe = poolExpr(0);
   el.innerHTML = `${o.tray === false ? "" : `<div class="tray">
@@ -72,7 +91,9 @@ export function renderRolls(el, o) {
         ${dm ? `<button class="btn small" id="trsec" aria-pressed="${secret}" title="Solo la ves tú">Secreta</button>` : ""}
 </div>
     </div>`}
-    ${o.log === false ? "" : `<div class="rolls">${list.filter(r => r.kind !== "oapass" && r.kind !== "rxpass" && !(r.link && list.some(x => x.id === r.link && (r.kind === "damage" || x.kind === "req")))).map(r => rowHTML(s, r, dm, me, hasDamage, list.find(x => x.kind === "damage" && x.link === r.id))).join("") || `<p class="empty">Aún no se ha tirado nada. ¡Que rueden los dados!</p>`}</div>`}`;
+    ${o.log === false ? "" : `${names.length > 1 ? `<div class="rfilter"><label>Ver <select id="rwho"><option value="">Todos</option>${names.map(n => `<option ${n === logWho ? "selected" : ""}>${esc(n)}</option>`).join("")}</select></label><small>Toca una tirada para ver su cálculo</small></div>` : ""}<div class="rolls">${(() => { let last = null; return list.filter(r => r.kind !== "oapass" && r.kind !== "rxpass" && !(r.link && list.some(x => x.id === r.link && (r.kind === "damage" || x.kind === "req")))).map(r => {
+      const g = grp.get(r.id), head = g !== last ? `<div class="rround ${g[0]}">${g[0] === "R" ? `⚔ Ronda ${g.slice(1)}` : g === "C" ? "⚔ Combate" : "Fuera de combate"}</div>` : ""; last = g;
+      return head + rowHTML(s, r, dm, me, hasDamage, list.find(x => x.kind === "damage" && x.link === r.id)); }).join(""); })() || `<p class="empty">Aún no se ha tirado nada. ¡Que rueden los dados!</p>`}</div>`}`;
 
   if (o.tray !== false) {
   const mod = () => +($("#trmod", el).value || 0);
@@ -117,6 +138,7 @@ export function renderRolls(el, o) {
   $$("[data-masok]", el).forEach(b => b.onclick = () => { const [req, atk] = b.dataset.masok.split("|"); applyMastery(atk, req); });
   $$("[data-xpok]", el).forEach(b => b.onclick = () => { const v = $(`[data-xpv="${b.dataset.xpok}"]`, el); import("../core/experiencia.js").then(m => m.grantXP(b.dataset.xpok, v ? Math.max(0, +v.value || 0) : null)); });
   $$("[data-oano]", el).forEach(b => b.onclick = () => answerOA(b.dataset.oano, false));
+  { const w = $("#rwho", el); if (w) w.onchange = () => { logWho = w.value; renderRolls(el); }; }
   $$("[data-row]", el).forEach(b => b.querySelector(".r1").onclick = e => { if (e.target.closest("button,input,select")) return; const id = b.dataset.row; openInfo.has(id) ? openInfo.delete(id) : openInfo.add(id); renderRolls(el); });
   $$("[data-edit]", el).forEach(b => b.onclick = () => { editing = b.dataset.edit; renderRolls(el); const i = $("#rtot", el); if (i) i.focus(); });
   const ok = $("#rtotok", el); if (ok) ok.onclick = () => { const v = +$("#rtot", el).value, id = editing; editing = null; decide(id, { total: v }); };
@@ -235,6 +257,7 @@ function rowHTML(s, r, dm, me, hasDamage, dmgRow) {
   if (r.mas && r.kind === "attack") out.push(`<span class="pill mas" title="${esc(MASTERY[r.mas.n] || "")}">⚔ ${esc(r.mas.n)}${r.masUsed ? " ✓" : ""}</span>`);
   if (r.cleaveOf) out.push(`<span class="pill mas" title="${esc(MASTERY.Hender)}">⚔ Hender</span>`);
   if (r.insp) out.push(`<span class="pill insp" title="Inspiración heroica">✨ ${r.insp.from} → ${r.insp.to}</span>`);
+  { const pt = pendingTag(s, dmgRow && awaitsDM(s, dmgRow) ? dmgRow : r); if (pt) out.push(`<span class="rpend">${esc(pt)}</span>`); }
   if (offTurn) out.push(`<span class="pill off" title="Tirada libre durante el turno de otro">fuera de turno</span>`);
   const dmgActs = dm && dmgRow && dmgRow.status === "pending" ? dmgButtons(s, dmgRow) : "";
   const acts = [
@@ -264,7 +287,7 @@ function rowHTML(s, r, dm, me, hasDamage, dmgRow) {
         : `<div class="r2"><small>${ans ? (ans.kind === "rxpass" ? "No la usó" : `${X.i} La usó`) : "No la usó"}</small></div>`; })() : ""}
     ${open ? `<div class="rdet"><div class="dice">${(r.dice || []).map(x => `<span class="dv d${x.d} ${x.drop ? "drop" : ""} ${x.d === 20 && x.v === 20 && !x.drop ? "nat20" : ""} ${x.d === 20 && x.v === 1 && !x.drop ? "nat1" : ""}">${x.v}</span>`).join("")}${r.expr && r.expr.match(/[+-]\d+$/) ? `<span class="dmod">${r.expr.match(/[+-]\d+$/)[0]}</span>` : ""}</div>
       <div class="rl">${esc(r.label)}</div>${r.why ? `<small class="${r.adv > 0 ? "adv" : r.adv < 0 ? "dis" : ""}">${esc(r.why.join(" · "))}</small>` : ""}${r.note && r.kind !== "death" ? `<small>${esc(r.note)}</small>` : ""}
-      <div class="rinfo">${rollInfo(s, r)}</div>
+      ${calcHTML(s, r)}<div class="rinfo">${rollInfo(s, r)}</div>
       ${dm && r.status !== "void" && !r.applied && r.total != null ? `<div class="r2"><button class="ib" data-edit="${r.id}">✎ Cambiar total</button><button class="ib danger" data-dec="${r.id}|void">✕ Anular</button></div>` : ""}</div>` : ""}
   </div>`;
 }

@@ -814,3 +814,22 @@ En combate, el jugador juega su turno desde una **barra abajo, sobre la mesa** (
 ## Hito 63 · PNJ híbridos y al día en la mesa
 - **La figura sigue a su ficha**: si el máster cambia la ficha de combate en el Lore (otra plantilla, conjuros, ataques, características, nombre o retrato) con el PNJ ya en la mesa, la figura se pone al día al momento (conserva el daño que llevaba) y su barra muestra lo nuevo.
 - **＋ Mezclar con esta**: añade a la ficha los ataques, acciones, rasgos y conjuros de otra plantilla sin quitar nada, para hacer híbridos (un bandido con conjuros de mago, un goblin con rasgos de berserker…). Los conjuros se juntan en un solo bloque.
+
+## Hito 64 · La oscuridad cuenta al atacar
+- Regla del SRD («Visión y luz»): quien ataca a una criatura que no ve porque está a oscuras tiene desventaja; si es el objetivo el que no ve al atacante, el atacante tiene ventaja. La luz brillante o tenue (antorchas, faroles, luz de la escena) y la visión en la oscuridad (personajes por su especie o su ficha; criaturas por su perfil del SRD) lo deciden. Sale en el porcentaje al apuntar y en el «por qué» de la tirada. Solo con la visión de la mesa activada.
+
+## Hito 65 · Anticipar: qué conviene hacer antes de hacerlo
+- Al apuntar, cada objetivo enseña lo necesario para decidir, como en BG3: **% de impactar**, **daño posible ya ajustado** a su resistencia (½), inmunidad o vulnerabilidad (×2), y **☠** si con ese golpe puede caer («☠?») o cae seguro («☠ cae»). El «por qué» de la etiqueta lo explica.
+- **Conjuros con salvación**: «CD 15 Des · falla 60%» por objetivo (con su bonificador, ventajas, Bendición/Perdición y resistencia mágica), y si el daño (o la mitad, si la supera) puede tumbarlo.
+- **Áreas**: al pasar la plantilla, cada criatura de dentro lleva su etiqueta (falla %, daño, ☠) y los aliados salen marcados «⚠ aliado».
+
+## Hito 66 · Reacciones a tu gusto, máster desconectado y confirmar lo arriesgado
+A partir de la auditoría de diseño comparada con Baldur's Gate 3:
+- **Reacciones configurables** (como BG3): pulsa el rombo ↺ de la reacción en la barra (o ↺ fuera de combate) y elige para cada una *Preguntar*, *Siempre* o *Nunca*: ataque de oportunidad, Escudo, Esquiva asombrosa, Reprensión infernal y Contrahechizo (solo salen las que tiene tu personaje). *Siempre* la usa sola en cuanto se puede; *Nunca* ni pregunta. Se guarda en la ficha. El máster tiene una para el ataque de oportunidad de sus criaturas. En pantallas estrechas está en la ficha («↺ Preguntar, siempre o nunca»).
+- **Si el máster no está conectado, se dice**: el daño, los empujones y los efectos sobre otros los aplica su navegador. El indicador de conectados muestra «máster fuera», la barra avisa y cada tirada que espera lleva «⏳ Se aplicará cuando el máster esté conectado». Con el máster conectado solo se avisa si tarda o si es decisión suya (Resistencia legendaria). Sin internet, el indicador dice «Sin conexión».
+- **Confirmar solo lo arriesgado**: si un conjuro dañino va a alcanzar a aliados (o a ti), la barra pregunta «¿Lo lanzas igualmente?» antes de gastar nada. Lo demás se lanza sin diálogos.
+
+## Hito 67 · Iconos grabados, registro por rondas y desglose de pruebas
+- **Iconos de la barra con el estilo del mapa del mundo**: armas, conjuros, rasgos, acciones, pestañas, estados y usos son ahora grabados de game-icons.net (CC BY 3.0, autores en `assets/hud/LEEME.txt`), teñidos según lo que hacen: acero para armas, naranja para el fuego, azul hielo para el frío, verde para curar o violeta para la magia. El medallón toma un reflejo de ese color.
+- **Registro de tiradas por rondas**: cabeceras «⚔ Ronda N» y «Fuera de combate», un filtro «Ver» por personaje y, al tocar una tirada, su cálculo en una línea: los dados (los descartados por ventaja o desventaja salen tachados), el modificador, el total, contra qué CA o CD y qué salió.
+- **Desglose de pruebas en la ficha**: ○ sin competencia, ● competente, ◆ pericia, con la característica al lado. Al pasar el ratón se ve el cálculo («Inteligencia +4 · competencia +3 = +7»). Las salvaciones en las que eres competente salen marcadas.

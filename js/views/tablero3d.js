@@ -18,7 +18,7 @@ import { leftOf } from "../core/duraciones.js";
 import { computeVision, explored, visionOn, tokenSeen } from "../core/vision.js";
 import { fogCanvas } from "./niebla.js";
 import { elevAt, altOf, hasElev, dist3, topOfTok } from "../core/alturas.js";
-import { templateCells, templateOk } from "../core/objetivo.js";
+import { chipText, templateCells, templateOk } from "../core/objetivo.js";
 import { colors, onColors } from "../core/colores.js";
 import { playEffect, EFECTOS } from "./efectos3d.js";
 import { sound, AMBIENTES } from "../core/sonido.js";
@@ -951,8 +951,7 @@ export function createBoard3D(host, opts) {
       const ok = g.state === "ok" || g.state === "long";
       const r = new THREE.Mesh(ringGeoT, ok ? TMAT.ring : TMAT.bad); r.position.set(cx(t.c), ty(t) + 0.2, cz(t.r)); r.scale.setScalar((t.size || 1) * (g.picked ? 1.12 : 1)); r.renderOrder = 7; r.userData.pulse = ok; tgtGrp.add(r);
       if (TG.kind === "pick") continue;
-      const txt = !ok ? (g.state === "cover" ? "🛡 cobertura total" : `fuera · ${String(g.far || "").replace(".", ",")} m`)
-        : [g.approach ? `🦶${String(g.approach.cost).replace(".", ",")} m` : "", TG.odds && g.pct != null ? `${g.pct}%` : "", g.save || "", g.dmg ? `${g.dmg[0]}–${g.dmg[1]}` : "", g.state === "long" ? "largo" : "", g.adv > 0 ? "▲" : g.adv < 0 ? "▼" : "", g.picked ? "✓" : ""].filter(Boolean).join(" · ");
+      const txt = chipText(g, TG.odds);
       const sp = chip(txt, colors().target, !ok); sp.position.set(cx(t.c), ty(t) + ((rec && rec.h) || 4) + 0.35, cz(t.r));
       sp.center.set(0.5, -(PLATE_H / 0.03) - 0.2); tgtGrp.add(sp); // justo encima de su placa (las dos tienen tamaño fijo en pantalla)
     }
