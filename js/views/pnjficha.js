@@ -6,7 +6,7 @@ import { srd, srdNow } from "../core/srd.js";
 import { CRS } from "../core/bestiario.js";
 import { WEAPONS } from "../data/equipo.js";
 import { mod } from "../data/dnd.js";
-import { TEMPLATES, SIZES, blankCombat, fromTemplate, resave, weaponAction, setMulti, multiOfC, spellBlock, addSpell, removeSpell, pbOf, npcMonster } from "../core/pnj.js";
+import { TEMPLATES, SIZES, blankCombat, fromTemplate, mergeTemplate, resave, weaponAction, setMulti, multiOfC, spellBlock, addSpell, removeSpell, pbOf, npcMonster } from "../core/pnj.js";
 import { $, $$, esc, toast } from "../core/ui.js";
 
 const AB = [["fue", "FUE"], ["des", "DES"], ["con", "CON"], ["int", "INT"], ["sab", "SAB"], ["car", "CAR"]];
@@ -28,7 +28,7 @@ export function combatHTML(s, e) {
   return `<section class="pcomb"><h3 class="lsec">⚔ Ficha de combate <small>${c.base ? `base: ${esc(c.base)} (SRD)` : "ficha propia"} · competencia ${sign(pbOf(c))}</small></h3>
     <div class="row pctop"><label class="switch"><input type="checkbox" data-ptable ${c.table ? "checked" : ""}> Disponible en la mesa</label>
       ${s.board ? (onBoard ? `<span class="tag">✓ Está en la mesa</span>` : `<button class="btn small gold" data-ptoboard>Poner en la mesa ahora</button>`) : ""}
-      <span class="grow"></span><select data-ptpl>${TEMPLATES.map(n => `<option ${n === (c.base || tplPick) ? "selected" : ""}>${esc(n)}</option>`).join("")}</select><button class="btn small" data-pretpl title="Sustituye toda la ficha por la plantilla">Cambiar de plantilla</button><button class="btn small danger" data-pnone>Quitar ficha</button></div>
+      <span class="grow"></span><select data-ptpl>${TEMPLATES.map(n => `<option ${n === (c.base || tplPick) ? "selected" : ""}>${esc(n)}</option>`).join("")}</select><button class="btn small" data-pmerge title="Añade sus ataques, acciones, rasgos y conjuros a esta ficha, sin quitar nada (híbridos)">＋ Mezclar con esta</button><button class="btn small" data-pretpl title="Sustituye toda la ficha por la plantilla">Cambiar de plantilla</button><button class="btn small danger" data-pnone>Quitar ficha</button></div>
     <div class="pcstats">
       <label>CA<input type="number" data-pc="ac" value="${c.ac}"></label>
       <label>PG máx.<input type="number" data-pc="hp" value="${c.hp}"></label>
@@ -60,6 +60,7 @@ export function bindCombat(root, e, done = () => {}) {
   const mk = $("[data-pmake]", root); if (mk) mk.onclick = async () => { const c = await fromTemplate(tplPick); if (!c) return toast("No encuentro esa plantilla."); setEntry(e.id, { combat: c }); };
   const bl = $("[data-pblank]", root); if (bl) bl.onclick = () => setEntry(e.id, { combat: blankCombat() });
   const rt = $("[data-pretpl]", root); if (rt) rt.onclick = async () => { if (!rt.dataset.sure) { rt.dataset.sure = 1; rt.textContent = "¿Seguro? Se pierde lo cambiado"; return; } const c = await fromTemplate(tplPick); if (c) setEntry(e.id, x => ({ combat: { ...c, table: !!(x.combat && x.combat.table) } })); };
+  const mg = $("[data-pmerge]", root); if (mg) mg.onclick = async () => { const x = store.get().lore.find(y => y.id === e.id); const c = clone(x.combat); if (await mergeTemplate(c, tplPick)) { setEntry(e.id, { combat: c }); toast(`Añadido lo de ${tplPick}`); } };
   const no = $("[data-pnone]", root); if (no) no.onclick = () => { if (!no.dataset.sure) { no.dataset.sure = 1; no.textContent = "Pulsa otra vez para quitarla"; return; } setEntry(e.id, { combat: null }); };
   const tb = $("[data-ptable]", root); if (tb) tb.onchange = () => edit(c => { c.table = tb.checked; });
   const pb = $("[data-ptoboard]", root); if (pb) pb.onclick = () => import("./reglas.js").then(m => { const s = store.get(), x = s.lore.find(y => y.id === e.id); m.addToBoard(npcMonster(s, x), 1, { hidden: false }); toast(`${x.name} está en la mesa`); });

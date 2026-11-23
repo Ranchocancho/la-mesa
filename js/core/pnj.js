@@ -91,6 +91,20 @@ export function npcMonster(s, e) {
     npc: e.id, srd: c.base || null, kit: clone(c.kit), ab: { ...c.ab }, size: c.size || 1, kind: hostile ? "foe" : "npc", color: hostile ? "#7a2a22" : "#3d4f8a" };
 }
 
+/** Mezclar: añade a la ficha las acciones, rasgos y conjuros de otra plantilla (híbridos a gusto del máster). */
+export async function mergeTemplate(c, name) {
+  const o = await fromTemplate(name); if (!o) return false;
+  for (const g of ["act", "bonus", "react"]) for (const a of (o.kit[g] || [])) {
+    if (a.type === "multi") continue;
+    if (a.type === "spells") { (a.lists || []).forEach(L => L.sp.forEach(x => addSpell(c, x.n, L.u))); continue; }
+    c.kit[g] = c.kit[g] || [];
+    if (!c.kit[g].some(x => x.n === a.n)) c.kit[g].push(JSON.parse(JSON.stringify(a)));
+  }
+  return true;
+}
+/** Firma de lo que la mesa copia de la ficha (si cambia en el Lore, la figura se pone al día). */
+const sheetSig = e => JSON.stringify([e.name, e.img, e.combat && [e.combat.ac, e.combat.hp, e.combat.speed, e.combat.size, e.combat.vd, e.combat.ab, e.combat.base, e.combat.kit]]);
+
 /* ---------- Lo que pasa en la mesa vuelve al Lore ----------
    Si un PNJ cae o queda herido, su ficha lo recuerda: la próxima vez que salga, sale como quedó. */
 export function watchNpcs() {
@@ -98,6 +112,17 @@ export function watchNpcs() {
   const run = () => {
     const s = store.get(); if (!isDM(s)) return;
     const toks = (s.tokens || []).filter(t => t.npc);
+    // 1) El Lore manda en la ficha: si el máster la cambia (plantilla, conjuros, ataques…), la figura en la mesa se actualiza
+    const stale = toks.map(t => ({ t, e: entry(s, t.npc) })).filter(({ t, e }) => e && e.combat && t.npcSig !== sheetSig(e));
+    if (stale.length) {
+      store.commit("token", st => stale.forEach(({ t, e }) => { const k = st.tokens.find(x => x.id === t.id); if (!k) return;
+        const m = npcMonster(st, e), wasMax = k.maxhp, hurt = (wasMax || 0) - (k.hp ?? wasMax);
+        Object.assign(k, { name: m.n, kit: m.kit, ab: m.ab, ac: m.ca, maxhp: m.pgMax, speed: parseFloat(String(m.vel).replace(",", ".")) || 9, size: m.size, vd: m.vd, srd: m.srd,
+          attacks: m.atk.map(a => ({ name: a.name, atk: a.atk, dmg: a.dmg, rng: a.rng })), ...(m.img ? { portrait: m.img } : {}) });
+        if (k.npcSig) k.hp = Math.max(0, Math.min(k.maxhp, k.maxhp - Math.max(0, hurt))); // conserva el daño recibido
+        k.npcSig = sheetSig(e); }));
+      return;
+    }
     const sig = JSON.stringify(toks.map(t => [t.npc, t.hp]));
     if (sig === last) return; last = sig;
     const upd = toks.map(t => ({ t, e: entry(s, t.npc) })).filter(({ t, e }) => e && e.combat && t.hp != null && e.combat.hpNow !== t.hp);

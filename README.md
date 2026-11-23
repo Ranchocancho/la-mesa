@@ -810,3 +810,7 @@ En combate, el jugador juega su turno desde una **barra abajo, sobre la mesa** (
 - **Recurrentes**: lo que le pasa en la mesa vuelve al Lore (PG que le quedan; herido o muerto). Los muertos ya no salen en la lista.
 - En la mesa, su ficha en «Táctica» enlaza al Lore y tiene **«👁 Mostrar a los jugadores»** (para las escenas de rol, sin combate: un mapa sin iniciar combate ya es una escena de rol).
 - La ficha de combate se guarda con los secretos del máster: los jugadores no ven sus números.
+
+## Hito 63 · PNJ híbridos y al día en la mesa
+- **La figura sigue a su ficha**: si el máster cambia la ficha de combate en el Lore (otra plantilla, conjuros, ataques, características, nombre o retrato) con el PNJ ya en la mesa, la figura se pone al día al momento (conserva el daño que llevaba) y su barra muestra lo nuevo.
+- **＋ Mezclar con esta**: añade a la ficha los ataques, acciones, rasgos y conjuros de otra plantilla sin quitar nada, para hacer híbridos (un bandido con conjuros de mago, un goblin con rasgos de berserker…). Los conjuros se juntan en un solo bloque.
