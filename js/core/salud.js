@@ -21,7 +21,8 @@ const delCond = (t, id) => { t.conds = (t.conds || []).filter(c => c.id !== id);
 /** Puntuaciones de característica de cualquier ficha (personaje o monstruo del compendio). */
 export function abilitiesOf(s, t) {
   const c = charOf(s, t); if (c) return c.abilities;
-  const m = t.srd && findMonster(t.srd); return (m && m.ab) || t.ab || { fue: 10, des: 10, con: 10, int: 10, sab: 10, car: 10 };
+  if (t.ab) return t.ab; // PNJ con sus propias características
+  const m = t.srd && findMonster(t.srd); return (m && m.ab) || { fue: 10, des: 10, con: 10, int: 10, sab: 10, car: 10 };
 }
 /** CD de salvación de los conjuros de un personaje: 8 + competencia + característica de lanzamiento. */
 export function spellDC(c) { const ab = classInfo(c.cls).cast; return ab ? 8 + prof(c.level) + mod(c.abilities[ab]) : 10; }

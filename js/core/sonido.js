@@ -87,6 +87,10 @@ const SFX = {
   whoosh() { burst(700, 1.2, 0.22, 0.22, "bandpass", master, 2600); },
   twang() { blip(196, 0.22, 0.14, "triangle", master, 120); burst(3000, 2, 0.12, 0.12, "bandpass", master, 900); },
   crit() { SFX.hit(); [659, 988].forEach((f, i) => setTimeout(() => blip(f, 0.35, 0.09, "triangle"), 60 + i * 80)); },
+  miss() { burst(900, 1.4, 0.2, 0.16, "bandpass", master, 300); setTimeout(() => burst(250, 1, 0.12, 0.08, "lowpass"), 150); },
+  block() { [1900, 2850, 4100].forEach(f => blip(f, 0.5, 0.06, "square")); blip(320, 0.25, 0.12, "triangle", master, 180); },
+  alert() { blip(880, 0.12, 0.12, "triangle"); setTimeout(() => blip(1175, 0.18, 0.12, "triangle"), 130); },
+  slash() { burst(1800, 1.6, 0.16, 0.25, "bandpass", master, 600); setTimeout(() => burst(500, 1, 0.12, 0.35, "lowpass"), 90); },
   sword() { [2300, 3700, 5200].forEach(f => blip(f, 0.4, 0.05, "square")); burst(5000, 2, 0.1, 0.15); }
 };
 const FX_SOUND = { bola: "fireball", proyectil: "magic", rayo: "thunder", escarcha: "magic", llama: "holy", curar: "heal", escudo: "magic", trueno: "thunder" };

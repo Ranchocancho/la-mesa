@@ -142,6 +142,7 @@ import("./core/acciones.js").then(m => m.watchEffects());
 import("./core/reacciones.js").then(m => m.watchReactions());
 import("./core/combate.js").then(m => { m.watchAutoResolve(); m.watchAutoDamage(); });
 import("./core/duraciones.js").then(m => m.watchDurations());
+import("./core/pnj.js").then(m => m.watchNpcs());
 window.addEventListener("hashchange", render);
 window.addEventListener("lamesa:login", () => { presence.beat(); current = null; render(); });
 

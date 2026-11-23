@@ -87,6 +87,7 @@ export const PROPS = {
   // Mazmorra
   columna:    { n: "Columna", i: "🏛️", cat: "mazmorra", block: true, cover: "3q" },
   escaleras:  { n: "Escaleras", i: "🪜", cat: "mazmorra" },
+  rampa:      { n: "Rampa / sendero", i: "⛰️", cat: "natural" },
   calavera:   { n: "Huesos y escombros", i: "💀", cat: "mazmorra" },
   estandarte: { n: "Estandarte (en pared)", i: "🚩", cat: "mazmorra", wall: true },
   estatua:    { n: "Estatua", i: "🗿", cat: "mazmorra", block: true, cover: "3q" },

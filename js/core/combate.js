@@ -56,7 +56,9 @@ export function attack(attackerId, targetId, weapon, force = null, use = "act", 
   // opt.free: ya lo ha permitido quien llama (acción legendaria, reacción o conjuro de una criatura)
   if (!opt.free && !canActNow(s, a.id, use)) { toast(`No es el turno de ${nameOf(s, a)}: fuera de su turno solo puede usar reacciones.`); return null; }
   { const me = currentUser(s); if (!isDM(s) && !(a.owner && me && a.owner === me.id)) { toast("Solo puedes atacar con tu propio personaje."); return null; } }
-  const rng = weapon.rng || { n: 1.5, l: 1.5 }, reach = inRange(rng, a, t), cov = cover(s, a, t), mods = modifiers(s, a, t, rng);
+  // Ataque de oportunidad: se resuelve en la casilla de la que salía (justo antes de salir del alcance), no donde acabó
+  const tv = opt.at ? { ...t, c: opt.at.c, r: opt.at.r } : t;
+  const rng = weapon.rng || { n: 1.5, l: 1.5 }, reach = inRange(rng, a, tv), cov = cover(s, a, tv), mods = modifiers(s, a, tv, rng);
   if (reach === "out") { toast(`${t.name || "El objetivo"} está a ${(gap(a, t) * 1.5).toLocaleString("es-ES")} m: fuera del alcance de ${weapon.name} (${rng.l} m)`); return null; }
   if (cov.level === "total") { toast("Cobertura total: no tienes línea hasta el objetivo"); return null; }
   const adv = force != null ? force : mods.net;
@@ -171,7 +173,7 @@ export function answerOA(oaId, go) {
   if (go) {
     const w = attacksOf(s, h).find(x => !x.rng.ranged || x.rng.melee);
     if (!w) { toast(`${nameOf(s, h)} no tiene un ataque cuerpo a cuerpo.`); go = false; }
-    else if (!attack(h.id, r.target, w, null, "react", { link: r.id })) go = false;
+    else if (!attack(h.id, r.target, w, null, "react", { link: r.id, at: r.oaAt || null })) go = false;
   }
   if (!go) {
     const me = currentUser(s);

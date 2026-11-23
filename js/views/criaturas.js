@@ -7,8 +7,10 @@ import { TYPES, CRS, typeOf, withCustom, setCustom, clearCustom, scaleMonster } 
 import { XP_BY_CR } from "../core/experiencia.js";
 import { getImage, putImage, readImageFile } from "../core/images.js";
 import { $, $$, esc, toast, pickFile } from "../core/ui.js";
+import { npcsForTable, npcMonster } from "../core/pnj.js";
+import { VITAL, STANCE } from "../core/contexto.js";
 
-const st = { q: "", type: "", vd: "", sel: null, cr: null, n: 1, edit: false };
+const st = { q: "", type: "", vd: "", sel: null, cr: null, n: 1, edit: false, tab: "bes", npc: null };
 const norm = x => String(x || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
 
 /** Abre el selector. onAdd(criatura ya escalada, cantidad). */
@@ -23,12 +25,14 @@ export async function openCreaturePicker({ onAdd, preselect = null, title = "Añ
   back.onclick = e => { if (e.target === back) close(); };
   const draw = () => {
     const s = store.get(), dm = isDM(s);
+    if (st.tab === "pnj") return drawNpcs(s);
     const list = M.filter(m => (!st.q || norm(m.n).includes(norm(st.q))) && (!st.type || typeOf(m) === st.type) && (!st.vd || m.vd === st.vd));
     const base = withCustom(s, M.find(m => m.n === st.sel)) || null, cur = base && scaleMonster(base, st.cr || base.vd);
     const counts = Object.fromEntries(TYPES.map(t => [t, M.filter(m => typeOf(m) === t).length]));
     const cust = base && (s.bestiary || {})[base.n] || {};
     back.innerHTML = `<div class="cpbox" role="dialog" aria-label="${esc(title)}">
       <header><h2>${esc(title)}</h2><button class="x" aria-label="Cerrar">✕</button></header>
+      ${tabs()}
       <div class="cpfilters"><input type="search" id="cpq" placeholder="Buscar (bandido, lobo, esqueleto…)" value="${esc(st.q)}">
         <select id="cpvd"><option value="">Cualquier VD</option>${CRS.filter(v => M.some(m => m.vd === v)).map(v => `<option ${st.vd === v ? "selected" : ""}>${v}</option>`).join("")}</select></div>
       <div class="cptypes"><button data-ty="" aria-pressed="${!st.type}">Todas</button>${TYPES.map(t => `<button data-ty="${t}" aria-pressed="${st.type === t}">${t} <small>${counts[t]}</small></button>`).join("")}</div>
@@ -47,7 +51,7 @@ export async function openCreaturePicker({ onAdd, preselect = null, title = "Añ
             <label class="field">Notas del máster<textarea id="cpnotas" rows="2">${esc(cust.notas || "")}</textarea></label>
             <div class="row"><button class="btn small gold" id="cpsave">Guardar</button>${base.custom ? `<button class="btn small danger" id="cpreset">Volver al original</button>` : ""}</div></details>` : ""}
         ` : `<p class="empty">Elige una criatura de la lista.</p>`}</div></div></div>`;
-    $(".x", back).onclick = close;
+    $(".x", back).onclick = close; bindTabs();
     const q = $("#cpq", back); q.oninput = () => { st.q = q.value; const p = q.selectionStart; draw(); const n = $("#cpq", back); n.focus(); n.setSelectionRange(p, p); };
     $("#cpvd", back).onchange = e => { st.vd = e.target.value; draw(); };
     $$("[data-ty]", back).forEach(b => b.onclick = () => { st.type = b.dataset.ty; draw(); });
@@ -64,5 +68,30 @@ export async function openCreaturePicker({ onAdd, preselect = null, title = "Añ
     $$("[data-img]", back).forEach(async el => { const u = await getImage(el.dataset.img); if (u && el.isConnected) { el.style.backgroundImage = `url('${u}')`; el.textContent = ""; } });
     const on = $(".cpitem.on", back); if (on) on.scrollIntoView({ block: "nearest" });
   };
+  // Pestañas: el bestiario del SRD o los PNJ propios del Lore («Disponible en la mesa»)
+  function tabs() { const n = npcsForTable(store.get()).length; return `<div class="cptabs"><button data-cptab="bes" aria-pressed="${st.tab === "bes"}">🐉 Bestiario</button><button data-cptab="pnj" aria-pressed="${st.tab === "pnj"}">📖 Mis PNJ <small>${n}</small></button></div>`; }
+  function bindTabs() { $$("[data-cptab]", back).forEach(b => b.onclick = () => { st.tab = b.dataset.cptab; draw(); }); }
+  function drawNpcs(s) {
+    const L = npcsForTable(s).filter(e => !(s.tokens || []).some(t => t.npc === e.id)).filter(e => !st.q || norm(e.name + " " + (e.role || "")).includes(norm(st.q)));
+    const e = L.find(x => x.id === st.npc) || L[0], m = e && npcMonster(s, e), pl = e && e.place && s.world.places.find(p => p.id === e.place);
+    back.innerHTML = `<div class="cpbox" role="dialog" aria-label="${esc(title)}">
+      <header><h2>${esc(title)}</h2><button class="x" aria-label="Cerrar">✕</button></header>${tabs()}
+      <div class="cpfilters"><input type="search" id="cpq" placeholder="Buscar PNJ por nombre o papel…" value="${esc(st.q)}"></div>
+      <div class="cpbody"><div class="cplist">${L.map(x => `<button class="cpitem ${e && x.id === e.id ? "on" : ""}" data-np="${x.id}">${x.img ? `<i class="cpimg" data-img="${esc(x.img)}"></i>` : `<i class="cpimg">👤</i>`}<b>${esc(x.name)}</b><small>${esc([x.role, (STANCE[x.stance || "neutral"] || [])[1]].filter(Boolean).join(" · "))}</small></button>`).join("")
+        || `<p class="empty">Aún no hay PNJ en la lista. Créalos en <a href="#lore/s:npc">Lore › Personajes</a>, rellena su «Ficha de combate» y marca «Disponible en la mesa».</p>`}</div>
+        <div class="cpdetail">${m ? `<div class="cphead">${m.img ? `<div class="cpport" data-img="${esc(m.img)}"></div>` : ""}<div><h3>${esc(e.name)}</h3><p class="note">${esc([e.role, pl && pl.name, e.combat.base ? "base: " + e.combat.base : "ficha propia"].filter(Boolean).join(" · "))}</p></div></div>
+          <div class="cpstats"><span><small>CA</small><b>${m.ca}</b></span><span><small>PG</small><b>${m.pg}/${m.pgMax}</b></span><span><small>VD</small><b>${esc(String(m.vd))}</b></span><span><small>Estado</small><b>${(VITAL[e.vital || "vivo"] || []).join(" ")}</b></span><span><small>Actitud</small><b>${(STANCE[e.stance || "neutral"] || []).join(" ")}</b></span></div>
+          <div class="cpatks">${m.atk.map(a => `<div><b>${esc(a.name)}</b> <span>${esc(a.atk)} · ${esc(a.dmg)}</span> <small>${esc(a.rng)}</small></div>`).join("") || `<p class="note">Sin ataques.</p>`}</div>
+          <p class="note">${m.kind === "foe" ? "Hostil: sale como enemigo." : "Sale como PNJ (aliado o neutral). Si se vuelve hostil, cambia su actitud en el Lore."}</p>
+          ${onAdd ? `<div class="cpadd"><button class="btn gold" id="cpnpc">Poner a ${esc(e.name.split(" ")[0])} en la mesa</button><label class="chk"><input type="checkbox" id="cphid" ${hideNew ? "checked" : ""}> Oculto a los jugadores</label></div>` : ""}
+          <a class="btn small" href="#lore/${e.id}">📖 Abrir su ficha en el Lore</a>` : `<p class="empty">Elige un PNJ.</p>`}</div></div></div>`;
+    $(".x", back).onclick = close; bindTabs();
+    const q = $("#cpq", back); q.oninput = () => { st.q = q.value; const p = q.selectionStart; draw(); const n = $("#cpq", back); n.focus(); n.setSelectionRange(p, p); };
+    $$("[data-np]", back).forEach(b => b.onclick = () => { st.npc = b.dataset.np; draw(); });
+    { const h = $("#cphid", back); if (h) h.onchange = () => { hideNew = h.checked; }; }
+    const go = $("#cpnpc", back); if (go) go.onclick = () => { onAdd(m, 1, hideNew); toast(`${e.name} en la mesa`); close(); };
+    $$("a[href^='#lore']", back).forEach(a => a.addEventListener("click", close));
+    $$("[data-img]", back).forEach(async el => { const u = await getImage(el.dataset.img); if (u && el.isConnected) { el.style.backgroundImage = `url('${u}')`; el.textContent = ""; } });
+  }
   draw();
 }

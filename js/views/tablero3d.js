@@ -45,7 +45,7 @@ export function miniFor(t, ch) {
 const PROP3D = {
   mesa: ["dungeon/table_medium", 1.2], mesalarga: ["dungeon/table_long_decorated_A", 1], silla: ["dungeon/chair", 1.2], barril: ["dungeon/barrel_large", 1],
   caja: ["dungeon/crates_stacked", 1], cofre: ["dungeon/chest", 1.1], columna: ["dungeon/pillar_decorated", 1], cama: ["dungeon/bed_decorated", 1],
-  calavera: ["dungeon/rubble_large", 0.45], tonel: ["dungeon/keg", 1], baul: ["dungeon/trunk_large_A", 1.2], escaleras: ["dungeon/stairs", 0.8],
+  calavera: ["dungeon/rubble_large", 0.45], tonel: ["dungeon/keg", 1], baul: ["dungeon/trunk_large_A", 1.2], escaleras: ["dungeon/stairs", 0.8], rampa: ["dungeon/stairs", 0.8],
   velas: ["dungeon/candle_triple", 1.6], antorcha: ["dungeon/torch_mounted", 1.6, "wall"], estandarte: ["dungeon/banner_red", 1, "wall"], puerta: ["dungeon/wall_doorway", 1, "door"],
   puertallave: ["dungeon/wall_doorway", 1, "door"], puertasecreta: ["dungeon/wall_doorway", 1, "door"], rastrillo: ["dungeon/wall_doorway", 1, "door"], puertarunas: ["dungeon/wall_doorway", 1, "door"],
   estanteria: ["dungeon/shelf_large", 1], cofre: ["dungeon/chest", 1.1]
@@ -754,9 +754,10 @@ export function createBoard3D(host, opts) {
         if (A.mixer) { play(A, e.magic ? "Spellcast_Shoot" : "1H_Melee_Attack_Chop", true); setTimeout(() => { if (!A.down) play(A, "Idle"); }, 800); } else A.hitT = Math.max(A.hitT || 0, 0.35);
         sound.play(melee && !e.magic ? "whoosh" : e.magic ? "magic" : "twang");
         fxList.push(strike(scene, A.root.position.clone(), B.root.position.clone(), { melee, magic: e.magic, color: e.color, res: e.res,
-          onHit: () => { B.hitT = Math.max(B.hitT || 0, e.res === "crit" ? 1 : 0.7); if (e.res === "crit") sound.play("crit"); } }));
+          onHit: () => { B.hitT = Math.max(B.hitT || 0, e.res === "crit" ? 1 : 0.7); sound.play(e.res === "crit" ? "crit" : "hit"); } }));
+        if (e.res === "miss") setTimeout(() => { if (!disposed) sound.play("miss"); }, melee && !e.magic ? 170 : 400);
         setTimeout(() => { if (!disposed) say(); }, melee && !e.magic ? 180 : 420);
-      } else say();
+      } else { if (e.type === "save") sound.play(e.res === "save" ? "block" : "hit"); say(); }
     }, e.delay || 0);
   }
 

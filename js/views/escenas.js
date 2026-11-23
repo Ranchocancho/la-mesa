@@ -7,7 +7,7 @@ import { blankScene, exampleScenes } from "../data/escenas.js";
 import { loadScene } from "../core/mesa.js";
 import { createBoard, TERRAIN } from "./tablero.js";
 import { propEditorHTML, bindPropEditor } from "./propeditor.js";
-import { generateDungeon, generateRegion } from "../core/generador.js";
+import { generateDungeon, generateRegion, addRelief } from "../core/generador.js";
 import { openCreaturePicker } from "./criaturas.js";
 import { difficulty, difficultyHTML, partyOf } from "../core/encuentro.js";
 // Todas las criaturas de la escena, en todas sus plantas
@@ -48,7 +48,7 @@ function draw() {
         <h2 class="sec" style="margin:0">Nueva escena</h2>
         <label class="field">Nombre<input id="nsname" required placeholder="Asalto al almacén"></label>
         <label class="field">Lugar<select id="nsplace"><option value="">Biblioteca (sin lugar)</option>${s.world.places.map(p => `<option value="${p.id}">${esc(p.name)}</option>`).join("")}</select></label>
-        <label class="field">Suelo inicial<select id="nsfill"><option value="gen:dungeon">🎲 Mazmorra generada</option><option value="gen:cave">🕳 Cueva generada</option>${Object.entries(REGIONS).map(([k, v]) => `<option value="reg:${k}">${v.i} ${esc(v.n)} (generado)</option>`).join("")}<option value="vacio">Vacío (para dibujar salas)</option>${Object.entries(TERRAIN).filter(([, v]) => !v.wall).map(([k, v]) => `<option value="${k}">${v.n}</option>`).join("")}</select></label>
+        <label class="field">Suelo inicial<select id="nsfill"><option value="gen:dungeon">🎲 Mazmorra generada</option><option value="gen:cave">🕳 Cueva generada</option>${Object.entries(REGIONS).map(([k, v]) => `<option value="reg:${k}">${v.i} ${esc(v.n)} (generado)</option>`).join("")}<option value="vacio">Vacío (para dibujar salas)</option>${Object.entries(TERRAIN).filter(([, v]) => !v.wall).map(([k, v]) => `<option value="${k}">${v.n}</option>`).join("")}</select></label><label class="field" title="Lomas, riscos, tarimas y galerías con escaleras o rampas (se retocan con la herramienta de alturas)">Alturas<select id="nsrelief"><option value="0">Sin alturas</option><option value="1" selected>Algunas</option><option value="2">Muchas</option></select></label>
         <button class="btn gold small">Crear</button>
       </form>
     </aside>
@@ -88,8 +88,9 @@ function draw() {
     // La región del lugar decide las piezas del editor (y su luz y sonido)
     const pack = reg || (place ? regionPackOf(store.get(), place) : "");
     if (pack && REGIONS[pack]) Object.assign(sc, { region: pack, ambient: REGIONS[pack].light, sound: REGIONS[pack].sound });
-    if (reg) { const d = generateRegion(sc.cols, sc.rows, reg); sc.terrain = d.terrain; sc.props = d.props; sc.start = d.start; }
-    else if (gen) { const d = generateDungeon(sc.cols, sc.rows, { cave: fill === "gen:cave" }); sc.terrain = d.terrain; sc.props = d.props; sc.start = d.start; sc.ambient = "interior"; }
+    const relief = +(($("#nsrelief", el) || {}).value || 0);
+    if (reg) { const d = generateRegion(sc.cols, sc.rows, reg); sc.terrain = d.terrain; sc.props = d.props; sc.start = d.start; sc.elev = addRelief(d, sc.cols, sc.rows, relief, reg !== "enano"); }
+    else if (gen) { const d = generateDungeon(sc.cols, sc.rows, { cave: fill === "gen:cave" }); sc.terrain = d.terrain; sc.props = d.props; sc.start = d.start; sc.ambient = "interior"; sc.elev = addRelief(d, sc.cols, sc.rows, relief, false); }
     store.commit("board", st => st.scenes.push(sc));
     openId = sc.id; board = null; draw();
   };

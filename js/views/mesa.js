@@ -17,6 +17,7 @@ import { putImage, readImageFile } from "../core/images.js";
 import { SILUETAS } from "../data/siluetas.js";
 import { ESTADOS, estado, etiqueta } from "../data/estados.js";
 import { floatAt } from "./flotantes.js";
+import { diceAnim } from "../core/dados.js";
 import { PROPS } from "../data/mapas.js";
 import { reachMap, pathTo, moveHint } from "../core/movimiento.js";
 import { propEditorHTML, bindPropEditor } from "./propeditor.js";
@@ -36,7 +37,7 @@ import { spellDC } from "../core/salud.js";
 import { nowState } from "./ahora.js";
 import { armedNow, arm, togglePick, picked, clearPicks, onAim } from "../core/apuntar.js";
 import { hide, search, shove, shovePreview } from "../core/acciones.js";
-import { oaThreats, weaponTargeting, attackPreview, hitChance, dmgRange, templateCells, tokensIn, templateOk } from "../core/objetivo.js";
+import { oaThreats, oaThreatsAt, weaponTargeting, attackPreview, hitChance, dmgRange, templateCells, tokensIn, templateOk } from "../core/objetivo.js";
 import { npcArmedArea } from "./accionesnpc.js";
 import { colors, setColor, resetColors, onColors, COLOR_KEYS, DEFAULT_COLORS } from "../core/colores.js";
 import { floorIdx } from "../core/plantas.js";
@@ -124,7 +125,7 @@ export function mountTactical(host, opts = {}) {
           const o = before.get(t.id); if (!o || (o.c === t.c && o.r === t.r) || (t.conds || []).some(c => c.id === "destrabado")) continue;
           // Por el camino de verdad: provoca quien sale del alcance de un enemigo en cualquier punto del recorrido
           { const R0 = reachMap(s, { ...t, c: o.c, r: o.r, eco: { ...eco(s, t), from: o, mov: 0 } }, { dm: true }), path = R0 ? pathTo(R0, t.c, t.r) : [];
-            oaThreats(s, t, path.length > 1 ? path : [o, { c: t.c, r: t.r }]).forEach(by => oas.push({ by, target: t.id })); }
+            oaThreatsAt(s, t, path.length > 1 ? path : [o, { c: t.c, r: t.r }]).forEach(x => oas.push({ by: x.id, target: t.id, at: x.at })); }
         }
         // Quien se mueve deja de estar subido al objeto (si se mueve a otra casilla)
         for (const t of s.tokens) { const o = before.get(t.id); if (!o || (o.c === t.c && o.r === t.r)) continue; if ((t.conds || []).some(c => c.id === "encima")) t.conds = t.conds.filter(c => c.id !== "encima"); }
@@ -154,7 +155,7 @@ export function mountTactical(host, opts = {}) {
           hzs.push({ t: t.id, hz }); }
       });
       if (warn) toast(warn);
-      oas.forEach(o => offerOA(o.by, o.target));
+      oas.forEach(o => offerOA(o.by, o.target, o.at));
       traps.forEach(tr => triggerTrap(tr.p, [tr.t]));
       if (hzs.length) onEnter(hzs);
     },
@@ -456,6 +457,7 @@ export function mountTactical(host, opts = {}) {
       if (html !== actSig) { actSig = html; actHost.innerHTML = html; bindActs(actHost); bindKit(actHost, () => { actSig = ""; drawHud(); }, () => atkAdv);
         $$("[data-narm]", actHost).forEach(b => b.onclick = () => { const [tid, i] = b.dataset.narm.split("|"), A = armedNow(); arm(A && A.kind === "atk" && A.tok === tid && A.i === +i ? null : { kind: "atk", tok: tid, i: +i }); actSig = ""; drawHud(); });
         $$("details[data-nph]", actHost).forEach(d => d.ontoggle = () => { npcPh[d.dataset.nph] = d.open; });
+        $$("[data-npcshow]", actHost).forEach(b => b.onclick = () => import("../core/lore.js").then(m => { m.showEntry(b.dataset.npcshow); toast("Lo ven todos"); }));
         $$("[data-tkhide]", actHost).forEach(b => b.onclick = () => { store.commit("token", st => { const k = st.tokens.find(x => x.id === b.dataset.tkhide); if (k) k.hidden = !k.hidden; }); actSig = ""; drawHud(); });
         $$("[data-ndisarm]", actHost).forEach(b => b.onclick = () => { arm(null); actSig = ""; drawHud(); }); $$("[data-npc]", actHost).forEach(b => b.onclick = () => { npcId = b.dataset.npc; if (board) board.select(npcId); drawHud(); }); }
     }
@@ -542,28 +544,43 @@ export function mountTactical(host, opts = {}) {
   const screenOf = id => { if (bw.__screenOf) return bw.__screenOf(id); const g = bw.querySelector(`[data-tok="${id}"]`); if (!g) return null; const r = g.getBoundingClientRect(); return [r.left + r.width / 2, r.top]; };
   const snapOf = s => new Map(s.tokens.map(t => { const h = hpOf(s, t); return [t.id, { hp: h ? h.cur : null, conds: (t.conds || []).map(c => c.id), pc: t.kind === "pc" }]; }));
   let snap = snapOf(S()); const fbSeen = new Set(visibleRolls(S()).map(r => r.id + ":" + (r.status !== "pending")));
+  // Registro de combate en la mesa (como el de BG3): las últimas cosas que han pasado, en una línea cada una
+  const feedEl = document.createElement("div"); feedEl.className = "cfeed"; feedEl.setAttribute("aria-live", "polite"); $(".tactical", host).appendChild(feedEl);
+  const N0 = id => { const s = S(), t = s.tokens.find(x => x.id === id); if (!t) return "?"; if (!isDM(s) && unseenFn(s, false)(t)) return "Alguien"; return esc(String(nameOf(s, t)).split(" ")[0]); };
+  function feed(html, kind = "", delay = 0) {
+    setTimeout(() => { if (!host.isConnected) return;
+      const li = document.createElement("div"); li.className = "cf " + kind; li.innerHTML = html; feedEl.prepend(li);
+      while (feedEl.children.length > 5) feedEl.lastChild.remove();
+      setTimeout(() => li.classList.add("old"), 7000); setTimeout(() => li.remove(), 9000); }, delay);
+  }
   function feedback() {
     const s = S(), now = snapOf(s);
     for (const [id, v] of now) {
       const o = snap.get(id), p = o && screenOf(id); if (!p) continue;
       if (o.hp != null && v.hp != null && v.hp !== o.hp) {
         const d = v.hp - o.hp; floatAt(p[0], p[1], d < 0 ? `−${-d}` : `+${d}`, d < 0 ? "dmg" : "heal", { big: Math.abs(d) >= 15 });
-        if (v.hp === 0 && o.hp > 0) floatAt(p[0], p[1], v.pc ? "Inconsciente" : "¡Cae!", "down", { delay: 450 });
+        feed(`${N0(id)} ${d < 0 ? `recibe <b>${-d}</b> de daño` : `recupera <b>${d}</b> PG`}`, d < 0 ? "dmg" : "heal", 0);
+        if (d > 0) import("../core/sonido.js").then(m => m.sound.play("heal"));
+        if (v.hp === 0 && o.hp > 0) { floatAt(p[0], p[1], v.pc ? "Inconsciente" : "¡Cae!", "down", { delay: 450 }); feed(`💀 ${N0(id)} ${v.pc ? "cae inconsciente" : "cae"}`, "down", 450); import("../core/sonido.js").then(m => m.sound.play("down")); }
       }
-      v.conds.filter(c => !o.conds.includes(c)).forEach((c, i) => { const e = estado(c); if (e) floatAt(p[0], p[1] - 26, "+ " + e.n, "cond", { color: e.c, delay: 300 + i * 250 }); });
+      v.conds.filter(c => !o.conds.includes(c)).forEach((c, i) => { const e = estado(c); if (e) { floatAt(p[0], p[1] - 26, "+ " + e.n, "cond", { color: e.c, delay: 300 + i * 250 }); if (!["encima", "concentracion", "destrabado"].includes(c)) feed(`${e.i || ""} ${N0(id)}: <b style="color:${e.c}">${esc(e.n)}</b>`, "cond", 300); } });
       o.conds.filter(c => !v.conds.includes(c)).forEach((c, i) => { const e = estado(c); if (e) floatAt(p[0], p[1] - 26, "− " + e.n, "cond", { color: e.c, delay: 300 + i * 250 }); });
     }
     snap = now;
     for (const r of visibleRolls(s)) {
       const key = r.id + ":" + (r.status !== "pending"); if (fbSeen.has(key)) continue; fbSeen.add(key);
-      const wait = r.dice && r.dice.length && r.status === "pending" ? 2600 : r.dice && r.dice.length && !fbSeen.has(r.id + ":false") ? 2600 : 0;
-      if (r.kind === "attack" && r.target && r.result && (r.status !== "pending" || isDM(s))) {
-        const p = screenOf(r.target); if (p) floatAt(p[0], p[1], r.result === "crit" ? "¡Crítico!" : r.result === "miss" ? "Fallo" : "Impacto", r.result === "crit" ? "crit" : r.result === "miss" ? "miss" : "hit", { delay: wait });
-      }
+      const DW = diceAnim() === "off" ? 0 : diceAnim() === "fast" ? 1200 : 2600; // lo que tardan los dados en caer
+      const wait = r.dice && r.dice.length && r.status === "pending" ? DW : r.dice && r.dice.length && !fbSeen.has(r.id + ":false") ? DW : 0;
+      // El golpe (tajo, flecha, «¡Impacto!») lo anima la mesa; aquí va al registro de combate
+      if (r.kind === "attack" && r.target && r.result) feed(`${N0(r.tok)} → ${N0(r.target)}: ${r.result === "crit" ? "¡CRÍTICO!" : r.result === "miss" ? "falla" : "impacta"}${r.wname ? ` <em>${esc(String(r.wname).replace(/^\S+\s(?=\p{L})/u, ""))}</em>` : ""}`, r.result, wait);
       // Empujón: se cuenta desde quien empuja («¡Derribado!» / «Resiste»), que es lo que importa en la mesa
       if (r.kind === "save" && r.tok && r.result && r.apply && r.apply.type === "shove") { const p = screenOf(r.tok); if (p) floatAt(p[0], p[1], r.result === "fail" ? (r.apply.mode === "prone" ? "¡Derribado!" : "¡Apartado!") : "Resiste el empujón", r.result === "fail" ? "crit" : "miss", { delay: wait, big: r.result === "fail" }); }
-      else if (r.kind === "save" && r.tok && r.result) { const p = screenOf(r.tok); if (p) floatAt(p[0], p[1], r.result === "save" ? "✓ Salva" : "✗ Falla", r.result === "save" ? "save" : "fail", { delay: wait }); }
-      if (r.saves && r.status === "pending") r.saves.forEach(sv => { if (sv.auto) return; const p = screenOf(sv.t); if (p) floatAt(p[0], p[1], sv.ok ? "✓ Salva" : "✗ Falla", sv.ok ? "save" : "fail", { delay: wait }); });
+      else if (r.kind === "save" && r.tok && r.result && r.dc != null) feed(`${N0(r.tok)} ${r.result === "save" ? "supera" : "falla"} la salvación (CD ${r.dc})`, r.result === "save" ? "save" : "fail", wait);
+      if (r.saves && r.status === "pending" && r.spell) feed(`${N0(r.tok)} lanza <em>${esc(r.spell)}</em>: ${r.saves.map(sv => `${N0(sv.t)} ${sv.auto ? "" : sv.ok ? "✓" : "✗"}`).join(", ")}`, "magic", wait);
+      if (r.apply && r.apply.type === "shove" && r.result) feed(`${N0(r.apply.target)} ${r.result === "fail" ? (r.apply.mode === "prone" ? "queda derribado" : "es apartado") : "resiste el empujón"}`, r.result === "fail" ? "hit" : "miss", wait);
+      if (r.kind === "rxuse") feed(`⚡ ${esc(r.label)}`, "react", 0);
+      if (r.kind === "react" && r.status === "pending") { const t = s.tokens.find(x => x.id === r.tok); if (t && t.owner && t.owner === me()) import("../core/sonido.js").then(m => m.sound.play("alert")); }
+      if (r.kind === "oa" && r.status === "pending") { feed(`⚠ ${N0(r.target)} sale del alcance de ${N0(r.tok)}`, "react", 0); const t = s.tokens.find(x => x.id === r.tok); if ((t && t.owner === me()) || (isDM(s) && t && !t.owner)) import("../core/sonido.js").then(m => m.sound.play("alert")); }
       if (r.kind === "oa" && r.status === "pending") { const p = screenOf(r.tok); if (p) floatAt(p[0], p[1], "¡Oportunidad!", "crit"); }
       if (r.kind === "death" && r.result) { const p = screenOf(r.tok); if (p) floatAt(p[0], p[1], r.result === "save" ? "✓ Resiste" : "✗ Se apaga", r.result === "save" ? "save" : "fail", { delay: wait }); }
     }
@@ -679,7 +696,10 @@ function npcCard(s, t, turn, canPick) {
   const weapons = why => `<div class="fweap npcw">${atks.map((w, i) => `<button class="fw ${A && A.kind === "atk" && A.tok === t.id && A.i === i ? "armed" : ""}" data-narm="${t.id}|${i}" ${why ? `disabled title="${esc(why)}"` : ""}><b>${esc(w.name)}</b><span>${w.atk >= 0 ? "+" : ""}${w.atk} · ${esc(w.expr)}</span><small>${esc(w.type || "")} · ${w.rng.ranged ? `${w.rng.n}/${w.rng.l} m` : `${w.rng.l} m`}</small></button>`).join("") || `<p class="note" style="margin:0">Sin ataques: añádelos en «Editar».</p>`}</div>
     ${A && A.kind === "atk" && A.tok === t.id ? `<div class="farmed">🎯 Toca al objetivo en la mesa <span><button class="ib ${atkAdv === 1 ? "gold" : ""}" data-atkadv="1">Ventaja</button><button class="ib ${atkAdv === -1 ? "gold" : ""}" data-atkadv="-1">Desv.</button><button class="ib" data-ndisarm>✕</button></span></div>` : ""}`;
   const fx = canPick && !kit && !(live && !turn) ? `<details class="castbox"><summary title="Solo dibuja el efecto en la mesa: no tira dados ni aplica daño">✨ Efecto visual (sin reglas)</summary><div class="castlist">${Object.entries(EFECTOS).map(([k, x]) => `<button class="btn small" data-cast="${t.id}|${k}" title="${x.hint || ""}">${x.n}</button>`).join("")}</div></details>` : "";
-  const more = `<div class="npcmore">${kitRest(t)}${fx}<details class="tkdetails" ${editOpen ? "open" : ""}><summary>✎ Editar</summary>${tokenEditor(t)}</details></div>`;
+  // PNJ del Lore: su ficha y mostrar su retrato a los jugadores (para el rol, sin combate)
+  const loreE = t.npc && (s.lore || []).find(x => x.id === t.npc);
+  const loreRow = loreE ? `<div class="row npclore"><a class="btn small" href="#lore/${loreE.id}">📖 Su ficha en el Lore</a><button class="btn small" data-npcshow="${loreE.id}" title="Sale en grande en la pantalla de todos (lo que saben de él)">👁 Mostrar a los jugadores</button></div>` : "";
+  const more = `<div class="npcmore">${loreRow}${kitRest(t)}${fx}<details class="tkdetails" ${editOpen ? "open" : ""}><summary>✎ Editar</summary>${tokenEditor(t)}</details></div>`;
   // Con la barra de abajo, aquí solo queda la consulta: vida, estados, defensas, editar
   if (barOn(s)) return `<div class="npcc">${head}<p class="fbarnote">⬇ Sus acciones están en la barra de abajo, sobre la mesa.</p>${more}</div>`;
   // Fuera de combate: todo a la vista
@@ -816,11 +836,11 @@ export function bindTokenEditor(root, mutate) {
 }
 
 /** Avisa en la mesa de un ataque de oportunidad posible: lo decide quien controla al atacante (o el máster). */
-function offerOA(byId, targetId) {
+function offerOA(byId, targetId, at = null) {
   const s = store.get(), h = s.tokens.find(t => t.id === byId), t = s.tokens.find(x => x.id === targetId), u = currentUser(s) || {};
   if (!h || !t) return;
   store.commit("roll", st => { st.rolls = st.rolls || []; st.rolls.push({ id: "oa" + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), at: Date.now(), who: u.id || null, whoName: u.name || "", kind: "oa",
-    label: `${nameOf(s, t)} sale del alcance de ${nameOf(s, h)}: ataque de oportunidad`, expr: "", dice: [], total: null, nat: null, tok: h.id, target: t.id, status: "pending", secret: false, seq: s.board ? s.board.seq : null }); });
+    label: `${nameOf(s, t)} sale del alcance de ${nameOf(s, h)}: ataque de oportunidad`, expr: "", dice: [], total: null, nat: null, tok: h.id, target: t.id, oaAt: at || null, status: "pending", secret: false, seq: s.board ? s.board.seq : null }); });
 }
 /** Sin objetivo elegido: una pista mínima (la ficha completa ya está en la columna de la derecha). */
 function atkOnly(s, t) { return s.board && s.board.turn === t.id ? `<p class="note hudhint">⚔️ Toca a un enemigo para atacarlo o lanzarle un conjuro.</p>` : ""; }

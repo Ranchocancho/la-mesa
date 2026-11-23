@@ -182,3 +182,37 @@ export function generateRegion(cols, rows, region) {
   for (let i = 0; i < cols && !free(start.c, start.r); i++) start = { c: start.c + 1, r: start.r };
   return { terrain: T, props, start };
 }
+
+/* ---------- Relieve (alturas) para los mapas generados ----------
+   level: 0 sin alturas · 1 algunas · 2 muchas. Interior (mazmorra, cueva): tarimas de 1,5 m y galerías de 3 m
+   con escaleras; exterior (regiones): lomas de 3 m con su ladera de 1,5 m alrededor (se suben trepando poco a
+   poco, SRD «Trepar») y algún risco con rampa. Todo se retoca luego con la herramienta de alturas. */
+const BLOCKED = /^(muro|empalizada|muralla|murocaido|murorunas|muroroca|veta|seto|vacio|abismo|agua|aguaprof|lava|brea|pasarela)/;
+export function addRelief(d, cols, rows, level = 1, outdoor = false) {
+  const elev = {}; if (!level) return elev;
+  const T = d.terrain || {}, props = d.props || [];
+  const ok = (c, r) => c >= 0 && r >= 0 && c < cols && r < rows && T[key(c, r)] && !BLOCKED.test(T[key(c, r)]);
+  const start = d.start || { c: -9, r: -9 };
+  const nearStart = (c, r) => Math.max(Math.abs(c - start.c), Math.abs(r - start.r)) <= 2;
+  const n = level === 1 ? 1 + rint(2) : 3 + rint(2);
+  for (let i = 0, tries = 0; i < n && tries < 200; tries++) {
+    const cc = 2 + rint(Math.max(1, cols - 4)), rr = 2 + rint(Math.max(1, rows - 4));
+    if (!ok(cc, rr) || nearStart(cc, rr) || elev[key(cc, rr)]) continue;
+    const R = outdoor ? 1.5 + Math.random() * 1.6 : 0.8 + Math.random() * 1.2, h = outdoor ? (Math.random() < 0.65 ? 3 : 1.5) : (Math.random() < 0.6 ? 1.5 : 3);
+    const cells = [];
+    for (let r = rr - 4; r <= rr + 4; r++) for (let c = cc - 4; c <= cc + 4; c++) if (ok(c, r) && !nearStart(c, r) && Math.hypot(c - cc, r - rr) <= R + (outdoor ? Math.random() * 0.6 : 0)) cells.push([c, r]);
+    if (cells.length < 3) continue;
+    cells.forEach(([c, r]) => { elev[key(c, r)] = h; });
+    // Exterior: ladera de 1,5 m alrededor de las lomas de 3 m
+    if (outdoor && h >= 3) cells.forEach(([c, r]) => { for (let dr = -1; dr <= 1; dr++) for (let dc = -1; dc <= 1; dc++) { const k2 = key(c + dc, r + dr); if (!elev[k2] && ok(c + dc, r + dr) && !nearStart(c + dc, r + dr)) elev[k2] = h - 1.5; } });
+    // Escaleras (interior) o rampa (exterior) en un borde, para subir andando
+    if (!outdoor || h >= 3 && Math.random() < 0.5) {
+      const edges = cells.filter(([c, r]) => [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dc, dr]) => ok(c + dc, r + dr) && !elev[key(c + dc, r + dr)]));
+      const edge = edges.find(([c, r]) => !props.some(p => p.c === c && p.r === r)) || edges[0];
+      if (edge) props.push({ id: pid(), c: edge[0], r: edge[1], k: outdoor ? "rampa" : "escaleras", rot: 0 });
+    }
+    i++;
+  }
+  if (Object.keys(elev).length) props.push({ id: pid(), c: 1, r: 1, k: "nota", rot: 0, hidden: true, label: `Relieve generado: ${outdoor ? "lomas y riscos" : "tarimas y galerías"}. Subir cuesta trepar (SRD: 1 m más por metro) salvo por ${outdoor ? "las rampas" : "las escaleras"}; desde arriba se ve más y hay cobertura.` });
+  return elev;
+}

@@ -792,3 +792,21 @@ En combate, el jugador juega su turno desde una **barra abajo, sobre la mesa** (
 - Fuera de la barra lo que no es de combate (Estudiar, Influir, Preparar una acción, Utilizar): se hacen como pruebas desde la ficha.
 - La fase del turno solo con símbolos, como BG3: ● acción, ▲ acción adicional, barra de movimiento, ◆ reacción y los espacios de conjuro.
 - **Solo juega quien está en la escena**: en una escena táctica, un jugador cuyo personaje no está en la mesa ve la mesa pero no tiene barra, ni dados, ni pruebas («no está en esta escena»). El «Ver como» del máster y «Pedir una tirada» solo ofrecen a los personajes que están en la mesa.
+
+## Hito 60 · Ataques de oportunidad que sí golpean
+- El ataque de oportunidad se resuelve en la casilla desde la que la criatura sale del alcance (justo antes de salir, como dicen las reglas), no donde acaba su movimiento. Antes se comprobaba el alcance con la posición final y nunca llegaba a pegar.
+
+## Hito 61 · Alturas en los mapas generados y feedback de los ataques
+- **Generadores con relieve**: en ⚙ Mapa del editor y al crear una escena se elige «Alturas: sin / algunas / muchas». Interior (mazmorra, cueva): tarimas de 1,5 m y galerías de 3 m con 🪜 escaleras. Exterior (regiones): lomas de 3 m con ladera de 1,5 m y algún risco con ⛰️ rampa (nueva pieza). Deja una nota oculta para el máster. Se retoca con la herramienta de alturas.
+- **Registro de combate en la mesa** (arriba a la izquierda, como el de BG3): «Guerrero → Brena: impacta · Cimitarra», «Brena recibe 7 de daño», «⤵ Goblin: Derribado», «Goblin resiste el empujón», salvaciones de conjuros, reacciones usadas, quién cae. Cada línea se desvanece a los pocos segundos. Respeta lo que no se ve (sale «Alguien»).
+- **Sonidos**: el golpe se oye al salir (tajo, cuerda de arco, magia) y al llegar (impacto, crítico o fallo); salvación superada (choque metálico) o fallada; curación; alguien cae; y un aviso de dos notas cuando te toca decidir una reacción. En 2D también (antes solo sonaba en 3D).
+- Sin textos duplicados: el «¡Impacto!» lo anima la mesa una sola vez; el empujón se cuenta desde quien empuja.
+
+## Hito 62 · PNJ del Lore con ficha de combate
+- **Un PNJ es una ficha del Lore**: historia (nombre, papel, lugar, estado, actitud, retrato, lo que saben los jugadores y los secretos) y, para el máster, una **«⚔ Ficha de combate»**.
+- **Plantillas del SRD** para empezar: plebeyo, bandido, capitán bandido, pendenciero y su jefe, guardia y su capitán, guerreros, batidor, berserker, gladiador, caballero, noble, espía, asesino, piratas, sacerdotes, sectarios, druida, mago, archimago, siervo de vampiro y goblinoides (goblins, hobgoblins, kobold, gnoll, osgos). O **desde cero**.
+- Todo se cambia: CA, PG (máximos y actuales), velocidad, tamaño, VD (da la competencia), características y salvaciones competentes, ataques (de las armas del equipo, calculados con las reglas, o propios), ataque múltiple, conjuros del compendio con sus usos (a voluntad, 1/día…), y acciones o rasgos de texto (acción, adicional o reacción). Lo que no viene de la plantilla es regla de campaña.
+- **«Disponible en la mesa»**: el botón 👹 de la mesa tiene la pestaña **📖 Mis PNJ** para ponerlos (hostil = enemigo; aliado o neutral = PNJ). También «Poner en la mesa ahora» desde su ficha.
+- **Recurrentes**: lo que le pasa en la mesa vuelve al Lore (PG que le quedan; herido o muerto). Los muertos ya no salen en la lista.
+- En la mesa, su ficha en «Táctica» enlaza al Lore y tiene **«👁 Mostrar a los jugadores»** (para las escenas de rol, sin combate: un mapa sin iniciar combate ya es una escena de rol).
+- La ficha de combate se guarda con los secretos del máster: los jugadores no ven sus números.

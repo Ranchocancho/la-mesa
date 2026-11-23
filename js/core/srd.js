@@ -25,6 +25,10 @@ export function monsterToken(m, c, r) {
   // «Mediano o Pequeño» es Mediano (la figura no debe encogerse)
   const size = /Enorme/.test(m.tipo) ? 2.4 : /Gargantu/.test(m.tipo) ? 3 : /Grande/.test(m.tipo) ? 1.6 : /Mediano/.test(m.tipo) ? 1 : /Pequeñ|Diminut/.test(m.tipo) ? 0.7 : 1;
   const xp = m.xp != null ? m.xp : XP_BY_CR[m.vd];
+  // PNJ del Lore (pnj.js): lleva su ficha de combate (acciones y características) y el enlace a su entrada
+  if (m.npc) return { id: "t" + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), kind: m.kind || "npc", name: m.n, srd: m.srd || null, npc: m.npc, kit: m.kit, ab: m.ab, c, r,
+    hp: m.pg, maxhp: m.pgMax || m.pg, ac: m.ca, initBonus: parseInt(m.ini) || 0, size: m.size || 1, color: m.color || "#3d4f8a", vd: m.vd, ...(m.img ? { portrait: m.img } : {}), speed: parseFloat(String(m.vel).replace(",", ".")) || 9,
+    attacks: (m.atk || []).map(a => ({ name: a.name, atk: a.atk, dmg: a.dmg, rng: a.rng })) };
   return { id: "t" + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), kind: "foe", name: m.n, srd: m.n, c, r, hp: m.pg, maxhp: m.pg, ac: m.ca,
     initBonus: parseInt(m.ini) || 0, size, color: "#7a2a22", vd: m.vd, ...(xp != null ? { xp } : {}), ...(m.img ? { portrait: m.img } : {}), speed: parseFloat(String(m.vel).replace(",", ".")) || 9, attacks: m.atk.map(a => ({ name: a.name, atk: a.atk, dmg: a.dmg, rng: a.rng })) };
 }

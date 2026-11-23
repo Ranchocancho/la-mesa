@@ -90,7 +90,9 @@ export { dist, eco };
 
 /** Ataques de oportunidad que provocaría moverse por este camino (SRD): sales del alcance de un enemigo que te ve,
  *  que puede reaccionar y que tiene un ataque cuerpo a cuerpo. Destrabarse, o estar oculto (invisible), lo evita. */
-export function oaThreats(s, t, path) {
+export const oaThreats = (s, t, path) => oaThreatsAt(s, t, path).map(x => x.id);
+/** Igual, con la casilla desde la que sale del alcance (el ataque de oportunidad se hace justo ANTES de que salga). */
+export function oaThreatsAt(s, t, path) {
   if (!path || path.length < 2 || !s.board) return [];
   if ((t.conds || []).some(c => c.id === "destrabado" || c.id === "invisible")) return [];
   const out = [];
@@ -101,7 +103,7 @@ export function oaThreats(s, t, path) {
     if (phase(s) === "live" && eco(s, h).react) continue;
     const melee = attacksOf(s, h).filter(w => !w.rng || !w.rng.ranged || w.rng.melee); if (!melee.length) continue;
     const reach = Math.max(1, ...melee.map(w => Math.round(((w.rng && w.rng.n) || 1.5) / 1.5)));
-    for (let i = 1; i < path.length; i++) if (gap(path[i - 1], h) <= reach && gap(path[i], h) > reach) { out.push(h.id); break; }
+    for (let i = 1; i < path.length; i++) if (gap(path[i - 1], h) <= reach && gap(path[i], h) > reach) { out.push({ id: h.id, at: { c: path[i - 1].c, r: path[i - 1].r } }); break; }
   }
   return out;
 }

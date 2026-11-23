@@ -31,7 +31,7 @@ export function combatEvents(s = store.get()) {
     if (r.kind === "attack" && r.tok && r.target && r.result) out.push({ ...base, type: "atk", to: r.target, res: r.result });
     else if (r.kind === "spell" && Array.isArray(r.saves) && r.saves.length) {
       r.saves.forEach((sv, i) => out.push({ ...base, id: r.id + ":" + i, type: sv.auto ? "atk" : "save", to: sv.t, res: sv.auto ? "hit" : sv.ok ? "save" : "fail", magic: true, delay: base.delay + i * 120 }));
-    } else if (r.kind === "save" && r.dc != null && r.tok && r.result) out.push({ ...base, type: "save", from: null, to: r.tok, res: r.result });
+    } else if (r.kind === "save" && r.dc != null && r.tok && r.result && !(r.apply && r.apply.type === "shove")) out.push({ ...base, type: "save", from: null, to: r.tok, res: r.result });
   }
   primed = true;
   return out;

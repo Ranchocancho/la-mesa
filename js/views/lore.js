@@ -1,6 +1,7 @@
 // Lore: el libro de campaña. El máster crea y edita lugares (región › ciudad › distrito › localización),
 // personajes, facciones, eventos, galería, notas, la preparación de la sesión y las sesiones jugadas.
 // Los jugadores ven lo mismo, pero solo lo que se les ha revelado y sin secretos.
+import { combatHTML, bindCombat } from "./pnjficha.js";
 import { store, uid } from "../core/store.js";
 import { isDM, currentUser } from "../core/session.js";
 import { LORE, EVENT_TYPES, EVENT_STATUS, PLACE_KINDS, loreOf, entry, placeOf, canSee, refName, related, placePath, childrenOf, descendants,
@@ -204,6 +205,7 @@ function entryPage(s, e, dm) {
       ${tools}
       ${e.kind === "note" || e.kind === "chapter" ? (dm ? `<label class="lsecret solo"><span>${e.kind === "chapter" ? "Qué preparar: material, descripciones, ideas" : "Apuntes"}</span><textarea data-ef="secret" rows="8">${esc(e.secret || "")}</textarea></label>` : "")
         : twoCols(dm, e.summary, e.secret, "ef", e.kind === "event" ? "Lo que ven los jugadores cuando ocurre" : "Descripción pública")}
+      ${e.kind === "npc" && dm ? combatHTML(s, e) : ""}
       ${e.kind === "event" ? (dm ? `<label class="lpub"><span>Acciones posibles (una por línea)</span><textarea data-ef="actions" rows="4">${esc(e.actions || "")}</textarea></label>` : "") : ""}
       ${relHTML}
       ${dm ? `<div class="row ldanger"><button class="btn small danger" data-del>Eliminar</button></div>` : ""}
@@ -310,6 +312,7 @@ function bindPage(s, t, dm) {
     catch (err) { toast("No se pudo cargar la imagen. Prueba con un JPG o PNG."); }
   };
   const ni = $("[data-noimg]", el); if (ni) ni.onclick = () => setEntry(e.id, { img: null });
+  if (e.kind === "npc") bindCombat(el, e, () => draw());
   confirmBtn($("[data-del]", el), () => { const k = e.kind, pl = e.place; removeEntry(e.id); go(pl ? pl : "s:" + k); });
 }
 function confirmBtn(b, fn) { if (b) b.onclick = () => { if (!b.dataset.sure) { b.dataset.sure = 1; b.textContent = "Pulsa otra vez para confirmar"; return; } fn(); }; }

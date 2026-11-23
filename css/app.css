@@ -2374,3 +2374,33 @@ body:has(.tactical.withbar) #toast{bottom:140px}
 .hotbar .hbres .hbr i{width:15px;height:15px}
 .hotbar .hbres .hbr{padding:0 4px;gap:3px}
 .pl-dice[hidden]{display:none!important}
+/* Hito 61: registro de combate en la mesa (como BG3) */
+.cfeed{position:absolute;left:12px;top:78px;z-index:9;display:flex;flex-direction:column;gap:3px;width:min(340px,40%);pointer-events:none}
+.cf{font-size:12.5px;line-height:1.3;color:#efe4cc;background:rgba(12,9,7,.86);border-left:3px solid #9fb3c8;border-radius:0 8px 8px 0;padding:3px 9px;box-shadow:0 3px 10px rgba(0,0,0,.4);animation:cfin .25s ease both;transition:opacity 1.6s}
+.cf.old{opacity:0}
+.cf em{color:#d8c79c;font-style:normal}.cf b{color:#fff}
+.cf.hit{border-left-color:#ffb15a}.cf.crit{border-left-color:#ffd65a;background:rgba(60,44,8,.92)}.cf.miss{border-left-color:#8a8378;color:#cfc6b6}
+.cf.dmg{border-left-color:#e0452f}.cf.heal{border-left-color:#5fd35a}.cf.down{border-left-color:#000;background:rgba(70,10,10,.92)}
+.cf.save{border-left-color:#7fb6e8}.cf.fail{border-left-color:#ff8a6a}.cf.cond{border-left-color:#c9a0ff}.cf.react{border-left-color:#b07cf0}.cf.magic{border-left-color:#7da0ff}
+@keyframes cfin{from{opacity:0;transform:translateX(-12px)}to{opacity:1;transform:none}}
+/* Hito 62: ficha de combate de los PNJ del Lore */
+.pcomb{margin:14px 0;padding:12px 14px;border:1px solid rgba(214,170,78,.35);border-radius:12px;background:rgba(0,0,0,.18)}
+.pcomb h3 small{font-family:Georgia,serif;font-size:12px;color:var(--tenue);margin-left:6px}
+.pcomb h4{margin:12px 0 6px;font-family:var(--display);color:var(--oro);font-size:14px;display:flex;align-items:center;gap:10px}
+.pcomb h4 small,.pcmulti{font-family:Georgia,serif;font-size:12px;color:var(--hueso)}
+.pcomb .row{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.pcomb input,.pcomb select{font-size:13px}
+.pcomb .sm{width:64px}
+.pcstats{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+.pcstats label{display:flex;flex-direction:column;font-size:11px;color:var(--tenue);gap:2px}
+.pcstats input{width:80px}
+.pcab{display:grid;grid-template-columns:repeat(6,minmax(70px,1fr));gap:6px;margin-top:8px}
+.pcab label{display:flex;flex-direction:column;align-items:center;gap:2px;padding:6px 4px;border:1px solid var(--linea);border-radius:8px;background:rgba(0,0,0,.2)}
+.pcab span{font:700 11px var(--display);color:var(--oro)}.pcab input[type=number]{width:52px;text-align:center}.pcab small{font-size:10px;color:var(--tenue)}
+.pcab .pcsv{font:400 10px system-ui,sans-serif;color:var(--tenue);display:flex;align-items:center;gap:2px}
+.pcatk{display:grid;grid-template-columns:1.3fr 64px 1.6fr 90px auto;gap:6px;margin-bottom:5px}
+.pcfreq{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:5px}.pcfreq i{font-size:12px;color:var(--tenue);min-width:80px}
+.pcact{padding:6px 8px;border:1px solid var(--linea);border-radius:8px;margin-bottom:5px}.pcact p{margin:3px 0 0;font-size:12.5px;color:#d8ccb4}.pcact .ib{float:right}
+.cptabs{display:flex;gap:6px;padding:0 14px 8px}.cptabs button{padding:5px 12px;border-radius:999px;border:1px solid var(--linea);background:transparent;color:var(--hueso);cursor:pointer}
+.cptabs button[aria-pressed="true"]{background:#3a2c17;border-color:var(--oro);color:var(--oro)}
+.npclore{margin:6px 0;gap:6px;display:flex;flex-wrap:wrap}

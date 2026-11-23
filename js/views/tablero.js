@@ -14,7 +14,8 @@ import { store } from "../core/store.js";
 import { leftOf } from "../core/duraciones.js";
 import { TERRAIN, TERRAIN_CATS, PROPS, PROP_CATS, REGIONS, inRegion, isDoor, isWallT, propVisible } from "../data/mapas.js";
 import { terrainURL } from "./texturas.js";
-import { generateDungeon, generateRegion } from "../core/generador.js";
+import { generateDungeon, generateRegion, addRelief } from "../core/generador.js";
+import { sound } from "../core/sonido.js";
 import { pathTo, moveHint } from "../core/movimiento.js";
 import { RES_TEXT, RES_COLOR } from "../core/golpes.js";
 export { TERRAIN, PROPS };
@@ -121,10 +122,12 @@ export function createBoard(host, opts) {
       ${E.more ? `<div class="mpal"><div class="row">Región <select data-region aria-label="Región de la escena"><option value="">Sin región</option>${Object.entries(REGIONS).map(([k, v]) => `<option value="${k}" ${reg === k ? "selected" : ""}>${v.i} ${v.n}</option>`).join("")}</select>${!reg && opts.suggestRegion && opts.suggestRegion() ? `<button class="btn small" data-region-sugg="${opts.suggestRegion()}">Usar la del lugar: ${REGIONS[opts.suggestRegion()].n.split(":")[0]}</button>` : ""}</div>
         <div class="row">Peligros <label title="Regla de campaña: el SRD no trae la lava">daño de la lava <input id="mlava" value="${esc(g.lavaDmg || "")}" placeholder="p. ej. 6d10" style="width:72px"></label><label title="SRD «Caídas»: 1d6 por cada 3 m">altura del abismo (m) <input type="number" id="mfall" min="1" max="120" value="${g.fallH || 3}"></label></div>
         <div class="row">Tamaño <label>ancho <input type="number" min="6" max="60" id="mcols" value="${g.cols}"></label><label>alto <input type="number" min="6" max="60" id="mrows" value="${g.rows}"></label><button class="btn small" data-act="resize">Aplicar</button></div>
+        <div class="row" title="Lomas, riscos, tarimas y galerías con escaleras o rampas al generar">Alturas ${[[0, "Sin"], [1, "Algunas"], [2, "Muchas"]].map(([v, n]) => `<button class="btn small" data-relief="${v}" aria-pressed="${(E.relief ?? 1) === v}">${n}</button>`).join("")}</div>
         <div class="row"><button class="btn small gold" data-act="gen">🎲 Generar mazmorra</button><button class="btn small" data-act="gencave">🕳 Generar cueva</button>${reg ? `<button class="btn small gold" data-act="genreg">${REGIONS[reg].i} Generar ${REGIONS[reg].n.split(":")[0].toLowerCase()}</button>` : ""}<button class="btn small" data-act="fill">Rellenar todo con el pincel</button></div>
         <p class="hint">Generar sustituye el mapa actual (se puede deshacer).</p></div>` : ""}
       <div class="mpal">${pal}</div>`;
     t.querySelectorAll("[data-tool]").forEach(b => b.onclick = () => { const was = E.tool; E.tool = b.dataset.tool; if (E.tool === "foe" && was !== "foe" && !E.foePick) setTimeout(pickCreature); if (E.tool !== "move") selectProp(null); tools(); if ((was === "height") !== (E.tool === "height")) render(); });
+    t.querySelectorAll("[data-relief]").forEach(b => b.onclick = () => { E.relief = +b.dataset.relief; tools(); });
     t.querySelectorAll("[data-brush]").forEach(b => b.onclick = () => { E.brush = b.dataset.brush; tools(); });
     t.querySelectorAll("[data-floor]").forEach(b => b.onclick = () => { E.floor = b.dataset.floor; tools(); });
     t.querySelectorAll("[data-wallt]").forEach(b => b.onclick = () => { E.wall = b.dataset.wallt; tools(); });
@@ -149,8 +152,8 @@ export function createBoard(host, opts) {
       else if (a === "resize") { const c = Math.max(6, Math.min(60, +t.querySelector("#mcols").value || g.cols)), r = Math.max(6, Math.min(60, +t.querySelector("#mrows").value || g.rows));
         edit(mm => { mm.grid.cols = c; mm.grid.rows = r; mm.grid.props = (mm.grid.props || []).filter(p => p.c < c && p.r < r); for (const k of Object.keys(mm.grid.terrain || {})) { const [x, y] = k.split(",").map(Number); if (x >= c || y >= r) delete mm.grid.terrain[k]; }
           for (let y = 0; y < r; y++) for (let x = 0; x < c; x++) if (!mm.grid.terrain[key(x, y)]) mm.grid.terrain[key(x, y)] = E.brush; mm.tokens.forEach(k => { k.c = Math.min(k.c, c - 1); k.r = Math.min(k.r, r - 1); }); }); fit(); }
-      else if (a === "gen" || a === "gencave") edit(mm => { const d = generateDungeon(mm.grid.cols, mm.grid.rows, { cave: a === "gencave", floor: E.floor, wall: a === "gencave" ? "muroroca" : E.wall }); mm.grid.terrain = d.terrain; mm.grid.props = d.props; if (d.start) mm.grid.start = d.start; mm.tokens.splice(0, mm.tokens.length, ...mm.tokens.filter(k => d.terrain[key(k.c, k.r)] && !isWallT(d.terrain[key(k.c, k.r)]))); if (opts.onStart && d.start) opts.onStart(d.start); })
-      else if (a === "genreg") edit(mm => { const d = generateRegion(mm.grid.cols, mm.grid.rows, mm.grid.region); mm.grid.terrain = d.terrain; mm.grid.props = d.props; if (d.start) mm.grid.start = d.start; mm.tokens.splice(0, mm.tokens.length, ...mm.tokens.filter(k => d.terrain[key(k.c, k.r)] && !isWallT(d.terrain[key(k.c, k.r)]))); if (opts.onStart && d.start) opts.onStart(d.start); })
+      else if (a === "gen" || a === "gencave") edit(mm => { const d = generateDungeon(mm.grid.cols, mm.grid.rows, { cave: a === "gencave", floor: E.floor, wall: a === "gencave" ? "muroroca" : E.wall }); mm.grid.terrain = d.terrain; mm.grid.props = d.props; mm.grid.elev = addRelief(d, mm.grid.cols, mm.grid.rows, E.relief ?? 1, false); if (d.start) mm.grid.start = d.start; mm.tokens.splice(0, mm.tokens.length, ...mm.tokens.filter(k => d.terrain[key(k.c, k.r)] && !isWallT(d.terrain[key(k.c, k.r)]))); if (opts.onStart && d.start) opts.onStart(d.start); })
+      else if (a === "genreg") edit(mm => { const d = generateRegion(mm.grid.cols, mm.grid.rows, mm.grid.region); mm.grid.terrain = d.terrain; mm.grid.props = d.props; mm.grid.elev = addRelief(d, mm.grid.cols, mm.grid.rows, E.relief ?? 1, mm.grid.region !== "enano"); if (d.start) mm.grid.start = d.start; mm.tokens.splice(0, mm.tokens.length, ...mm.tokens.filter(k => d.terrain[key(k.c, k.r)] && !isWallT(d.terrain[key(k.c, k.r)]))); if (opts.onStart && d.start) opts.onStart(d.start); })
       else if (a === "fill") edit(mm => { mm.grid.terrain = {}; for (let y = 0; y < mm.grid.rows; y++) for (let x = 0; x < mm.grid.cols; x++) mm.grid.terrain[key(x, y)] = E.brush; });
     });
   }
@@ -363,9 +366,10 @@ export function createBoard(host, opts) {
       const [x1, y1] = center(B.c, B.r), rb = S * 0.8 * (B.size || 1);
       const say = () => floatTxt(x1, y1 - rb - 20, RES_TEXT[e.res], RES_COLOR[e.res], e.res === "crit");
       const A = e.from && e.from !== e.to && m.tokens.find(t => t.id === e.from);
-      if (e.type !== "atk" || !A) return say();
+      if (e.type !== "atk" || !A) { if (e.type === "save") sound.play(e.res === "save" ? "block" : "hit"); return say(); }
       const [x0, y0] = center(A.c, A.r), melee = dist(A, B) <= 1 + Math.max(A.size || 1, B.size || 1), miss = e.res === "miss";
-      const land = () => { if (miss) return say(); sparks2(x1, y1, e.res === "crit" ? "#ffd65a" : e.color === "#f4ecd8" ? "#ffb15a" : e.color, e.res === "crit" ? 20 : 12); shakeUntil.set(B.id, Date.now() + 450); const g = world.querySelector(`[data-tok="${B.id}"]`); if (g) { g.classList.remove("shake"); void g.getBBox(); g.classList.add("shake"); } setTimeout(say, 60); };
+      sound.play(melee && !e.magic ? "whoosh" : e.magic ? "magic" : "twang"); // el golpe se oye al salir…
+      const land = () => { sound.play(miss ? "miss" : e.res === "crit" ? "crit" : "hit"); if (miss) return say(); /* …y al llegar */ sparks2(x1, y1, e.res === "crit" ? "#ffd65a" : e.color === "#f4ecd8" ? "#ffb15a" : e.color, e.res === "crit" ? 20 : 12); shakeUntil.set(B.id, Date.now() + 450); const g = world.querySelector(`[data-tok="${B.id}"]`); if (g) { g.classList.remove("shake"); void g.getBBox(); g.classList.add("shake"); } setTimeout(say, 60); };
       if (melee && !e.magic) {
         const ang = Math.atan2(y1 - y0, x1 - x0), r = rb + 10, ux = Math.cos(ang), uy = Math.sin(ang), px = -uy, py = ux;
         const sx = x1 + px * r - ux * 4, sy = y1 + py * r - uy * 4, ex = x1 - px * r - ux * 4, ey = y1 - py * r - uy * 4, qx = x1 - ux * r * 1.1, qy = y1 - uy * r * 1.1;

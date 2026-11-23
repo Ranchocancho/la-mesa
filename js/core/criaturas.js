@@ -13,7 +13,7 @@ export function loadKits() {
 }
 const baseName = n => String(n || "").replace(/\s+\d+$/, "").trim();
 /** Las acciones del SRD de una ficha de criatura (por su nombre del compendio). */
-export const kitOf = t => !ACC || !t || t.kind === "pc" ? null : ACC[t.srd] || ACC[baseName(t.name)] || null;
+export const kitOf = t => !t || t.kind === "pc" ? null : t.kit || (!ACC ? null : ACC[t.srd] || (t.npc ? null : ACC[baseName(t.name)]) || null); // los PNJ del Lore llevan su propia ficha
 
 const WORDS = { dos: 2, tres: 3, cuatro: 4, cinco: 5, seis: 6 };
 /** Ataques que permite su Ataque múltiple (1 si no tiene). */
