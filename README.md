@@ -721,3 +721,8 @@ Comprobado simulando las reglas sobre las escrituras reales de la app (gastar es
   - Abajo, una barra dice qué toca hacer. Se cancela con Esc, con clic derecho o con ✕.
 - **🎨 Colores de la mesa** (botón en la barra de arriba): cada jugador elige los colores del movimiento, correr, el camino, el alcance, el alcance largo, los objetivos y las áreas, y la intensidad. Se guardan en su navegador y los nuevos colores por defecto son más vivos.
 - **% de impacto para los jugadores**: regla de campaña. Está activado (como en BG3) y el máster puede apagarlo en 🎨, porque deja adivinar la CA.
+
+## Hito 52 · Editor de mapas: objetos y criaturas que funcionan
+
+- **Objetos**: la paleta salía en una sola columna enorme y sin las categorías, porque una regla de estilo de la ficha (`.props`) le cambiaba el formato desde el hito 42. Arreglado: vuelve la cuadrícula con las categorías (Mobiliario, Luz, Mazmorra, Naturaleza, Puertas, Trampas, Tesoro, Marcas, Regiones) y hay un **buscador** que busca en todas («trampa», «árbol», «puerta»…).
+- **👹 Enemigo**: abre el bestiario del SRD. Eliges criatura, cuántas y si van ocultas, y **tocas el mapa donde quieras ponerlas**; si son varias, se reparten en las casillas libres de alrededor. Se puede seguir tocando para poner más; ✕ vuelve al enemigo genérico. «Añadir criaturas…» del panel de la escena hace lo mismo. Antes las ponía solas, lejos del punto de inicio. También en el retoque en directo desde Partida.

@@ -177,7 +177,7 @@ function identityHTML(c, dm) {
 /* ---------- Propuestas y registro ---------- */
 const when = t => new Date(t).toLocaleString("es-ES", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
 function propsHTML(c, dm, mine) {
-  return `<section class="props">${(c.proposals || []).map(p => `<div class="pprop">
+  return `<section class="pprops">${(c.proposals || []).map(p => `<div class="pprop">
       <div class="ph"><b>📝 ${esc(p.by)} propone</b><small>${when(p.at)}</small>${p.note ? `<em>«${esc(p.note)}»</em>` : ""}</div>
       <ul>${p.changes.map(ch => `<li>${esc(describe(ch))}${stale(c, ch) ? ` <small class="warn" title="La ficha ha cambiado en esto desde que se envió: al aprobar se pone el valor propuesto">⚠ ha cambiado desde entonces</small>` : ""}</li>`).join("")}
         ${p.meta && p.meta.give ? `<li>🤝 Para <b>${esc((store.get().characters.find(x => x.id === p.meta.give.to) || {}).name || "?")}</b>: ${esc([...(p.meta.give.items || []).map(i => `${i.name}${i.qty > 1 ? " ×" + i.qty : ""}`), ...Object.entries(p.meta.give.coins || {}).map(([k, v]) => `${v} ${k}`)].join(", "))}</li>` : ""}

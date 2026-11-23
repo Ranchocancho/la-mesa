@@ -96,16 +96,24 @@ export function createBoard(host, opts) {
     if (E.tool === "paint" || E.tool === "rect") pal = terrainPicker("brush", E.brush, ["region", "interior", "exterior", "peligro", "muro"]) + (E.tool === "paint" ? `<div class="sizes">Tamaño ${[1, 2, 3, 5].map(n => `<button data-size="${n}" aria-pressed="${E.size === n}">${n}×${n}</button>`).join("")}</div>` : `<p class="hint">Arrastra para rellenar un rectángulo.</p>`);
     if (E.tool === "room") pal = `<p class="hint">Arrastra para trazar una habitación. Suelo:</p><div class="pal">${Object.entries(TERRAIN).filter(([, v]) => !v.wall && !v.liquid && v.cat !== "peligro").map(([k, v]) => sw(k, v, "floor", E.floor === k)).join("")}</div><p class="hint">Muros:</p><div class="pal">${Object.entries(TERRAIN).filter(([, v]) => v.wall && !v.void).map(([k, v]) => sw(k, v, "wallt", E.wall === k)).join("")}</div>`;
     if (E.tool === "wall") pal = `<p class="hint">Arrastra para levantar un muro recto.</p><div class="pal">${Object.entries(TERRAIN).filter(([, v]) => v.wall).map(([k, v]) => sw(k, v, "wallt", E.wall === k)).join("")}</div>`;
-    if (E.tool === "prop") pal = `<div class="tabs">${Object.entries(PROP_CATS).map(([k, n]) => `<button data-pcat="${k}" aria-pressed="${E.pcat === k}">${k === "region" ? regName : n}</button>`).join("")}</div>
-      <div class="pal props">${Object.entries(PROPS).filter(([, v]) => E.pcat === "region" ? (reg ? inRegion(v, reg) : v.cat === "region") : v.cat === E.pcat).map(([k, v]) => `<button class="psw" data-prop="${k}" aria-pressed="${E.prop === k}" title="${esc(v.n)}${v.block ? " · no se puede atravesar" : ""}${v.cover ? ` · cobertura ${v.cover === "3q" ? "de tres cuartos" : "media"}` : ""}${v.light ? " · ilumina" : ""}${v.haz === "fall" ? " · caída" : v.haz === "fire" ? " · quema" : ""}${v.srd ? " · trampa del SRD" : ""}${v.hidden ? " · oculto a los jugadores" : ""}${v.note ? " · " + esc(v.note) : ""}"><b>${v.i}</b><span>${esc(v.n)}</span></button>`).join("")}</div>
+    if (E.tool === "prop") pal = `<input class="psearch" type="search" placeholder="🔎 Buscar objeto (mesa, puerta, trampa, árbol…)" value="${esc(E.pq || "")}" aria-label="Buscar objeto"><div class="tabs">${Object.entries(PROP_CATS).map(([k, n]) => `<button data-pcat="${k}" aria-pressed="${E.pcat === k}">${k === "region" ? regName : n}</button>`).join("")}</div>
+      <div class="pal props">${propList(reg)}</div>
       <p class="hint">${E.pcat === "puerta" ? "Toca un muro para abrir el hueco y poner la puerta." : E.pcat === "tesoro" || E.pcat === "peligro" ? "Colócalo y tócalo con ✋ para ver o cambiar su contenido o su efecto." : E.pcat === "region" && !reg ? "Elige la región de la escena en ⚙ Mapa para ver solo sus piezas." : "Toca una casilla para colocarlo. Con ✋ lo seleccionas, lo mueves y lo giras."}</p>`;
+    function propList(reg) {
+      const q = (E.pq || "").trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, ""), nrm = x => String(x).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+      const list = Object.entries(PROPS).filter(([k, v]) => q ? nrm(v.n).includes(q) || nrm(k).includes(q) || nrm(PROP_CATS[v.cat] || "").includes(q) : E.pcat === "region" ? (reg ? inRegion(v, reg) : v.cat === "region") : v.cat === E.pcat);
+      return list.map(([k, v]) => `<button class="psw" data-prop="${k}" aria-pressed="${E.prop === k}" title="${esc(v.n)}${v.block ? " · no se puede atravesar" : ""}${v.cover ? ` · cobertura ${v.cover === "3q" ? "de tres cuartos" : "media"}` : ""}${v.light ? " · ilumina" : ""}${v.haz === "fall" ? " · caída" : v.haz === "fire" ? " · quema" : ""}${v.srd ? " · trampa del SRD" : ""}${v.hidden ? " · oculto a los jugadores" : ""}${v.note ? " · " + esc(v.note) : ""}"><b>${v.i}</b><span>${esc(v.n)}</span></button>`).join("") || `<p class="empty">Nada con «${esc(E.pq)}».</p>`;
+    }
+    if (E.tool === "foe") pal = `<div class="foepal">${E.foePick ? `<div class="foesel"><b>${esc(E.foePick.m.n)}</b><small>${E.foePick.n > 1 ? `${E.foePick.n} criaturas · ` : ""}VD ${esc(String(E.foePick.m.vd ?? "?"))}${E.foePick.h ? " · 🙈 ocultas" : ""}</small><button class="btn small" data-foeclr title="Volver al enemigo genérico">✕</button></div>` : ""}
+      <button class="btn gold small" data-foepick>👹 Elegir del bestiario (SRD)…</button>
+      <p class="hint">${E.foePick ? "Toca una casilla para poner " + (E.foePick.n > 1 ? "las criaturas (se reparten alrededor)" : "la criatura") + ". Puedes seguir tocando para poner más." : "Elige una criatura con sus ataques y rasgos del SRD, o toca el mapa para poner un enemigo genérico y editarlo a mano."}</p></div>`;
     if (E.tool === "height") pal = `<div class="hmodes"><button data-hmode="up" aria-pressed="${E.hmode === "up"}" title="Cada pasada sube 1,5 m"><b>▲</b> Subir</button><button data-hmode="down" aria-pressed="${E.hmode === "down"}" title="Cada pasada baja 1,5 m"><b>▼</b> Bajar</button><button data-hmode="set" aria-pressed="${E.hmode === "set"}" title="Pone la altura elegida"><b>＝</b> Fijar</button><button data-hmode="flat" aria-pressed="${E.hmode === "flat"}" title="Vuelve al nivel del suelo"><b>▬</b> Allanar</button></div>
       ${E.hmode === "set" ? `<div class="hlevels">${ELEVS.map(v => `<button data-hval="${v}" aria-pressed="${E.hval === v}" style="--hl:${hlColor(v)}">${v > 0 ? "+" : v < 0 ? "−" : ""}${String(Math.abs(v)).replace(".", ",")}</button>`).join("")}<small>metros</small></div>` : ""}
       <div class="sizes">Tamaño ${[1, 2, 3, 5].map(n => `<button data-size="${n}" aria-pressed="${E.size === n}">${n}×${n}</button>`).join("")}</div>
       <p class="hint">Arrastra sobre el mapa. Subir a un desnivel cuesta trepar (SRD: 1 m más por metro); pon 🪜 Escaleras en el borde para subir andando. Quien está 3 m más arriba queda fuera del alcance cuerpo a cuerpo.</p>`;
     if (E.tool === "erase") pal = `<div class="sizes">Tamaño ${[1, 2, 3].map(n => `<button data-size="${n}" aria-pressed="${E.size === n}">${n}×${n}</button>`).join("")}</div><p class="hint">Quita fichas y objetos; si no hay, el terreno.</p>`;
     // Mover y Enemigo no tienen paleta: su ayuda va en el título del botón, para no ocupar una segunda barra sobre el mapa
-    t.innerHTML = `<div class="mtools">${TOOLS.map(([k, ic, n]) => `<button data-tool="${k}" aria-pressed="${E.tool === k}" title="${n}${k === "move" ? ": arrastra fichas y objetos; toca un objeto para editarlo" : k === "foe" ? ": toca una casilla para poner un enemigo y edítalo en el panel" : ""}"><b>${ic}</b><span>${n.split(" ")[0]}</span></button>`).join("")}
+    t.innerHTML = `<div class="mtools">${TOOLS.map(([k, ic, n]) => `<button data-tool="${k}" aria-pressed="${E.tool === k}" title="${n}${k === "move" ? ": arrastra fichas y objetos; toca un objeto para editarlo" : k === "foe" ? ": elige una criatura del bestiario y toca el mapa para ponerla" : ""}"><b>${ic}</b><span>${n.split(" ")[0]}</span></button>`).join("")}
         <span class="sep"></span><button data-act="undo" ${hist.undo.length ? "" : "disabled"} title="Deshacer (Ctrl+Z)"><b>↶</b><span>Deshacer</span></button><button data-act="redo" ${hist.redo.length ? "" : "disabled"} title="Rehacer (Ctrl+Y)"><b>↷</b><span>Rehacer</span></button>
         <button data-act="more" aria-pressed="${!!E.more}" title="Tamaño del mapa y generar mazmorra"><b>⚙</b><span>Mapa</span></button></div>
       ${E.more ? `<div class="mpal"><div class="row">Región <select data-region aria-label="Región de la escena"><option value="">Sin región</option>${Object.entries(REGIONS).map(([k, v]) => `<option value="${k}" ${reg === k ? "selected" : ""}>${v.i} ${v.n}</option>`).join("")}</select>${!reg && opts.suggestRegion && opts.suggestRegion() ? `<button class="btn small" data-region-sugg="${opts.suggestRegion()}">Usar la del lugar: ${REGIONS[opts.suggestRegion()].n.split(":")[0]}</button>` : ""}</div>
@@ -114,14 +122,18 @@ export function createBoard(host, opts) {
         <div class="row"><button class="btn small gold" data-act="gen">🎲 Generar mazmorra</button><button class="btn small" data-act="gencave">🕳 Generar cueva</button>${reg ? `<button class="btn small gold" data-act="genreg">${REGIONS[reg].i} Generar ${REGIONS[reg].n.split(":")[0].toLowerCase()}</button>` : ""}<button class="btn small" data-act="fill">Rellenar todo con el pincel</button></div>
         <p class="hint">Generar sustituye el mapa actual (se puede deshacer).</p></div>` : ""}
       <div class="mpal">${pal}</div>`;
-    t.querySelectorAll("[data-tool]").forEach(b => b.onclick = () => { const was = E.tool; E.tool = b.dataset.tool; if (E.tool !== "move") selectProp(null); tools(); if ((was === "height") !== (E.tool === "height")) render(); });
+    t.querySelectorAll("[data-tool]").forEach(b => b.onclick = () => { const was = E.tool; E.tool = b.dataset.tool; if (E.tool === "foe" && was !== "foe" && !E.foePick) setTimeout(pickCreature); if (E.tool !== "move") selectProp(null); tools(); if ((was === "height") !== (E.tool === "height")) render(); });
     t.querySelectorAll("[data-brush]").forEach(b => b.onclick = () => { E.brush = b.dataset.brush; tools(); });
     t.querySelectorAll("[data-floor]").forEach(b => b.onclick = () => { E.floor = b.dataset.floor; tools(); });
     t.querySelectorAll("[data-wallt]").forEach(b => b.onclick = () => { E.wall = b.dataset.wallt; tools(); });
     t.querySelectorAll("[data-tcat]").forEach(b => b.onclick = () => { E.tcat = b.dataset.tcat; tools(); });
-    t.querySelectorAll("[data-pcat]").forEach(b => b.onclick = () => { E.pcat = b.dataset.pcat; const f = Object.entries(PROPS).find(([, v]) => v.cat === E.pcat); if (f) E.prop = f[0]; tools(); });
-    t.querySelectorAll("[data-prop]").forEach(b => b.onclick = () => { E.prop = b.dataset.prop; tools(); });
+    { const ps = t.querySelector(".psearch"); if (ps) ps.oninput = () => { E.pq = ps.value; const g = t.querySelector(".pal.props"); if (g) { g.innerHTML = propList(reg); bindProps(); } }; }
+    t.querySelectorAll("[data-pcat]").forEach(b => b.onclick = () => { E.pq = ""; E.pcat = b.dataset.pcat; const f = Object.entries(PROPS).find(([, v]) => v.cat === E.pcat); if (f) E.prop = f[0]; tools(); });
+    function bindProps() { t.querySelectorAll("[data-prop]").forEach(b => b.onclick = () => { E.prop = b.dataset.prop; const f = PROPS[E.prop]; if (E.pq && f) E.pcat = f.cat; tools(); }); }
+    bindProps();
     t.querySelectorAll("[data-size]").forEach(b => b.onclick = () => { E.size = +b.dataset.size; tools(); });
+    t.querySelectorAll("[data-foepick]").forEach(b => b.onclick = pickCreature);
+    t.querySelectorAll("[data-foeclr]").forEach(b => b.onclick = () => { E.foePick = null; tools(); });
     t.querySelectorAll("[data-hmode]").forEach(b => b.onclick = () => { E.hmode = b.dataset.hmode; tools(); render(); });
     t.querySelectorAll("[data-hval]").forEach(b => b.onclick = () => { E.hval = +b.dataset.hval; tools(); });
     const setRegion = k => { edit(mm => { mm.grid.region = k; if (k && REGIONS[k]) { mm.grid.ambient = REGIONS[k].light; mm.grid.sound = REGIONS[k].sound; } }); if (k) { E.tcat = "region"; E.pcat = "region"; } tools(); render(); };
@@ -302,6 +314,23 @@ export function createBoard(host, opts) {
       + inT.map(t => { const [x, y] = center(t.c, t.r), rad = S * 0.8 * (t.size || 1); return `<circle cx="${x}" cy="${y}" r="${rad + 6}" class="thit"/>`; }).join("")
       + (() => { const top = Math.min(...[...cells].map(k => +k.split(",")[1]), hover.r), [x] = center(hover.c, top), y = center(hover.c, top)[1]; const al = inT.filter(t => (t.kind === "pc") === (a.kind === "pc")).length; const txt = ok ? `${inT.length} dentro${al ? ` · ⚠ ${al} aliado${al > 1 ? "s" : ""}` : ""}` : "demasiado lejos"; return `<g class="tchipa" transform="translate(${x},${y - S - 16})"><rect x="${-txt.length * 3.6 - 8}" y="-11" width="${txt.length * 7.2 + 16}" height="21" rx="10"/><text y="4">${txt}</text></g>`; })();
   }
+  function placeCreatures(P, h) {
+    import("../core/srd.js").then(({ monsterToken }) => {
+      let first = null;
+      edit(mm => {
+        const busy = new Set(mm.tokens.map(k => k.c + "," + k.r)), had = mm.tokens.filter(k => k.name && k.name.startsWith(P.m.n)).length;
+        let placed = 0;
+        for (let d = 0; d < 12 && placed < P.n; d++) for (let r = h.r - d; r <= h.r + d && placed < P.n; r++) for (let c = h.c - d; c <= h.c + d && placed < P.n; c++) {
+          if (Math.max(Math.abs(c - h.c), Math.abs(r - h.r)) !== d || !inside({ c, r }) || busy.has(c + "," + r) || wallIn(mm.grid, c, r)) continue;
+          busy.add(c + "," + r); const t = monsterToken(P.m, c, r); if (P.n > 1 || had) t.name = `${P.m.n} ${had + placed + 1}`; if (P.h) t.hidden = true; mm.tokens.push(t); if (!first) first = t.id; placed++;
+        }
+      });
+      if (first) select(first);
+    });
+  }
+  function pickCreature() {
+    import("./criaturas.js").then(({ openCreaturePicker }) => openCreaturePicker({ title: "Elige la criatura y toca el mapa para ponerla", onAdd: (m, n, hid) => { E.foePick = { m, n, h: !!hid }; E.tool = "foe"; tools(); } }));
+  }
   const brushCells = h => { const n = E.size || 1, o = Math.floor((n - 1) / 2), out = []; for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) out.push({ c: h.c - o + c, r: h.r - o + r }); return out; };
   let lastEv = null;
   const showTip = txt => { if (!lastEv) return; const r = host.getBoundingClientRect(); tip.hidden = false; tip.textContent = txt; tip.style.left = (lastEv.clientX - r.left + 14) + "px"; tip.style.top = (lastEv.clientY - r.top + 14) + "px"; };
@@ -368,6 +397,8 @@ export function createBoard(host, opts) {
       if (E.tool === "wall") { drag = { line: h, cur: h }; ghost(); return; }
       if (E.tool === "prop") { placeProp(h); return; }
       if (E.tool === "foe") {
+        // Criatura del bestiario elegida: se pone donde tocas (y, si son varias, en las casillas libres de alrededor)
+        if (E.foePick) { placeCreatures(E.foePick, h); return; }
         const id = "t" + Date.now().toString(36);
         edit(mm => mm.tokens.push({ id, kind: "foe", name: "Enemigo", c: h.c, r: h.r, color: "#7a2a22", size: 1, hp: 7, maxhp: 7, ac: 12, initBonus: 0 }));
         select(id); return;
@@ -545,7 +576,7 @@ export function createBoard(host, opts) {
   addEventListener("keydown", onKey);
 
   tools(); render();
-  return { render, fit, select, playEvents, get selected() { return selected; }, get selectedProp() { return selProp; }, selectProp, editProp: (id, fn) => edit(mm => { const p = (mm.grid.props || []).find(z => z.id === id); if (p) fn(p, mm); }), resize() { fit(); }, undo, redo };
+  return { setTool(k, extra) { E.tool = k; if (extra && extra.foePick) E.foePick = extra.foePick; tools(); }, render, fit, select, playEvents, get selected() { return selected; }, get selectedProp() { return selProp; }, selectProp, editProp: (id, fn) => edit(mm => { const p = (mm.grid.props || []).find(z => z.id === id); if (p) fn(p, mm); }), resize() { fit(); }, undo, redo };
 }
 
 /** Coste de moverse en línea recta, en casillas: el terreno difícil cuenta doble. */

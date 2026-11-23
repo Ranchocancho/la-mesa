@@ -1907,7 +1907,7 @@ button.inspchip{cursor:pointer;font:inherit;font-size:12.5px}
 .lvbox{margin:12px 0;padding:12px 14px;border:1px solid var(--oro);border-radius:12px;background:rgba(214,170,78,.08)}
 .lvbox p{margin:0 0 8px}
 .lvlog{display:flex;flex-direction:column;gap:3px;font-size:13.5px;color:var(--tenue)}
-.props{display:flex;flex-direction:column;gap:8px;margin:0 0 10px}
+.pprops{display:flex;flex-direction:column;gap:8px;margin:0 0 10px}
 .pprop{border:1px solid var(--oro);border-radius:12px;padding:10px 12px;background:rgba(214,170,78,.07)}
 .pprop .ph{display:flex;gap:8px;align-items:baseline;flex-wrap:wrap}
 .pprop .ph small{color:var(--tenue)}
@@ -2188,3 +2188,9 @@ button.spip{cursor:pointer}
 .colpop input[type=color]{width:42px;height:26px;padding:0;border:1px solid var(--linea);border-radius:6px;background:none}
 .colpop input[type=range]{width:120px}
 .aimbar b,.aimbar span{white-space:nowrap}
+.mpal>*{flex-shrink:0}
+.foepal{display:flex;flex-direction:column;gap:8px;min-width:260px}
+.foesel{display:flex;align-items:center;gap:8px;padding:6px 10px;border:1px solid var(--oro);border-radius:10px;background:rgba(214,170,78,.1)}
+.foesel small{color:var(--tenue);flex:1}
+.psearch{width:100%;box-sizing:border-box;padding:7px 10px;border-radius:8px;border:1px solid var(--linea);background:rgba(0,0,0,.35);color:inherit;font:inherit}
+.mpal .pal.props{max-height:none}

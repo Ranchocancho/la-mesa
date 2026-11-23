@@ -154,7 +154,9 @@ function side() {
   $("#sccols", box).onchange = e => M(x => { x.cols = Math.max(5, Math.min(40, +e.target.value)); });
   $("#sclight", box).onchange = e => M(x => { x.light = e.target.value; });
   $("#scrows", box).onchange = e => M(x => { x.rows = Math.max(5, Math.min(30, +e.target.value)); });
-  $("#monpick", box).onclick = () => openCreaturePicker({ title: "Añadir criaturas a la escena", onAdd: (m, n, h) => {
+  // Añadir criaturas: se eligen en el bestiario y se colocan tocando el mapa (herramienta 👹 del editor)
+  $("#monpick", box).onclick = () => openCreaturePicker({ title: "Elige la criatura y toca el mapa para ponerla", onAdd: (m, n, h) => {
+    if (board && board.setTool) { board.setTool("foe", { foePick: { m, n, h: !!h } }); toast(`Toca el mapa para poner ${n > 1 ? n + " × " : ""}${m.n}.`); return; }
     M(x => { const busy = new Set(x.tokens.map(k => k.c + "," + k.r)); let placed = 0; const st0 = x.start || { c: 1, r: 1 };
       for (let d = 2; d < 20 && placed < n; d++) for (let r = 0; r < x.rows && placed < n; r++) for (let c = x.cols - 1; c >= 0 && placed < n; c--) {
         if (Math.max(Math.abs(c - st0.c), Math.abs(r - st0.r)) !== d || busy.has(c + "," + r) || isWallT(x.terrain[c + "," + r])) continue;
