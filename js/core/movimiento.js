@@ -4,6 +4,7 @@
 // encima). Más allá de tu velocidad solo llegas Corriendo, que gasta tu acción.
 import { TERRAIN, PROPS, isDoor } from "../data/mapas.js";
 import { eco, speedOf, hasCond } from "./turnos.js";
+import { climbExtra, elevAt, altOf } from "./alturas.js";
 
 const key = (c, r) => c + "," + r;
 const STOP = ["agarrado", "apresado", "paralizado", "aturdido", "inconsciente", "petrificado", "muerto"];
@@ -24,6 +25,9 @@ export function reachMap(s, t, { dm = false } = {}) {
   const wall = (c, r) => c < 0 || r < 0 || c >= g.cols || r >= g.rows || !!(TERRAIN[T[key(c, r)]] && TERRAIN[T[key(c, r)]].wall);
   const blocked = (c, r) => wall(c, r) || (g.props || []).some(p => p.c === c && p.r === r && ((PROPS[p.k] || {}).block || (isDoor(p) && !p.open && !dm)));
   const foeAt = (c, r) => s.tokens.some(k => k.id !== t.id && k.c === c && k.r === r && !k.hidden && (k.kind === "pc") !== pc && !(k.conds || []).some(x => ["muerto", "inconsciente"].includes(x.id)));
+  // Trepa sin coste extra quien tiene velocidad trepando o vuela (SRD «Trepar» y «Volar»)
+  const spd = String(t.speed || "") + " " + String(((s.characters.find(x => x.id === t.char) || {}).speeds) || "");
+  const climber = /trep|vol|climb|fly/i.test(spd) || altOf(t) > 0;
   const anyAt = (c, r) => s.tokens.some(k => k.id !== t.id && k.c === c && k.r === r);
   const cells = new Map([[key(from.c, from.r), { cost: 0, dash: false, dif: false, occ: false, prev: null }]]);
   const open = [[0, from.c, from.r]];
@@ -37,15 +41,17 @@ export function reachMap(s, t, { dm = false } = {}) {
       if (blocked(nc, nr) || foeAt(nc, nr)) continue;
       if (dc && dr && (blocked(c + dc, r) && blocked(c, r + dr))) continue; // no se cuelan esquinas entre muros
       const dif = !!(TERRAIN[T[key(nc, nr)]] && TERRAIN[T[key(nc, nr)]].dif);
-      const step = 1.5 * (dif ? 2 : 1) * (prone ? 2 : 1), nCost = Math.round((cost + step) * 10) / 10;
+      const up = climbExtra(g, { c, r }, { c: nc, r: nr }, { dif, climber });
+      const step = 1.5 * (dif ? 2 : 1) * (prone ? 2 : 1) + up, nCost = Math.round((cost + step) * 10) / 10;
       if (nCost > max + 0.01) continue;
       const prev = cells.get(key(nc, nr));
       if (prev && prev.cost <= nCost) continue;
-      cells.set(key(nc, nr), { cost: nCost, dash: nCost > walk + 0.01, dif, occ: anyAt(nc, nr), prev: key(c, r) });
+      const pv = cells.get(key(c, r)) || {};
+      cells.set(key(nc, nr), { cost: nCost, dash: nCost > walk + 0.01, dif, occ: anyAt(nc, nr), prev: key(c, r), climb: Math.round(((pv.climb || 0) + up) * 10) / 10 });
       open.push([nCost, nc, nr]);
     }
   }
-  return { from, speed, walk, max, prone, stopped, cells };
+  return { from, speed, walk, max, prone, stopped, cells, g };
 }
 /** Camino de casillas desde el origen del turno hasta una casilla (vacío si no se llega). */
 export function pathTo(R, c, r) {
@@ -62,5 +68,6 @@ export function moveHint(R, c, r) {
   if (R.stopped) return `No puedes moverte (${R.stopped})`;
   if (!x) return "No llegas";
   if (x.occ) return "Casilla ocupada";
-  return `${m(x.cost)} de ${m(R.walk)} m${x.dash ? " · Correr: gastas tu acción" : ""}${x.dif ? " · terreno difícil" : ""}${R.prone ? " · arrastrándote" : ""}`;
+  const z = R.g ? elevAt(R.g, c, r) : 0;
+  return `${m(x.cost)} de ${m(R.walk)} m${x.dash ? " · Correr: gastas tu acción" : ""}${x.dif ? " · terreno difícil" : ""}${x.climb ? ` · trepando (+${m(x.climb)} m)` : ""}${z ? ` · altura ${z > 0 ? "+" : "−"}${m(Math.abs(z))} m` : ""}${R.prone ? " · arrastrándote" : ""}`;
 }

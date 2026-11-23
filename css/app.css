@@ -937,11 +937,11 @@ b.ininum{display:block}
 .hudprop{position:relative}.hudprop .x{position:absolute;right:6px;top:6px;background:transparent;border:0;color:var(--tenue);cursor:pointer}
 .boardsvg .wtop{fill:rgba(8,6,4,.5);pointer-events:none}
 .boardsvg .wedge{stroke:rgba(255,235,200,.5);stroke-width:2.5}
-.boardsvg .rch{fill:rgba(111,208,232,.16);stroke:rgba(111,208,232,.28);stroke-width:1;pointer-events:none}
+.boardsvg .rch{fill:var(--c-walk,rgba(47,200,255,.34));stroke:var(--c-walk-b,rgba(47,200,255,.75));stroke-width:1.2;pointer-events:none}
 .boardsvg .rch.dif{fill:rgba(224,180,90,.2);stroke:rgba(224,180,90,.3)}
-.boardsvg .rch.dash{fill:rgba(168,138,224,.1);stroke:rgba(168,138,224,.2);stroke-dasharray:3 3}
+.boardsvg .rch.dash{fill:var(--c-dash,rgba(180,124,255,.26));stroke:var(--c-dash-b,rgba(180,124,255,.65));stroke-dasharray:3 3}
 .boardsvg .rorig{fill:none;stroke:rgba(255,210,122,.8);stroke-width:2.5;stroke-dasharray:5 3;pointer-events:none}
-.boardsvg .rpath{fill:none;stroke:rgba(255,226,160,.85);stroke-width:4;stroke-linecap:round;stroke-linejoin:round;pointer-events:none}
+.boardsvg .rpath{fill:none;stroke:var(--c-path,#ffd166);stroke-width:5;stroke-linecap:round;stroke-linejoin:round;pointer-events:none}
 .boardsvg .rpath.dash{stroke:rgba(200,168,255,.85)}
 .boardsvg .target.bad{stroke:#d04a3a;fill:rgba(208,74,58,.15)}
 /* ——— HUD de combate compacto ——— */
@@ -2132,3 +2132,59 @@ button.spip{cursor:pointer}
 .movebar em{padding:0!important;z-index:1;font-weight:600;font-variant-numeric:tabular-nums;text-shadow:0 0 3px #000,0 1px 2px #000}
 /* Nombre de quien actúa en la tira de turnos: nombre corto, en letra legible (no versalitas) */
 .turnbar .tbchip.now em{font-family:Georgia,serif;font-weight:700;font-size:15px;letter-spacing:0;text-transform:none;max-width:120px}
+
+/* ---------- Alturas ---------- */
+.rcliff{stroke:rgba(8,6,4,.7);stroke-linecap:round;pointer-events:none}
+.rrim{stroke:rgba(255,236,200,.42);stroke-width:1.2;stroke-linecap:round;pointer-events:none}
+.relief,.relief2{pointer-events:none}
+.rtag rect{fill:rgba(18,14,10,.72);stroke:rgba(214,170,78,.55);stroke-width:1}
+.rtag.dn rect{stroke:rgba(120,150,220,.55)}
+.rtag text{font:700 10px system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;fill:#f3e3bf;text-anchor:middle;letter-spacing:.02em}
+.rtag.dn text{fill:#cdd8f5}
+.rnum{font:700 11px system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;text-anchor:middle;paint-order:stroke;stroke:rgba(0,0,0,.75);stroke-width:3px}
+.rnum.up{fill:#ffe3a3}.rnum.dn{fill:#b9c9ff}
+.gheight{pointer-events:none;stroke-width:2}
+.gheight.up{fill:rgba(214,170,78,.28);stroke:rgba(214,170,78,.85)}
+.gheight.down{fill:rgba(80,110,200,.28);stroke:rgba(120,150,230,.85)}
+.gheight.set{fill:rgba(255,255,255,.18);stroke:rgba(255,255,255,.7)}
+.gheight.flat{fill:rgba(0,0,0,.25);stroke:rgba(200,200,200,.6);stroke-dasharray:4 3}
+.hmodes{display:flex;gap:6px;flex-wrap:wrap}
+.hmodes button{display:flex;align-items:center;gap:6px;padding:6px 10px;border-radius:8px;border:1px solid var(--linea);background:rgba(255,255,255,.03);color:inherit;font:inherit;cursor:pointer}
+.hmodes button[aria-pressed="true"]{border-color:var(--oro);background:rgba(214,170,78,.15)}
+.hmodes b{font-size:13px;color:var(--oro)}
+.hlevels{display:flex;gap:4px;flex-wrap:wrap;align-items:center;margin:8px 0}
+.hlevels button{min-width:38px;padding:5px 6px;border-radius:7px;border:1px solid var(--linea);background:linear-gradient(180deg,var(--hl),rgba(0,0,0,.35));color:#fff;font:700 12px system-ui,sans-serif;text-shadow:0 1px 2px #000;cursor:pointer}
+.hlevels button[aria-pressed="true"]{outline:2px solid var(--oro);outline-offset:1px}
+.hlevels small{color:var(--tenue);margin-left:4px}
+.altb rect{fill:rgba(20,30,48,.9);stroke:#8fb2ff;stroke-width:1}
+.altb text{font:700 10px system-ui,sans-serif;fill:#dbe6ff;text-anchor:middle}
+
+/* ---------- Apuntar (como en BG3): alcance, objetivos y plantillas ---------- */
+.boardsvg .trange,.boardsvg .tmarks,.boardsvg .tmpl{pointer-events:none}
+.boardsvg .trfill{fill:var(--c-range,rgba(255,159,28,.14))}
+.boardsvg .trng{fill:none;stroke:var(--c-range-b,#ff9f1c);stroke-width:3;stroke-linecap:round;filter:drop-shadow(0 0 4px rgba(0,0,0,.6))}
+.boardsvg .trng.long{stroke:var(--c-long-b,#ffcf70);stroke-width:2;stroke-dasharray:7 6}
+.boardsvg .tmark .tring{fill:none;stroke:var(--c-target,#ff4d4d);stroke-width:3.5;animation:tpulse 1.2s ease-in-out infinite}
+.boardsvg .tmark.long .tring{stroke-dasharray:6 4}
+.boardsvg .tmark.no .tring{stroke:#8b8b8b;stroke-width:2;stroke-dasharray:3 4;animation:none;opacity:.7}
+.boardsvg .tmark.picked .tring{stroke-width:5;fill:color-mix(in srgb,var(--c-target,#ff4d4d) 18%,transparent)}
+.boardsvg .tmark rect,.boardsvg .tchipa rect{fill:rgba(14,10,8,.9);stroke:var(--c-target,#ff4d4d);stroke-width:1.5}
+.boardsvg .tmark.no rect{stroke:#777}
+.boardsvg .tmark text,.boardsvg .tchipa text{font:700 12px system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;fill:#fff;text-anchor:middle;font-variant-numeric:tabular-nums}
+.boardsvg .tmark.no text{fill:#bbb;font-weight:600}
+.boardsvg .tcell{fill:var(--c-area,rgba(255,106,0,.42))}
+.boardsvg .tedge{fill:none;stroke:var(--c-area-b,#ff6a00);stroke-width:3}
+.boardsvg .tcell.bad{fill:rgba(120,120,120,.3)}.boardsvg .tedge.bad{stroke:#999;stroke-dasharray:5 4}
+.boardsvg .thit{fill:none;stroke:var(--c-target,#ff4d4d);stroke-width:4;animation:tpulse .9s ease-in-out infinite}
+.boardsvg .tchipa rect{stroke:var(--c-area-b,#ff6a00)}
+@keyframes tpulse{0%,100%{stroke-opacity:1}50%{stroke-opacity:.45}}
+.aimbar{position:absolute;left:50%;bottom:14px;transform:translateX(-50%);z-index:30;display:flex;gap:10px;align-items:center;padding:8px 10px 8px 14px;border-radius:12px;background:rgba(14,10,8,.92);border:1px solid var(--c-target,#ff4d4d);box-shadow:0 6px 24px rgba(0,0,0,.5);max-width:92%;font-size:14px}
+.aimbar b{color:var(--oro)}
+.aimbar small{color:var(--tenue)}
+@media (max-width:760px){.aimbar small{display:none}.aimbar{bottom:8px;font-size:13px}}
+.colpop{position:absolute;z-index:40;right:10px;top:54px;width:270px;padding:12px;border-radius:12px;background:rgba(18,14,10,.97);border:1px solid var(--linea);box-shadow:0 10px 30px rgba(0,0,0,.55)}
+.colpop h4{margin:0 0 8px;font-family:var(--display)}
+.colpop label{display:flex;align-items:center;gap:8px;justify-content:space-between;font-size:13px;margin:5px 0}
+.colpop input[type=color]{width:42px;height:26px;padding:0;border:1px solid var(--linea);border-radius:6px;background:none}
+.colpop input[type=range]{width:120px}
+.aimbar b,.aimbar span{white-space:nowrap}

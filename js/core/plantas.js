@@ -26,9 +26,9 @@ export function swapFloor(g, tokens, to, carry = new Set()) {
   const fl = floorsOf(g).map(f => ({ ...f })), cur = floorIdx(g);
   if (to === cur || !fl[to]) return tokens;
   const goes = tokens.filter(t => carry.has(t.id)), stays = tokens.filter(t => !carry.has(t.id));
-  fl[cur] = { name: fl[cur].name || "Planta", cols: g.cols, rows: g.rows, terrain: g.terrain || {}, props: g.props || [], tokens: stays };
+  fl[cur] = { name: fl[cur].name || "Planta", cols: g.cols, rows: g.rows, terrain: g.terrain || {}, elev: g.elev || {}, props: g.props || [], tokens: stays };
   const T = fl[to];
-  g.cols = T.cols || g.cols; g.rows = T.rows || g.rows; g.terrain = T.terrain || {}; g.props = T.props || [];
+  g.cols = T.cols || g.cols; g.rows = T.rows || g.rows; g.terrain = T.terrain || {}; g.elev = T.elev || {}; g.props = T.props || [];
   const arriving = (T.tokens || []).map(t => ({ ...t }));
   const busy = new Set(arriving.map(t => t.c + "," + t.r));
   const moved = goes.map(t => { const p = spot(g, busy, t.c, t.r); busy.add(p.c + "," + p.r); const m = { ...t, c: p.c, r: p.r }; delete m.eco; return m; });

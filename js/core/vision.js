@@ -6,6 +6,7 @@
 //  - Oscuridad: zona muy oscura (quien intenta ver algo ahí está cegado): no se ve.
 //  - Visión en la oscuridad: dentro de su alcance, la luz tenue cuenta como brillante y la oscuridad como tenue.
 import { TERRAIN, PROPS, doorBlocksSight } from "../data/mapas.js";
+import { reliefBlocks } from "./alturas.js";
 
 /** Fuentes de luz en casillas de 1,5 m: b = radio de luz brillante, d = radio total (brillante + tenue). */
 export const LIGHT_ITEMS = {
@@ -48,7 +49,7 @@ export function sightLine(grid) {
       if ((c !== b.c || r !== b.r) && wall(c, r)) return false;
       pc = c; pr = r;
     }
-    return true;
+    return !grid.elev || !reliefBlocks(grid, a, b); // el relieve más alto que la mirada también tapa
   };
 }
 

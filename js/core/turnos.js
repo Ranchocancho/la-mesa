@@ -11,9 +11,11 @@ import { onTurnStart } from "./criaturas.js";
 import { revives } from "./defensas.js";
 import { charOf, hpOf, order } from "./mesa.js";
 import { TERRAIN, PROPS, isDoor, doorBlocksSight } from "../data/mapas.js";
+import { dist3, reliefBlocks } from "./alturas.js";
 
 const CELL_M = 1.5;
-export const dist = (a, b) => Math.max(Math.abs(a.c - b.c), Math.abs(a.r - b.r));
+/** Distancia en casillas. Con alturas en el mapa, la diferencia de altura cuenta como casillas (core/alturas.js). */
+export const dist = (a, b) => { const g = (store.get() || {}).board; return g && (g.elev || a.alt || b.alt) ? dist3(g, a, b) : Math.max(Math.abs(a.c - b.c), Math.abs(a.r - b.r)); };
 export const metres = cells => (cells * CELL_M).toLocaleString("es-ES") + " m";
 
 /* ---------- Fases ---------- */
@@ -184,6 +186,14 @@ export function cover(s, a, b) {
       furn = Math.max(furn, propCover(c, r));
     }
     if (hit) blocked++;
+  }
+  // Relieve (riscos, tarimas): si el borde tapa la parte baja, media; casi todo, tres cuartos; todo, total.
+  // Se mira a tres alturas del objetivo (pies, cintura, cabeza), como se mira a sus cuatro esquinas. Regla de mesa.
+  if (g.elev) {
+    const hidden = [0.3, 0.9, 1.5].filter(h => reliefBlocks(g, a, b, 1.5, h)).length;
+    if (hidden === 3) return { level: "total", bonus: null, txt: "cobertura total: el relieve lo tapa" };
+    if (hidden === 2) blocked = Math.max(blocked, 3);
+    else if (hidden === 1) blocked = Math.max(blocked, 1);
   }
   if (blocked >= 4) return { level: "total", bonus: null, txt: "cobertura total: no se puede elegir como objetivo" };
   if (blocked === 3 || furn === 2) return { level: "3/4", bonus: 5, txt: blocked === 3 ? "cobertura de tres cuartos (+5 CA)" : "tres cuartos por la escenografía (+5 CA)" };

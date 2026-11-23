@@ -35,6 +35,13 @@ function needs(R) {
   return { targets: false };
 }
 
+/** Para la mesa: si la acción elegida del PNJ usa un área, cuál y desde dónde (plantilla que sigue al cursor). */
+export function npcArmedArea(s, A) {
+  if (!A || A.kind !== "npcact") return null;
+  const t = s.tokens.find(x => x.id === A.tok), R = t && resolve(kitOf(t), A); if (!R) return null;
+  const nd = needs(R); if (!nd.area) return null;
+  return { tok: t.id, area: nd.area, rng: nd.m ? (nd.m.touch ? { n: 1.5, l: 1.5 } : nd.m.rng) : null, label: R.sp || R.a.n };
+}
 /** Defensas del perfil, para tenerlas a la vista: se aplican solas al daño, a los estados y a las salvaciones. */
 function defensesHTML(t) {
   const d = defensesOf(t); if (!d) return "";

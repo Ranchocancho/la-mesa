@@ -695,3 +695,29 @@ Comprobado simulando las reglas sobre las escrituras reales de la app (gastar es
 - **Placas de la mesa 3D**: se dibujan a la resolución exacta con la que se ven (antes se encogían desde una imagen grande y se emborronaban). El nombre es más grande y los PG van centrados dentro de la barra, en letra de palo gruesa con contorno («27 / 33»). En los enemigos, el estado (Ileso, Herido…). Al cambiar el tamaño de la ventana se rehacen nítidas.
 - **Barras de vida en las pestañas Personaje y PNJ**: más altas, con los PG centrados y en cifras del mismo ancho, legibles sobre cualquier color. También la barra de movimiento.
 - **Tira de turnos**: el nombre de quien actúa sale corto («Mirra», «Osric») y en letra normal, no en versalitas cortadas.
+
+## Hito 50 · Alturas en el mapa táctico (SRD 5.2.1)
+
+- **Editor de mapas · ⛰ Altura**: pinta con el pincel (1×1 a 5×5) para **subir** o **bajar** 1,5 m por pasada, **fijar** una altura (de −6 a +12 m) o **allanar**. Mientras la usas, cada casilla enseña su cifra. Sirve para tarimas, riscos, galerías, colinas, fosos y zanjas. Se guarda en la escena, en cada planta y al «Guardar como escena».
+- **Cómo se ve**:
+  - **2D**: lo alto, algo más claro; lo hondo, más oscuro; cada desnivel con su filo de luz arriba y su sombra sobre lo bajo, y una etiqueta discreta por meseta («▲ 3 m», «▼ 3 m»).
+  - **3D**: el suelo sube y baja de verdad, con paredes de roca y un filo claro en lo alto. Las figuras, los objetos, los muros y las luces se ponen a su altura. La niebla de la vista sigue el relieve, y se apunta al suelo de verdad (lo alto del risco).
+- **Reglas**:
+  - **Distancias**: como en la cuadrícula, cada 1,5 m cuenta una casilla en cualquier dirección. Un enemigo 3 m más arriba está a 2 casillas, así que el ataque cuerpo a cuerpo (1,5 m) no le llega; un arco, sí. Vale para el alcance de ataques y conjuros y para los ataques de oportunidad.
+  - **Trepar** (SRD): cada metro de subida o bajada cuesta 1 m más de movimiento (2 m en terreno difícil). No cuesta con velocidad trepando o volando, ni por unas 🪜 Escaleras (un tramo de 1,5 m). El cursor lo dice: «trepando (+3 m) · altura +3 m».
+  - **Vista y cobertura**: el relieve más alto que la línea entre los ojos (1,5 m) y el objetivo tapa la vista; lo que hay encima de un risco no se ve desde abajo. Si tapa parte del objetivo da cobertura media o de tres cuartos, y si lo tapa entero, total. El reparto entre media y tres cuartos es regla de mesa.
+  - **Volar** (SRD): el máster puede poner una criatura en el aire («Vuela a» 1,5–18 m al editarla). Cuenta para distancias y en 2D lleva una etiqueta «↑3».
+- Las caídas siguen como estaban: el abismo hace 1d6 por cada 3 m. Saltar desde un risco lo resuelve el máster.
+
+## Hito 51 · Apuntar como en Baldur's Gate 3 (con las reglas del SRD) y colores de la mesa
+
+- **Eliges arma o conjuro y la mesa enseña a quién**, en 2D y en 3D:
+  - El **alcance** del arma o del conjuro va contado como la cuadrícula y con la altura: contorno continuo para el alcance normal y discontinuo para el largo (con desventaja).
+  - Sobre cada enemigo, una etiqueta con la **probabilidad de impactar** (d20 + ataque contra su CA, con ventaja o desventaja, cobertura, Bendición o Perdición y cansancio), el **daño posible** («4–11»), ▲/▼ si hay ventaja o desventaja, y el porqué al pasar el ratón. Si no llega, «fuera · 12 m» o «🛡 cobertura total».
+  - Los conjuros de salvación enseñan la CD («CD 15 Des»); los trucos, el daño a tu nivel.
+  - **Te acercas y atacas**: si el enemigo está fuera de tu alcance cuerpo a cuerpo pero llegas andando (sin correr), la etiqueta dice «🦶4,5 m». Al tocarlo, tu figura va por el camino más corto, paga el movimiento (y provoca ataques de oportunidad si sale del alcance de alguien) y ataca.
+  - **Plantillas de área**: la Bola de fuego, Manos ardientes, los alientos… siguen al cursor con su forma del SRD (esfera, cilindro, cubo, cono, línea, emanación). Marcan a quién alcanzan y avisan si hay aliados dentro («⚠ 1 aliado»), o «demasiado lejos» si el punto de origen queda fuera de alcance. Al tocar, el jugador lanza el conjuro; al máster se le marcan los objetivos para «Usar».
+  - Un ataque de conjuro a un solo objetivo (Rayo de escarcha, Rayo de fuego…) se lanza al tocar al objetivo.
+  - Abajo, una barra dice qué toca hacer. Se cancela con Esc, con clic derecho o con ✕.
+- **🎨 Colores de la mesa** (botón en la barra de arriba): cada jugador elige los colores del movimiento, correr, el camino, el alcance, el alcance largo, los objetivos y las áreas, y la intensidad. Se guardan en su navegador y los nuevos colores por defecto son más vivos.
+- **% de impacto para los jugadores**: regla de campaña. Está activado (como en BG3) y el máster puede apagarlo en 🎨, porque deja adivinar la CA.

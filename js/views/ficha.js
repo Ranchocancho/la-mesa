@@ -236,7 +236,7 @@ function bind(el, s, c, tok) {
     publish({ kind: "check", label: `${n} de ${c.name}`, expr: `1d20${bonus >= 0 ? "+" : ""}${bonus}`, by: tok ? tok.id : null });
   });
   $$("[data-slot]", el).forEach(b => b.onclick = () => { const [l, dlt] = b.dataset.slot.split("|"); useSlot(c.id, +l, +dlt); });
-  $$("[data-spell]", el).forEach(b => b.onclick = () => { openSpell = openSpell === b.dataset.spell ? null : b.dataset.spell; arm(openSpell ? { kind: "spell", name: openSpell } : null); renderSheet(el); });
+  $$("[data-spell]", el).forEach(b => b.onclick = () => { openSpell = openSpell === b.dataset.spell ? null : b.dataset.spell; arm(openSpell ? { kind: "spell", name: openSpell, go: doCast } : null); renderSheet(el); });
   $$("[data-unpick]", el).forEach(b => b.onclick = () => togglePick(b.dataset.unpick));
   $$("[data-arm]", el).forEach(b => b.onclick = () => { const i = +b.dataset.arm, use = b.dataset.use || "act", A = armedNow(); openSpell = null; arm(A && A.kind === "atk" && A.i === i && (A.use || "act") === use ? null : { kind: "atk", tok: tok.id, i, use }); renderSheet(el); });
   $$("[data-fbon]", el).forEach(b => b.onclick = () => {
@@ -267,7 +267,10 @@ function bind(el, s, c, tok) {
     if (!center && !/cono|línea|emanación/.test(m.area.shape)) return toast("Marca primero la criatura del centro del área.");
     inArea(s, m, tok, center).forEach(id => picked.add(id)); renderSheet(el);
   });
-  on("fcastgo", () => {
+  on("fcastgo", () => doCast());
+  // Lanzar: desde el botón o, como en BG3, al colocar el área o tocar al objetivo de un ataque de conjuro
+  function doCast() {
+    const s = store.get(); if (!openSpell) return;
     const d = findSpell(openSpell), m = spellMech(d);
     if (!tok || !s.board) {           // fuera de la mesa: solo se gasta el espacio
       if (m.lvl) { const free = freeSlots(c, m.lvl); if (!free.length) return; useSlot(c.id, slotPick[d.n] || free[0]); }
@@ -278,7 +281,7 @@ function bind(el, s, c, tok) {
     if (!targets.length && (m.save || m.heal || m.atk || m.buff || m.dmg)) return toast("Elige al menos un objetivo.");
     const r = cast(tok.id, d.n, m.lvl ? slotPick[d.n] : 0, targets);
     if (r !== null) { openSpell = null; arm(null); }
-  });
+  }
   on("faddcond", () => { condOpen = !condOpen; renderSheet(el); });
   $$("[data-addc]", el).forEach(b => b.onclick = () => { condOpen = false; store.commit("token", st => { const k = st.tokens.find(x => x.id === tok.id); k.conds = k.conds || []; if (condImmune(k, b.dataset.addc)) { toast(`${k.name} es inmune a ese estado (perfil del SRD).`); return; } if (!k.conds.some(c => c.id === b.dataset.addc)) k.conds.push({ id: b.dataset.addc }); }); });
   $$("[data-uncond]", el).forEach(b => b.onclick = () => store.commit("token", st => { const k = st.tokens.find(x => x.id === tok.id); k.conds = (k.conds || []).filter(c => c.id !== b.dataset.uncond); }));

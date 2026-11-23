@@ -26,10 +26,16 @@ import { EFECTOS } from "../data/efectos.js";
 import { computeVision, explored, visionOn, tokenSeen, unseenFn, LIGHT_ITEMS } from "../core/vision.js";
 import { renderRolls, visibleRolls } from "./tiradas.js";
 import { attacksOf, attack, acOf, nameOf, damageFor, answerOA, decide } from "../core/combate.js";
-import { canActNow, phase, current, pending, beginCombat, rollInit, startRounds, endTurn, stopCombat, eco, moveBudget, speedOf, spend, toggle, ACCIONES, rangeOf, inRange, cover, modifiers, dist, metres } from "../core/turnos.js";
-import { srd } from "../core/srd.js";
+import { canActNow, phase, current, pending, beginCombat, rollInit, startRounds, endTurn, stopCombat, eco, moveBudget, speedOf, spend, toggle, ACCIONES, rangeOf, inRange, cover, modifiers, dist, metres, gap } from "../core/turnos.js";
+import { srd, findSpell } from "../core/srd.js";
+import { spellMech } from "../core/hechizos.js";
+import { classInfo, prof, mod } from "../data/dnd.js";
+import { spellDC } from "../core/salud.js";
 import { nowState } from "./ahora.js";
-import { armedNow, arm, togglePick } from "../core/apuntar.js";
+import { armedNow, arm, togglePick, picked, clearPicks, onAim } from "../core/apuntar.js";
+import { weaponTargeting, attackPreview, hitChance, dmgRange, templateCells, tokensIn, templateOk } from "../core/objetivo.js";
+import { npcArmedArea } from "./accionesnpc.js";
+import { colors, setColor, resetColors, onColors, COLOR_KEYS, DEFAULT_COLORS } from "../core/colores.js";
 import { floorIdx } from "../core/plantas.js";
 import { publish, mySkin, SKIN_HEX } from "../core/dados.js";
 
@@ -44,7 +50,7 @@ let hudOpen = !(window.matchMedia && window.matchMedia("(max-width: 900px)").mat
 
 export function mountTactical(host, opts = {}) {
   host.innerHTML = `<div class="tactical"><div class="boardwrap"></div><aside class="sidecol"><div class="sidetabs" role="tablist"><button role="tab" data-side="ini">Iniciativa</button><button role="tab" data-side="tir">🎲 Tiradas</button></div><div class="initcol" aria-label="Iniciativa"></div><div class="rollcol" hidden></div></aside><div class="hud"></div>
-    <div class="topbar"><div class="tb-now" aria-live="polite"></div><div class="turnbar"></div><div class="tb-right"><div class="tb-ctl"></div><button class="btn small" id="v3d" title="Cambiar entre la mesa en 3D y el plano en 2D"></button></div></div><div class="editbadge" hidden>✏️ El máster está retocando la mesa…</div><div class="turnbanner" hidden></div><div class="taskcall" hidden></div></div>`;
+    <div class="topbar"><div class="tb-now" aria-live="polite"></div><div class="turnbar"></div><div class="tb-right"><div class="tb-ctl"></div><button class="btn small" id="v3d" title="Cambiar entre la mesa en 3D y el plano en 2D"></button><button class="btn small" id="vcol" title="Colores del movimiento, el alcance, los objetivos y las áreas">🎨</button></div></div><div class="editbadge" hidden>✏️ El máster está retocando la mesa…</div><div class="turnbanner" hidden></div><div class="taskcall" hidden></div></div>`;
   // Para los jugadores, la iniciativa va en su columna fija de la derecha (opts.sideHost) y el tablero ocupa todo el ancho
   if (opts.sideHost) { $(".sidecol", host).remove(); $(".tactical", host).classList.add("noside"); opts.sideHost.innerHTML = `<div class="initcol" aria-label="Iniciativa"></div>`; }
   const sideRoot = opts.sideHost || host;
@@ -62,11 +68,22 @@ export function mountTactical(host, opts = {}) {
       if (id === A.tok) return false;
       const a = st.tokens.find(t => t.id === A.tok), w = a && attacksOf(st, a)[A.i]; if (!w) { arm(null); return false; }
       if (dm && a.kind === "pc") return false;
+      const tt = st.tokens.find(t => t.id === id), pv = tt && attackPreview(st, a, w, tt);
+      // Como en BG3: si no llegas pero puedes acercarte andando, la figura se acerca (pagando su movimiento) y ataca
+      if (pv && pv.approach) { bopts.mutate("token", m => { const k = m.tokens.find(x => x.id === a.id); if (k) { k.c = pv.approach.c; k.r = pv.approach.r; } }); toast(`Te acercas ${metres(pv.approach.cost / 1.5)} y atacas.`); }
       sel = id; const r = attack(A.tok, id, w, dm ? atkAdv : null, A.use || "act"); if (r) { const left = eco(S(), a).atkLeft; if (A.use === "bonus" || !(left > 0)) arm(null); atkAdv = null; } actSig = ""; drawHud(); return true;
     }
     if (A.kind === "npcact") { if (id !== A.tok || A.sp) togglePick(id); sel = id; actSig = ""; drawHud(); return true; } // el máster elige objetivos de la acción de su criatura
     if (dm) return false;
-    if (A.kind === "spell") { togglePick(id); sel = id; drawHud(); return true; }
+    if (A.kind === "spell") {
+      const T = targeting();
+      if (T && T.kind === "tmpl") return true; // con plantilla de área se toca el suelo, no una figura
+      const tg = T && T.targets && T.targets.find(x => x.id === id);
+      if (tg && tg.state === "out") { toast(`Fuera del alcance de ${A.name}${tg.far ? ` (está a ${String(tg.far).replace(".", ",")} m)` : ""}.`); return true; }
+      togglePick(id); sel = id; drawHud();
+      if (A.go && T && T.single && picked.has(id)) A.go(); // un ataque de conjuro a un solo objetivo: se lanza al tocarlo
+      return true;
+    }
     return false;
   }
   function selectTok(id) { if (aimAt(id)) return; if (board && board.select) board.select(id); if (sel !== id) { sel = id; } hudOpen = true; if (isDM(S()) && (S().tokens.find(t => t.id === id) || {}).kind !== "pc") npcId = id; drawHud(); if (opts.onSelect) opts.onSelect(id); }
@@ -146,6 +163,8 @@ export function mountTactical(host, opts = {}) {
     setSound: v => store.commit("board", st => { st.board.sound = v; }),
     rolls: () => visibleRolls(S()),
     aim: () => aimInfo(),
+    targeting: () => targeting(),
+    onTemplate: cell => placeTemplate(cell),
     rollColor: r => { const t = S().tokens.find(x => x.id === r.tok), c = t && charOf(S(), t); const u = S().users.find(x => x.id === r.who); return (c && c.color) || (u && u.role !== "player" ? "#6a3fb0" : (u && u.color) || "#8a2be2"); },
     fogState: () => { const s = S(); if (isDM(s) || !visionOn(s.board)) return null; const vis = computeVision(s.board, s.tokens, s.characters); return { vis, exp: explored((s.board.scene || "mesa") + "#" + floorIdx(s.board), vis) }; },
     setAmbient: k => store.commit("board", st => { st.board.ambient = k; })
@@ -170,6 +189,46 @@ export function mountTactical(host, opts = {}) {
     if (!dm) return s.tokens.find(t => t.kind === "pc" && t.owner === me());
     if (cur && cur.kind !== "pc") return cur;
     const st = s.tokens.find(t => t.id === sel); return st && st.kind !== "pc" ? st : cur;
+  }
+  /** Lo que la mesa dibuja al apuntar (BG3): alcance, objetivos con su probabilidad, o una plantilla de área. */
+  function targeting() {
+    const s = S(), A = armedNow(); if (!A || !s.board || !s.tokens) return null;
+    const dm = isDM(s), hid = unseenFn(s, dm), vis = t => dm || !hid(t), odds = dm || s.showOdds !== false;
+    if (A.kind === "atk") {
+      const a = s.tokens.find(t => t.id === A.tok); if (!a || (!dm && a.owner !== me())) return null;
+      const T = weaponTargeting(s, a, A.i, vis); if (T) T.odds = odds; return T;
+    }
+    if (A.kind === "spell") {
+      const a = actorTok(), d = findSpell(A.name), m = d && spellMech(d); if (!a || !m || m.self) return null;
+      const rng = m.touch ? { n: 1.5, l: 1.5 } : m.rng || { n: 1.5, l: 1.5 };
+      if (m.area) return { kind: "tmpl", from: a.id, area: m.area, rng, label: d.n };
+      const sw = attacksOf(s, a).find(x => x.spell && x.name === "✨ " + d.n), sdmg = sw ? dmgRange(sw.expr) : m.dmg ? dmgRange(m.dmg) : null; // trucos: el daño que toca a tu nivel
+      const c = charOf(s, a), ab = c && classInfo(c.cls).cast, bonus = c && ab ? prof(c.level) + mod(c.abilities[ab]) : 0, dc = c ? spellDC(c) : null;
+      const targets = s.tokens.filter(t => vis(t)).map(t => { const st = inRange(rng, a, t), cv = st === "out" ? null : cover(s, a, t);
+        if (st === "out") return { id: t.id, state: "out", far: Math.round(gap(a, t) * 15) / 10, ally: (t.kind === "pc") === (a.kind === "pc") };
+        if (cv.level === "total") return { id: t.id, state: "cover", ally: (t.kind === "pc") === (a.kind === "pc") };
+        const mods = modifiers(s, a, t, rng), pct = m.atk ? Math.round(hitChance(bonus, acOf(s, t) + (cv.bonus || 0), mods.net) * 100) : null;
+        return { id: t.id, state: st, ally: (t.kind === "pc") === (a.kind === "pc"), pct, picked: picked.has(t.id), save: m.save ? `CD ${dc} ${({ fue: "Fue", des: "Des", con: "Con", int: "Int", sab: "Sab", car: "Car" })[m.save]}` : "", dmg: sdmg, why: m.atk ? [...mods.adv.map(x => "▲ " + x), ...mods.dis.map(x => "▼ " + x)] : [], cov: cv.txt || "" }; });
+      return { kind: "spell", from: a.id, label: d.n, rng: { n: rng.n / 1.5, l: (rng.l || rng.n) / 1.5, melee: rng.n <= 1.5 }, targets, odds, single: !!m.atk };
+    }
+    if (A.kind === "npcact") {
+      const ar = npcArmedArea(s, A); if (ar) return { kind: "tmpl", from: ar.tok, area: ar.area, rng: ar.rng, label: ar.label };
+      const a = s.tokens.find(t => t.id === A.tok); if (!a) return null;
+      return { kind: "pick", from: a.id, targets: s.tokens.filter(t => t.id !== a.id).map(t => ({ id: t.id, state: "ok", picked: picked.has(t.id) })) };
+    }
+    return null;
+  }
+  /** Se ha colocado una plantilla de área: se marcan las criaturas dentro y, si el conjuro está listo, se lanza. */
+  function placeTemplate(cell) {
+    const s = S(), T = targeting(), A = armedNow(); if (!T || T.kind !== "tmpl" || !A) return;
+    const a = s.tokens.find(t => t.id === T.from); if (!a) return;
+    if (!templateOk(s, a, cell, T.area, T.rng)) return toast(`Demasiado lejos: el punto de origen tiene que estar a ${String(T.rng.n).replace(".", ",")} m o menos.`);
+    const ids = tokensIn(s, templateCells(s.board, a, cell, T.area), /cono|línea|emanación/.test(T.area.shape) ? a.id : null);
+    clearPicks(); ids.forEach(id => picked.add(id));
+    if (!ids.length) { toast("No hay ninguna criatura dentro del área."); drawHud(); return; }
+    const names = ids.map(id => nameOf(s, s.tokens.find(t => t.id === id))).join(", ");
+    if (A.go) A.go(); else { toast(`Dentro del área: ${names}. Pulsa «Usar» para resolverlo.`); actSig = ""; drawHud(); }
+    if (board) board.render();
   }
   function aimInfo() {
     const s = S(), a = actorTok(), t = s.tokens.find(x => x.id === (isDM(s) && a && a.kind !== "pc" ? dmTarget || sel : sel));
@@ -482,6 +541,39 @@ export function mountTactical(host, opts = {}) {
   // Acciones reales de las criaturas del SRD: se cargan una vez y se redibuja la ficha
   loadKits().then(() => { if (!host.isConnected) return; actSig = ""; drawHud(); }).catch(e => console.warn("Acciones del SRD no disponibles", e));
   const tickNow = setInterval(() => { if (!host.isConnected || !$(".tb-now", host)) return clearInterval(tickNow); drawNow(); }, 4000);
+  // Apuntar (BG3): al elegir arma o conjuro, la mesa enseña el alcance y los objetivos; una barra dice qué hacer
+  const aimbar = document.createElement("div"); aimbar.className = "aimbar"; aimbar.hidden = true; $(".tactical", host).appendChild(aimbar);
+  function drawAimbar() {
+    const T = targeting(), A = armedNow();
+    if (!T || !A) { aimbar.hidden = true; return; }
+    const ok = (T.targets || []).filter(x => !x.ally && (x.state === "ok" || x.state === "long")).length;
+    const what = T.kind === "tmpl" ? `◎ Coloca el área (${esc(T.area.shape)} de ${String(T.area.size).replace(".", ",")} m)${T.rng && !/cono|línea|emanación/.test(T.area.shape) && T.rng.n ? ` a ${String(T.rng.n).replace(".", ",")} m o menos` : ""}` : T.kind === "pick" ? "🎯 Toca los objetivos" : `🎯 Elige objetivo${ok ? ` · ${ok} a tu alcance` : " · nadie a tu alcance"}`;
+    aimbar.innerHTML = `<b>${esc(T.label || "")}</b><span>${what}</span><small>Esc o clic derecho para cancelar</small><button class="ib" data-aimx aria-label="Cancelar">✕</button>`;
+    aimbar.hidden = false; $("[data-aimx]", aimbar).onclick = () => { arm(null); };
+  }
+  const offAim = onAim(() => { if (!host.isConnected) return offAim(); drawAimbar(); if (board) board.render(); });
+  const onKey = e => { if (!host.isConnected) return document.removeEventListener("keydown", onKey); if (e.key === "Escape" && armedNow()) { arm(null); actSig = ""; drawHud(); } };
+  document.addEventListener("keydown", onKey);
+  host.addEventListener("contextmenu", e => { if (armedNow() && e.target.closest(".boardwrap")) { e.preventDefault(); arm(null); actSig = ""; drawHud(); } });
+  // Colores de la mesa (cada jugador, en su navegador)
+  $("#vcol", host).onclick = e => {
+    e.stopPropagation();
+    let pop = $(".colpop", host); if (pop) { pop.remove(); return; }
+    pop = document.createElement("div"); pop.className = "colpop"; $(".tactical", host).appendChild(pop);
+    const draw = () => { const c = colors(), s = S();
+      pop.innerHTML = `<h4>🎨 Colores de la mesa</h4>${COLOR_KEYS.map(([k, n, d]) => `<label title="${esc(d)}">${n}<input type="color" data-col="${k}" value="${c[k]}"></label>`).join("")}
+        <label>Intensidad<input type="range" min="0.5" max="1.8" step="0.1" data-colk="strength" value="${c.strength}"></label>
+        ${isDM(s) ? `<label title="Regla de campaña: como en BG3, los jugadores ven la probabilidad de impactar (deja adivinar la CA)"><span>Mostrar % de impacto a los jugadores</span><input type="checkbox" data-odds ${s.showOdds !== false ? "checked" : ""}></label>` : ""}
+        <div class="row"><button class="btn small" data-colreset>Restablecer</button><span class="grow"></span><button class="btn small" data-colx>Cerrar</button></div><p class="note" style="margin:6px 0 0">Solo cambia en tu pantalla.</p>`;
+      $$("[data-col]", pop).forEach(i => i.oninput = () => setColor(i.dataset.col, i.value));
+      $$("[data-colk]", pop).forEach(i => i.oninput = () => setColor("strength", +i.value));
+      const od = $("[data-odds]", pop); if (od) od.onchange = () => store.commit("campaign", st => { st.showOdds = od.checked; });
+      $("[data-colreset]", pop).onclick = () => { resetColors(); draw(); };
+      $("[data-colx]", pop).onclick = () => pop.remove(); };
+    draw();
+  };
+  const offCol = onColors(() => { if (!host.isConnected) return offCol(); if (board) board.render(); });
+  drawAimbar();
   return {
     selected: () => sel,
     npc: () => npcPick,
@@ -491,6 +583,7 @@ export function mountTactical(host, opts = {}) {
       const fk = s.board.scene + "#" + floorIdx(s.board);
       if (board && fk !== sceneId) { sceneId = fk; board.fit(); }
       if (board) board.render();
+      drawAimbar();
       if (!opts.edit) { const ev = combatEvents(s); if (ev.length && board && board.playEvents) board.playEvents(ev); }
       drawInit();
       if (rc && sideTab === "tir") renderRolls(rc);
@@ -657,6 +750,7 @@ export function tokenEditor(t) {
     <label class="field">Ataques <small>(uno por línea: nombre | ataque | daño)</small><textarea data-tkatk rows="2" placeholder="Cimitarra | +4 | 1d6+2 cortante">${esc((t.attacks || []).map(a => [a.name, a.atk, a.dmg].join(" | ")).join("\n"))}</textarea></label>
     <div class="tkgrid" style="grid-template-columns:1fr auto"><label class="field">Silueta de la peana<select data-tk="icon"><option value="">Según el nombre</option>${SILUETAS.map(([id, n]) => `<option value="${id}" ${t.icon === id ? "selected" : ""}>${n}</option>`).join("")}</select></label>
       <div class="row" style="align-self:end"><button class="btn small" data-tkimg="${t.id}">${t.img ? "Cambiar ilustración" : "Subir ilustración"}</button>${t.img ? `<button class="btn small" data-tknoimg="${t.id}">Quitar</button>` : ""}</div></div>
+    <label class="field" title="SRD «Volar»: con velocidad volando puede quedarse en el aire. Cuenta para distancias y alcance.">Vuela a (m)<select data-tk="alt"><option value="">En el suelo</option>${[1.5, 3, 4.5, 6, 9, 12, 18].map(v => `<option value="${v}" ${+t.alt === v ? "selected" : ""}>${String(v).replace(".", ",")} m</option>`).join("")}</select></label>
     <label class="field">Lleva luz<select data-tk="light"><option value="">Nada</option>${Object.entries(LIGHT_ITEMS).map(([k, x]) => `<option value="${k}" ${t.light === k ? "selected" : ""} title="${esc(x.src)}">${x.n}</option>`).join("")}</select></label>
     <div class="row"><label class="switch"><input type="checkbox" data-tk="hidden" ${t.hidden ? "checked" : ""}> Oculto a los jugadores</label><input type="color" data-tk="color" value="${t.color || "#7a2a22"}" aria-label="Color"></div>
   </div>`;
@@ -673,7 +767,8 @@ export function bindTokenEditor(root, mutate) {
     const id = box.dataset.tokedit;
     $$("[data-tk]", box).forEach(i => i.onchange = () => mutate(id, t => {
       const k = i.dataset.tk;
-      t[k] = i.type === "checkbox" ? i.checked : i.type === "number" || k === "size" ? +i.value : i.value;
+      t[k] = i.type === "checkbox" ? i.checked : i.type === "number" || k === "size" || k === "alt" ? +i.value : i.value;
+      if (k === "alt" && !t.alt) delete t.alt;
       if (k === "maxhp" && (t.hp == null || t.hp > t.maxhp)) t.hp = t.maxhp;
     }));
   });
