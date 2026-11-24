@@ -22,13 +22,13 @@ import { clockOf, clockShort } from "./core/lore.js";
 const ROUTES = [
   { id: "inicio", label: "Inicio", view: inicio },
   { id: "partida", label: "Partida", view: partida },
-  { id: "mundo", label: "Mapa", view: mundo },
   { id: "escenas", label: "Escenas", view: escenas, dmOnly: true },
+  { id: "mando", label: "Mando", view: mando, dmOnly: true },
+  { id: "mundo", label: "Mapa", view: mundo },
   { id: "personajes", label: "Personajes", view: personajes },
   { id: "reglas", label: "Reglas", view: reglas },
   { id: "lore", label: "Lore", view: lore },
-  { id: "cronica", label: "Crónica", view: cronica },
-  { id: "mando", label: "Mando", view: mando, dmOnly: true }
+  { id: "cronica", label: "Crónica", view: cronica }
 ];
 
 let current = null, mounted = null, cloudMod = null;
@@ -57,7 +57,7 @@ function topbar(state) {
   const players = state.users.filter(u => u.role === "player" && (!onBoard || onBoard.has(u.id) || u.id === session.viewAs()));
   return `<header class="top">
     <div class="brand"><b>La Mesa</b><span>${esc(state.campaign.name)} · ${live ? `${esc(sessionName(live))} en curso · ${esc(clockShort(clockOf(state)))}` : "sin partida"}${cloudMode ? "" : " · demostración"}</span></div>
-    ${me ? `<nav class="nav" aria-label="Secciones">${ROUTES.filter(x => !x.dmOnly || isDM(state)).map(x => `<a href="#${x.id}" ${x.id === r ? 'aria-current="page"' : ""}>${x.label}${x.id === "partida" && live ? ` <i class="livedot" title="Partida en curso"></i>` : ""}${x.id === "personajes" && isDM(state) && pendingCount(state) ? ` <i class="pendot" title="Cambios de fichas por revisar">${pendingCount(state)}</i>` : ""}${x.soon ? ` <span class="soon">· hito ${x.soon}</span>` : ""}</a>`).join("")}</nav>
+    ${me ? `<nav class="nav" aria-label="Secciones">${ROUTES.filter(x => !x.dmOnly || isDM(state)).map(x => `<a href="#${x.id}" ${x.id === r ? 'aria-current="page"' : ""} ${x.dmOnly ? 'class="dmnav" title="Solo el máster"' : ""}>${x.label}${x.id === "partida" && live ? ` <i class="livedot" title="Partida en curso"></i>` : ""}${x.id === "personajes" && isDM(state) && pendingCount(state) ? ` <i class="pendot" title="Cambios de fichas por revisar">${pendingCount(state)}</i>` : ""}${x.soon ? ` <span class="soon">· hito ${x.soon}</span>` : ""}</a>`).join("")}</nav>
     ${syncHTML(state)}
     ${isEditor(state) && players.length ? `<label class="viewas">Ver como<select id="viewas" class="btn small"><option value="">${esc(ROLE[real.role])}</option>${players.map(p => `<option value="${p.id}" ${va && va.id === p.id ? "selected" : ""}>${esc(p.name)}</option>`).join("")}</select></label>` : ""}
     <div class="me">${avatar(real)}<div>${esc(real.name)}<small>${esc(ROLE[real.role] || "Jugador")}</small></div>

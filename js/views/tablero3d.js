@@ -12,6 +12,7 @@ import { pathTo, moveHint } from "../core/movimiento.js";
 import { terrainCanvas } from "./texturas.js";
 import { PROC } from "./props3d.js";
 import { siluetaFor, siluetaURL } from "../data/siluetas.js";
+import { COND } from "../data/iconos.js";
 import { estado, etiqueta } from "../data/estados.js";
 import { store } from "../core/store.js";
 import { leftOf } from "../core/duraciones.js";
@@ -42,14 +43,18 @@ export function miniFor(t, ch) {
 }
 
 // Escenografía: modelo, escala y si va colgada de la pared
+// Escala de cada pieza (Hito 69: a la medida de las figuras: 1 casilla = 1,5 m = 4 unidades; una mesa ≈ 0,75 m de alto,
+// un barril ≈ 1 m, una puerta ≈ 2,3 m; antes salían a dos tercios y parecían de juguete)
 const PROP3D = {
-  mesa: ["dungeon/table_medium", 1.2], mesalarga: ["dungeon/table_long_decorated_A", 1], silla: ["dungeon/chair", 1.2], barril: ["dungeon/barrel_large", 1],
-  caja: ["dungeon/crates_stacked", 1], cofre: ["dungeon/chest", 1.1], columna: ["dungeon/pillar_decorated", 1], cama: ["dungeon/bed_decorated", 1],
-  calavera: ["dungeon/rubble_large", 0.45], tonel: ["dungeon/keg", 1], baul: ["dungeon/trunk_large_A", 1.2], escaleras: ["dungeon/stairs", 0.8], rampa: ["dungeon/stairs", 0.8],
-  velas: ["dungeon/candle_triple", 1.6], antorcha: ["dungeon/torch_mounted", 1.6, "wall"], estandarte: ["dungeon/banner_red", 1, "wall"], puerta: ["dungeon/wall_doorway", 1, "door"],
+  mesa: ["dungeon/table_medium", 2], mesalarga: ["dungeon/table_long_decorated_A", 1.6], silla: ["dungeon/chair", 1.9], barril: ["dungeon/barrel_large", 1.45],
+  caja: ["dungeon/crates_stacked", 1.45], cofre: ["dungeon/chest", 1.7], columna: ["dungeon/pillar_decorated", 1.6], cama: ["dungeon/bed_decorated", 1.45],
+  calavera: ["dungeon/rubble_large", 0.6], tonel: ["dungeon/keg", 1.45], baul: ["dungeon/trunk_large_A", 1.7], escaleras: ["dungeon/stairs", 0.8], rampa: ["dungeon/stairs", 0.8],
+  velas: ["dungeon/candle_triple", 2.2], antorcha: ["dungeon/torch_mounted", 2.2, "wall"], estandarte: ["dungeon/banner_red", 1.5, "wall"], puerta: ["dungeon/wall_doorway", 1, "door"],
   puertallave: ["dungeon/wall_doorway", 1, "door"], puertasecreta: ["dungeon/wall_doorway", 1, "door"], rastrillo: ["dungeon/wall_doorway", 1, "door"], puertarunas: ["dungeon/wall_doorway", 1, "door"],
-  estanteria: ["dungeon/shelf_large", 1], cofre: ["dungeon/chest", 1.1]
+  estanteria: ["dungeon/shelf_large", 1.6]
 };
+const PROC_BIG = ["altar", "sarcofago", "estatua", "pozo", "brasero", "arbolmuerto", "setas", "cristales", "obsidiana"]; // piezas hechas por código que también se quedaban cortas
+const WALL_TALL = 1.6; // muros altos: 6,4 unidades ≈ 2,4 m (antes 1,5 m, más bajos que las figuras)
 // Texturas de terreno como materiales 3D (con relieve sacado de la propia imagen); una por tipo
 const TEXMAT = new Map();
 function terrainMat(k) {
@@ -78,7 +83,9 @@ const FLOOR_TINT = { barro: 0x8a7458 };
 const AMBIENT = {
   dia: { n: "Día", hemi: [0xdfeaff, 0x6b5a45, 1.6], sun: [0xfff1dc, 2.6], bg: 0x2b2722, torch: 0.5 },
   interior: { n: "Interior", hemi: [0xffe2c0, 0x3a2c20, 0.55], sun: [0xffc58a, 0.9], bg: 0x17120e, torch: 1 },
-  noche: { n: "Noche", hemi: [0x7a8fc8, 0x1a1c26, 0.5], sun: [0x9fb4ff, 0.6], bg: 0x080a10, torch: 1.25 }
+  noche: { n: "Noche", hemi: [0x7a8fc8, 0x1a1c26, 0.5], sun: [0x9fb4ff, 0.6], bg: 0x080a10, torch: 1.25 },
+  penumbra: { n: "Penumbra", hemi: [0xc8b498, 0x231a12, 0.34], sun: [0xd6a070, 0.45], bg: 0x100c09, torch: 1.15 },
+  oscuro: { n: "Oscuridad", hemi: [0x6a6a80, 0x0c0c12, 0.16], sun: [0x8a90b0, 0.12], bg: 0x050507, torch: 1.4 }
 };
 
 // ---------- Texturas procedurales (sin descargas) ----------
@@ -205,9 +212,19 @@ const plateName = n => { const b = String(n || "?").replace(/\s*\(.*?\)/g, "").t
 const shortName = n => { const w = (n || "?").trim().split(/\s+/); return w.length > 1 && TITLES.test(w[0]) ? w[1] : w[0].length < 3 && w[1] ? w.slice(0, 2).join(" ") : w[0]; };
 /** Placa dibujada a la resolución exacta con la que se verá (pxH píxeles de alto): así el texto sale nítido, sin
  *  emborronarse al encogerse. Arriba el nombre; abajo la barra de vida con los PG centrados y grandes. */
-function namePlate(name, pct, txt, color, hl, pxH = 48) {
-  const U = 150, k = pxH / U, Wu = 600;               // se diseña en unidades de 150 de alto y se escala al tamaño real
-  const c = document.createElement("canvas"); c.width = Math.round(Wu * k); c.height = Math.round(U * k);
+// Iconos de estado (los grabados de la barra) para pintarlos en la placa: se cargan una vez y se tiñen de blanco
+const GI = {}; let giVer = 0;
+function giImg(k) {
+  if (GI[k]) return GI[k].c || null;
+  GI[k] = {}; const im = new Image();
+  im.onload = () => { const c = document.createElement("canvas"); c.width = c.height = 96; const g = c.getContext("2d"); g.drawImage(im, 0, 0, 96, 96); g.globalCompositeOperation = "source-in"; g.fillStyle = "#fff"; g.fillRect(0, 0, 96, 96); GI[k].c = c; giVer++; };
+  im.src = `assets/hud/${k}.svg`; return null;
+}
+// Placa sobre la figura, como en BG3: nombre, vida y debajo los estados en iconos pequeños con los turnos que les quedan
+function namePlate(name, pct, txt, color, hl, pxH = 48, conds = []) {
+  const list = conds.map(cd => ({ e: estado(cd.id || cd), left: cd.left, lvl: cd.lvl })).filter(x => x.e && x.e.id !== "encima");
+  const U = 150, k = pxH / U, Wu = 600, CR = list.length ? 84 : 0;   // se diseña en unidades de 150 de alto y se escala al tamaño real
+  const c = document.createElement("canvas"); c.width = Math.round(Wu * k); c.height = Math.round((U + CR) * k);
   const g = c.getContext("2d"); g.setTransform(k, 0, 0, k, 0, 0);
   const hasBar = pct != null;
   let fs = hasBar ? 54 : 64; g.font = `700 ${fs}px Georgia, serif`;
@@ -231,10 +248,24 @@ function namePlate(name, pct, txt, color, hl, pxH = 48) {
       g.fillStyle = "#fff"; g.fillText(txt, Wu / 2, by + bh / 2 + 2);
     }
   }
+  if (list.length) { // fila de estados bajo la placa
+    const D = 74, gap = 8, max = 6, shown = list.slice(0, max), n = shown.length + (list.length > max ? 1 : 0), x0i = (Wu - n * D - (n - 1) * gap) / 2, y = U + 6;
+    shown.forEach(({ e, left, lvl }, i) => {
+      const x = x0i + i * (D + gap);
+      g.shadowColor = "rgba(0,0,0,.8)"; g.shadowBlur = 6; g.fillStyle = e.c; g.beginPath(); g.roundRect(x, y, D, D, 10); g.fill(); g.shadowBlur = 0;
+      g.lineWidth = 3; g.strokeStyle = "rgba(0,0,0,.75)"; g.stroke();
+      const ic = COND[e.id] && giImg(COND[e.id]);
+      if (ic) { g.drawImage(ic, x + 7, y + 7, D - 14, D - 14); } else { g.font = "30px sans-serif"; g.textAlign = "center"; g.textBaseline = "middle"; g.fillStyle = "#fff"; g.fillText(e.i || "•", x + D / 2, y + D / 2 + 2); }
+      const badge = left != null ? String(left) : lvl > 1 ? String(lvl) : "";
+      if (badge) { g.fillStyle = "#111"; g.beginPath(); g.arc(x + D - 6, y + D - 6, 14, 0, Math.PI * 2); g.fill(); g.font = "800 20px system-ui,sans-serif"; g.textAlign = "center"; g.textBaseline = "middle"; g.fillStyle = "#fff"; g.fillText(badge, x + D - 6, y + D - 5); }
+    });
+    if (list.length > max) { const x = x0i + max * (D + gap); g.font = "800 28px system-ui,sans-serif"; g.textAlign = "center"; g.textBaseline = "middle"; g.lineWidth = 5; g.strokeStyle = "#000"; g.strokeText("+" + (list.length - max), x + D / 2, y + D / 2); g.fillStyle = "#fff"; g.fillText("+" + (list.length - max), x + D / 2, y + D / 2); }
+  }
   const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
   t.generateMipmaps = false; t.minFilter = THREE.LinearFilter; t.magFilter = THREE.LinearFilter; // sin mipmaps: no se emborrona
   const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, depthTest: false, transparent: true, sizeAttenuation: false }));
-  s.scale.set(PLATE_H * Wu / U, PLATE_H, 1); s.center.set(0.5, 0); s.renderOrder = 9; return s;
+  // Ancla abajo en la fila de la placa (no en la de estados): la placa queda donde estaba y los estados cuelgan debajo, delante de la figura
+  s.scale.set(PLATE_H * Wu / U, PLATE_H * (U + CR) / U, 1); s.center.set(0.5, CR / (U + CR)); s.renderOrder = 9; s.userData.base = [s.scale.x, s.scale.y]; return s;
 }
 function condTag(conds) {
   // Estados como iconos redondos en fila (como BG3 sobre la vida), con los turnos que les quedan
@@ -430,7 +461,7 @@ export function createBoard3D(host, opts) {
     // Muros: bloque de piedra y caras de muro de KayKit hacia las casillas transitables
     const wallGl = await load("dungeon/wall"); if (my !== build) return;
     let wallMesh = null; wallGl && wallGl.scene.traverse(o => { if (o.isMesh && !wallMesh) wallMesh = o; });
-    const wh = lowWalls ? 0.32 : 1, faces = [], blocks = [];
+    const wh = lowWalls ? 0.36 : WALL_TALL, faces = [], blocks = [];
     const shroudable = []; // piezas que se esconden mientras su casilla no se haya visto nunca (niebla)
     const byType = {};
     for (let r = 0; r < g.rows; r++) for (let c = 0; c < g.cols; c++) {
@@ -471,7 +502,7 @@ export function createBoard3D(host, opts) {
       let obj = null;
       if (p.k === "arbol") obj = tree(); else if (p.k === "arbusto") obj = bush(); else if (p.k === "roca") obj = rock(); else if (p.k === "trampa") obj = trap();
       else if (p.k === "hoguera") obj = campfire();
-      else if (PROC[p.k]) { obj = PROC[p.k](fire); if (!["telarana"].includes(p.k)) obj.rotation.y = (p.rot || 0) * Math.PI / 2; }
+      else if (PROC[p.k]) { obj = PROC[p.k](fire); if (!["telarana"].includes(p.k)) obj.rotation.y = (p.rot || 0) * Math.PI / 2; if (PROC_BIG.includes(p.k)) obj.scale.multiplyScalar(1.35); }
       else if (PROP3D[p.k]) {
         const [path, scale, how] = PROP3D[p.k];
         const gl = await load(path); if (my !== build) return;
@@ -485,12 +516,12 @@ export function createBoard3D(host, opts) {
           if (!dirs.length) obj.position.y = 0.6;
         } else if (how === "door") {
           obj.rotation.y = isWallIn(g, p.c - 1, p.r) || isWallIn(g, p.c + 1, p.r) ? 0 : Math.PI / 2;
-          obj.scale.set(1, wh < 1 ? 0.6 : 1, 1);
+          obj.scale.set(1, wh < 1 ? 0.6 : WALL_TALL, 1);
           // Hoja de madera: cerrada tapa el hueco; abierta, girada contra el marco
-          const lh = wh < 1 ? 1.9 : 3.1;
+          const lh = wh < 1 ? 1.9 : 3.1 * WALL_TALL;
           const leaf = p.k === "rastrillo" ? (() => { const bars = new THREE.Group(), iron = new THREE.MeshStandardMaterial({ color: 0x2e2c2a, metalness: 0.7, roughness: 0.45 }); for (let i = 0; i < 6; i++) { const b = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, lh, 6), iron); b.position.set(-0.95 + i * 0.38, 0, 0); bars.add(b); } [-0.3, 0.3].forEach(y => { const b = new THREE.Mesh(new THREE.BoxGeometry(2.1, 0.08, 0.08), iron); b.position.set(0, y * lh, 0); bars.add(b); }); return bars; })()
             : new THREE.Mesh(new THREE.BoxGeometry(2.2, lh, 0.22), p.k === "puertasecreta" ? terrainMat("muro") : p.k === "puertarunas" ? terrainMat("murorunas") : new THREE.MeshStandardMaterial({ map: woodLeaf(), roughness: 0.8, ...(p.k === "puertallave" ? { color: 0xc8b0a0 } : {}) }));
-          const hinge = new THREE.Group(); hinge.position.set(-1.1, 0, 0); leaf.position.set(1.1, (wh < 1 ? 1.9 : 3.1) / 2, 0); hinge.add(leaf);
+          const hinge = new THREE.Group(); hinge.position.set(-1.1, 0, 0); leaf.position.set(1.1, lh / 2, 0); hinge.add(leaf);
           hinge.rotation.y = p.open ? -Math.PI / 2 * 0.92 : 0;
           obj.add(hinge);
           obj.traverse(o => { o.userData.door = p.id; });
@@ -606,7 +637,8 @@ export function createBoard3D(host, opts) {
     let name = d.name || t.name || "?"; while (g.measureText(name).width > W - 70 && name.length > 4) name = name.slice(0, -2) + "…";
     g.fillText(name, W / 2, H - 50);
     const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 4;
-    const face = new THREE.MeshStandardMaterial({ map: tex, roughness: 0.75 }), side = new THREE.MeshStandardMaterial({ color: edge, roughness: 0.8 });
+    // La ilustración brilla un poco por sí misma: así no se apaga con la luz de interior o de noche (como una carta impresa bien iluminada)
+    const face = new THREE.MeshStandardMaterial({ map: tex, roughness: 0.75, emissive: 0xffffff, emissiveMap: tex, emissiveIntensity: 0.55 }), side = new THREE.MeshStandardMaterial({ color: edge, roughness: 0.8 });
     const CW = 3.0, CH = 4.0;
     const mesh = new THREE.Mesh(new THREE.BoxGeometry(CW, CH, 0.09), [side, side, side, side, face, face]);
     mesh.position.y = CH / 2; mesh.castShadow = true;
@@ -662,7 +694,7 @@ export function createBoard3D(host, opts) {
       if (down !== rec.down) {
         if (down && rec.lastHp != null) sound.play("down");
         rec.down = down; play(rec, down ? "Death_A" : "Idle", down);
-        if (rec.mini && rec.mini.userData.mats) rec.mini.userData.mats.forEach(m => m.color.setScalar(down ? 0.45 : 1));
+        if (rec.mini && rec.mini.userData.mats) rec.mini.userData.mats.forEach(m => { m.color.setScalar(down ? 0.45 : 1); if (m.emissiveMap) m.emissiveIntensity = down ? 0.12 : 0.55; });
       }
       // Estados: anillos de color en la peana, etiqueta escrita y algunos efectos en la figura
       const conds = t.conds || [], S0 = store.get(), condKey = JSON.stringify(conds) + conds.map(cd => cd.dur ? leftOf(S0, cd) : "").join(",");
@@ -672,7 +704,7 @@ export function createBoard3D(host, opts) {
         // Un solo anillo fino del color del primer estado (los iconos van encima de la figura)
         { const e = conds.map(cd => estado(cd.id || cd)).find(x => x && x.id !== "encima"); if (e) { const ring = new THREE.Mesh(new THREE.TorusGeometry(1.7, 0.06, 8, 48), new THREE.MeshStandardMaterial({ color: e.c, emissive: e.c, emissiveIntensity: 0.4, roughness: 0.4 })); ring.rotation.x = Math.PI / 2; ring.position.y = 0.1; rec.root.add(ring); rec.rings.push(ring); } }
         if (rec.tag) { rec.root.remove(rec.tag); rec.tag = null; }
-        if (conds.length) { rec.tag = condTag(conds.map(cd => cd.dur ? { ...cd, left: leftOf(S0, cd) } : cd)); rec.root.add(rec.tag); }
+        // (los estados van ahora en la placa, bajo la vida, como en BG3)
         const has = id => conds.some(cd => (cd.id || cd) === id);
         rec.prone = has("derribado") || has("inconsciente");
         const ghost = has("invisible"), stone = has("petrificado");
@@ -689,10 +721,11 @@ export function createBoard3D(host, opts) {
       const pctQ = hp ? (exact ? hp.cur / Math.max(1, hp.max) : (r => r > 0.75 ? 1 : r > 0.5 ? 0.7 : r > 0.25 ? 0.45 : r > 0 ? 0.18 : 0)(hp.cur / Math.max(1, hp.max))) : null;
       const word = hp && !exact ? (pctQ >= 1 ? "Ileso" : pctQ >= 0.7 ? "Herido" : pctQ >= 0.45 ? "Malherido" : pctQ > 0 ? "Al borde" : "Fuera de combate") : "";
       const pxH = Math.max(28, Math.min(160, Math.round(PLATE_H * camera.projectionMatrix.elements[5] / 2 * renderer.domElement.height))); // píxeles reales de la placa
-      const plateKey = JSON.stringify([d.name || t.name, pctQ, exact && hp && hp.cur, exact && hp && hp.max, hl, word, pxH]);
+      const cl = (t.conds || []).map(cd => cd.dur ? { ...cd, left: leftOf(store.get(), cd) } : cd);
+      const plateKey = JSON.stringify([d.name || t.name, pctQ, exact && hp && hp.cur, exact && hp && hp.max, hl, word, pxH, cl, giVer]);
       if (plateKey !== rec.barKey) {
         if (rec.bar) { rec.root.remove(rec.bar); rec.bar.material.map.dispose(); rec.bar.material.dispose(); rec.bar = null; }
-        rec.bar = namePlate(t.kind === "pc" ? shortName(d.name || t.name) : plateName(d.name || t.name), pctQ, hp ? (exact ? `${hp.cur} / ${hp.max}` : word) : "", t.kind === "pc" ? "#d6aa4e" : t.kind === "npc" ? "#7d8fe0" : "#b33a2e", hl, pxH);
+        rec.bar = namePlate(t.kind === "pc" ? shortName(d.name || t.name) : plateName(d.name || t.name), pctQ, hp ? (exact ? `${hp.cur} / ${hp.max}` : word) : "", t.kind === "pc" ? "#d6aa4e" : t.kind === "npc" ? "#7d8fe0" : "#b33a2e", hl, pxH, cl);
         rec.root.add(rec.bar); rec.barKey = plateKey;
       }
       rec.bar.position.y = top;
@@ -1093,7 +1126,7 @@ export function createBoard3D(host, opts) {
         rec.pulse.scale.setScalar(1 + k * 1.4); rec.pulse.material.opacity = rec.fxT * 0.95;
         rec.beam.material.opacity = Math.sin(Math.min(1, k * 1.4) * Math.PI) * (rec.fxHeal ? 0.32 : 0.22);
         rec.beam.scale.set(1 - k * 0.3, rec.fxHeal ? 0.6 + k * 0.7 : 1, 1 - k * 0.3); rec.beam.position.y = rec.fxHeal ? 1.8 + k * 2.5 : 3;
-        if (rec.bar) { const k = 1 + 0.18 * rec.fxT; rec.bar.scale.set(PLATE_H * 640 / 150 * k, PLATE_H * k, 1); }
+        if (rec.bar && rec.bar.userData.base) { const k = 1 + 0.18 * rec.fxT, [bx, by] = rec.bar.userData.base; rec.bar.scale.set(bx * k, by * k, 1); }
       }
       if (rec.sel && rec.sel.visible) rec.sel.material.opacity = 0.55 + 0.3 * Math.sin(time * 4);
       if (rec.turn && rec.turn.visible) rec.turn.material.opacity = 0.09 + 0.06 * Math.sin(time * 3);

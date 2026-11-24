@@ -15,7 +15,7 @@ import { glyph, COND } from "../data/iconos.js";
 import { siluetaFor, siluetaURL } from "../data/siluetas.js";
 import { INDICE, ACCESOS } from "../data/indice.js";
 import { srd, srdNow, norm } from "../core/srd.js";
-import { openRulePage, openRules } from "./reglas.js";
+import { openRulePage, openRules, sectionBlocks, blocksHTML } from "./reglas.js";
 import { mandoOf, partyChars, sessionXP, ensureXP0, addXPNote, grantXPNotes, dropXPNote, FTAGS, addFuture, toggleFuture, dropFuture,
   addRule, dropRule, moveRule, addMerma, dropMerma } from "../core/mando.js";
 
@@ -38,7 +38,7 @@ export function draw(el, compact, force) {
   // no pisar lo que se está escribiendo
   if (!force && el.contains(document.activeElement) && /INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName) && document.activeElement.dataset.keep !== undefined) return;
   ensureXP0();
-  if (!srdNow.glosario) Promise.all([srd("glosario"), srd("conjuros"), srd("monstruos")]).then(() => draw(el, compact));
+  if (!srdNow.glosario || !srdNow.paginas) Promise.all([srd("glosario"), srd("conjuros"), srd("monstruos"), srd("paginas")]).then(() => draw(el, compact));
   const sec = (k, icon, title, sub, body, wide) => `<section class="mpanel ${wide ? "wide" : ""}" data-mk="${k}"><h2 class="msec" data-mtog="${k}"><span>${icon} ${title}</span>${sub ? `<small>${sub}</small>` : ""}<i>${ui.open[k] ? "▾" : "▸"}</i></h2>${ui.open[k] ? `<div class="mbody">${body}</div>` : ""}</section>`;
   const live = liveSession(s);
   el.classList.toggle("compact", !!compact);
@@ -125,7 +125,7 @@ function futureHTML(s) {
 }
 
 /* ---------- Reglas a mano ---------- */
-const KIND = { g: "📚", p: "📖", c: "✨", m: "🐉", t: "🗂" };
+const KIND = { g: "📚", p: "📖", s: "📑", c: "✨", m: "🐉", t: "🗂" };
 function ruleResults(q) {
   const n = norm(q); if (n.length < 2) return [];
   const out = [], push = (k, ref, label, sub) => { if (out.length < 14) out.push({ k, ref, label, sub }); };
@@ -144,17 +144,26 @@ function rulesHTML(s) {
     ${groups.map(g => `<div class="mrgrp">${g ? `<h3 class="msub">📁 ${esc(g)}</h3>` : R.length && groups.length > 1 ? `<h3 class="msub">Sin carpeta</h3>` : ""}<div class="mrules">${R.filter(r => (r.grp || "") === g).map(r => `<span class="mrule"><button data-ropen="${r.k}|${esc(r.ref)}" title="Abrir">${KIND[r.k]} ${esc(r.label)}</button><button class="mx" data-rup="${r.id}" aria-label="Subir">‹</button><button class="mx" data-rdel="${r.id}" aria-label="Quitar">✕</button></span>`).join("")}</div></div>`).join("")}`;
 }
 /** Abre un acceso: glosario y conjuros en una ventana aquí mismo (rápido); páginas y monstruos, en Reglas. */
-function openRule(k, ref) {
-  if (k === "p") { const [p, a] = ref.split("~"); return openRulePage(+p, a); }
+function openRule(k, ref, label) {
+  if (k === "p" || k === "s") { // apartados del libro: su texto aquí mismo (uno o varios juntos)
+    const P = srdNow.paginas, parts = ref.split(";;").map(x => x.split("~")), [p0, a0] = parts[0];
+    if (!P) { srd("paginas").then(() => openRule(k, ref)); return; }
+    const html = parts.map(([p, a]) => { const bl = sectionBlocks(P, +p, a); return bl.length ? `<div class="mrsec">${blocksHTML(bl)}<small class="tenue">Libro, pág. ${p}</small></div>` : ""; }).join("");
+    if (!html) return openRulePage(+p0, a0);
+    return viewer(`${KIND[k]} ${parts.length > 1 ? esc(label || "Apartados") : esc(a0)}`, `<div class="bookpage mrbook">${html}</div>`, () => openRulePage(+p0, a0));
+  }
   if (k === "m") return openRules("monstruos", ref);
   if (k === "t") return openRules(ref);
   let title = ref, body = "", go = () => openRules(k === "g" ? "glosario" : "conjuros", ref);
   if (k === "g") { const g = (srdNow.glosario || {})[ref]; body = g ? g.txt : ""; }
   if (k === "c") { const c = (srdNow.conjuros || []).find(x => x.n === ref); if (c) { title = `${c.n} · ${c.lvl ? `nivel ${c.lvl}` : "truco"} (${c.esc})`; body = `Tiempo: ${c.t} · Alcance: ${c.al} · Componentes: ${c.co} · Duración: ${c.du}\n${c.txt}`; } }
   if (!body) return go();
+  viewer(`${KIND[k]} ${esc(title)}`, `<div class="mrtxt">${body.split("\n").map(p => `<p>${esc(p)}</p>`).join("")}</div>`, go);
+}
+function viewer(title, inner, go) {
   const ov = document.createElement("div"); ov.className = "reqdlg";
-  ov.innerHTML = `<div class="modalbox mrulebox"><header><h3>${KIND[k]} ${esc(title)}</h3><button class="x" data-close aria-label="Cerrar">✕</button></header>
-    <div class="mrtxt">${body.split("\n").map(p => `<p>${esc(p)}</p>`).join("")}</div><div class="row"><button class="btn small" data-go>Abrir en Reglas</button><small class="srdnote">SRD 5.2.1 · CC BY 4.0</small></div></div>`;
+  ov.innerHTML = `<div class="modalbox mrulebox"><header><h3>${title}</h3><button class="x" data-close aria-label="Cerrar">✕</button></header>
+    ${inner}<div class="row"><button class="btn small" data-go>Abrir en Reglas</button><small class="srdnote">SRD 5.2.1 · CC BY 4.0</small></div></div>`;
   document.body.appendChild(ov);
   const close = () => ov.remove();
   ov.onclick = e => { if (e.target === ov || e.target.closest("[data-close]")) close(); };
@@ -194,7 +203,7 @@ function bind(el, compact) {
   { const q = $("#mrq", el); if (q) q.oninput = () => { ui.rq = q.value; const pos = q.selectionStart; redraw(); const q2 = $("#mrq", el); if (q2) { q2.focus(); q2.setSelectionRange(pos, pos); } }; }
   { const g = $("#mrg", el); if (g) g.oninput = () => { ui.rgrp = g.value; }; }
   on("[data-radd]", b => { const [k, ref, label] = b.dataset.radd.split("|"); addRule(k, ref, label, ui.rgrp); });
-  on("[data-ropen]", b => { const i = b.dataset.ropen.indexOf("|"); openRule(b.dataset.ropen.slice(0, i), b.dataset.ropen.slice(i + 1)); });
+  on("[data-ropen]", b => { const i = b.dataset.ropen.indexOf("|"), k = b.dataset.ropen.slice(0, i), ref = b.dataset.ropen.slice(i + 1), r = mandoOf(store.get()).rules.find(x => x.k === k && x.ref === ref); openRule(k, ref, r && r.label); });
   on("[data-rdel]", b => dropRule(b.dataset.rdel));
   on("[data-rup]", b => moveRule(b.dataset.rup, -1));
 }

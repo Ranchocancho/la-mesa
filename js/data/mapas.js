@@ -202,7 +202,8 @@ export const PROPS = {
   mastil:     { n: "Mástil", i: "⛵", cat: "region", reg: ["costa"], block: true, cover: "3q" },
   // Marcadores del máster
   nota:       { n: "Nota del máster", i: "📌", cat: "marca", hidden: true },
-  interes:    { n: "Punto de interés", i: "⭐", cat: "marca" }
+  interes:    { n: "Punto de interés", i: "⭐", cat: "marca" },
+  pasaje:     { n: "Paso a otra escena", i: "🧭", cat: "marca", note: "Une esta mesa con otra escena (el ala este del castillo, el nivel inferior de la mina…). En partida, el máster lleva al grupo desde aquí y aparece junto al paso de vuelta, si lo hay." }
 };
 /** Paquetes de región: luz y sonido que proponen al elegirlos en el editor. */
 export const REGIONS = {

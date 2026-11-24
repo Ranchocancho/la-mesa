@@ -13,6 +13,7 @@ import { XP_BY_CR } from "../core/srd.js";
 import { difficulty, partyOf, HINT } from "../core/encuentro.js";
 
 let el = null, tab = "libro", page = 5, q = "", sel = null, filt = { lvl: "", cls: null, vd: "", ty: "", fx: "" }, PROGM = null;
+const pinSel = new Set(); // apartados del libro marcados para guardarlos juntos (máster)
 let sortM = "az", mfOpen = matchMedia("(min-width: 761px)").matches, mf = { vdr: "", ty: "", sz: "", mv: "", tr: "", df: "", or: "" }, gf = "", anchor = null, here = null, side = false, openCh = null;
 const CLASES = ["bardo", "brujo", "clérigo", "druida", "explorador", "hechicero", "mago", "paladín"];
 
@@ -26,7 +27,7 @@ export function mount(root) {
   el = document.createElement("div"); el.className = "reglas"; root.appendChild(el);
   el.addEventListener("click", e => { const b = e.target.closest("[data-rpin]"); if (!b) return; e.preventDefault(); e.stopPropagation();
     const [k, ref, label] = b.dataset.rpin.split("|"), r = mandoOf(store.get()).rules.find(x => x.k === k && x.ref === ref);
-    if (r) dropRule(r.id); else addRule(k, ref, label); const on = !r; b.classList.toggle("on", on); b.textContent = on ? "📌 ✓" : "📌 A mano"; toast(on ? "Añadida a tus reglas a mano (Mando)." : "Quitada de tus reglas a mano."); }, true);
+    if (r) dropRule(r.id); else addRule(k, ref, label); const on = !r; b.classList.toggle("on", on); if (!b.closest(".bhpin")) b.textContent = on ? "📌 ✓" : "📌 A mano"; toast(on ? "Añadida a tus reglas a mano (Mando)." : "Quitada de tus reglas a mano."); }, true);
   draw();
   return { update() {}, unmount() { el = null; } };
 }
@@ -102,8 +103,22 @@ const rich = (txt, term) => {
     .replace(/(^|[\s.])(Acierto|Fallo|Éxito|Fallo o éxito|Desencadenante|Respuesta|Usando un espacio de conjuro de nivel superior|Mejora de truco):/g, '$1<b class="kw">$2:</b>');
   return term ? mark(h, term) : h;
 };
-export function bookHTML(t, term) {
-  return blocks(t).map(b => b.k === "h" ? `<h${b.lvl} class="bh">${esc(b.t)}${b.tag ? ` <span class="btag">${esc(b.tag)}</span>` : ""}</h${b.lvl}>`
+export function bookHTML(t, term) { return blocksHTML(blocks(t), term); }
+/** Texto de un apartado del libro: desde su título hasta el siguiente título de su nivel o mayor (puede seguir en la página siguiente). */
+export function sectionBlocks(P, pg, title) {
+  const n = norm(title).slice(0, 24); let out = [], lvl = null;
+  for (let p = pg; p <= Math.min(P.length, pg + 3); p++) {
+    for (const b of blocks(P[p - 1])) {
+      if (lvl == null) { if (b.k === "h" && norm(b.t).startsWith(n)) { lvl = b.lvl; out.push(b); } continue; }
+      if (b.k === "h" && b.lvl <= lvl) return out;
+      out.push(b);
+    }
+    if (lvl == null) return out; // no está el título en su página
+  }
+  return out;
+}
+export function blocksHTML(bl, term) {
+  return bl.map(b => b.k === "h" ? `<h${b.lvl} class="bh">${esc(b.t)}${b.tag ? ` <span class="btag">${esc(b.tag)}</span>` : ""}</h${b.lvl}>`
     : b.k === "t" ? `<div class="btbl"><table>${b.rows.map((r, i) => `<tr>${r.map(c => i === 0 && b.rows.length > 1 ? `<th>${esc(c)}</th>` : `<td>${rich(c, term)}</td>`).join("")}</tr>`).join("")}</table></div>`
     : b.k === "ul" ? `<ul class="bul">${b.items.map(x => `<li>${rich(x, term)}</li>`).join("")}</ul>`
     : `<p>${rich(b.t, term)}</p>`).join("");
@@ -134,9 +149,22 @@ function libro(body, P) {
       <nav class="toc">${INDICE.map(c => `<details ${cur === c.n ? "open" : ""} data-ch="${esc(c.n)}"><summary class="${w.ch === c ? "on" : ""}"><span>${c.i} ${esc(c.n)}</span><small>${c.p}</small></summary><div>${c.subs.map(x => sub(x, c)).join("")}</div></details>`).join("")}</nav>`}
     </aside>
     <article class="rpage book"><div class="pnav"><button class="btn small rback" data-back>☰ Índice</button><button class="btn small" data-go="-1" aria-label="Página anterior">◀</button><span class="crumbs"><b>${esc(w.ch.n)}</b>${w.top ? ` › ${esc(w.top[0])}` : ""}${w.leaf ? ` › ${esc(w.leaf[0])}` : ""} <em>· p. ${page}/${P.length}</em></span><button class="btn small" data-go="1" aria-label="Página siguiente">▶</button></div>
+      ${isDM(store.get()) ? `<div class="pinbar">${pinSel.size ? `<span>📌 ${pinSel.size} apartado${pinSel.size > 1 ? "s" : ""} marcado${pinSel.size > 1 ? "s" : ""}</span><input id="pinname" placeholder="Nombre (p. ej. Agarres y empujones)"><button class="btn small gold" id="pinsave">Guardar juntos a mano</button><button class="btn small" id="pinclr">Desmarcar</button>` : `<small>Máster: 📌 junto a cada título lo guarda en tus reglas a mano (Mando). Con ☐ marcas varios apartados para guardarlos juntos.</small>`}</div>` : ""}
       <div class="bookpage">${bookHTML(P[page - 1] || "", q.length > 2 ? esc(q) : "")}<div class="folio">— ${page} —</div></div>
       <div class="pnav bottom"><button class="btn small" data-go="-1">◀ Anterior</button><button class="btn small" data-go="1">Siguiente ▶</button></div></article>`;
   const redraw = () => libro(body, P);
+  // Máster: fijar apartados del libro (uno a uno con 📌, o varios juntos con ☐)
+  if (isDM(store.get())) {
+    const R = mandoOf(store.get()).rules;
+    $$(".bookpage .bh", body).forEach(h => {
+      const t = (h.firstChild && h.firstChild.textContent || h.textContent).trim(), ref = `${page}~${t}`, on = R.some(r => r.k === "p" && r.ref === ref), key = ref;
+      h.insertAdjacentHTML("beforeend", `<span class="bhpin"><button class="${on ? "on" : ""}" data-rpin="p|${esc(ref)}|${esc(t)}" title="${on ? "Ya está en tus reglas a mano. Pulsa para quitarla." : "Guardar este apartado en tus reglas a mano"}">📌</button><button class="${pinSel.has(key) ? "on" : ""}" data-psel="${esc(key)}" title="Marcar para guardar varios apartados juntos">${pinSel.has(key) ? "☑" : "☐"}</button></span>`);
+    });
+    $$("[data-psel]", body).forEach(b => b.onclick = e => { e.stopPropagation(); const k = b.dataset.psel; pinSel.has(k) ? pinSel.delete(k) : pinSel.add(k); redraw(); });
+    const sv = $("#pinsave", body); if (sv) sv.onclick = () => { const L = [...pinSel], nm = ($("#pinname", body).value || "").trim() || L.map(k => k.split("~")[1]).join(" + ");
+      addRule("s", L.join(";;"), nm); pinSel.clear(); toast("Guardado en tus reglas a mano (Mando)."); redraw(); };
+    const cl = $("#pinclr", body); if (cl) cl.onclick = () => { pinSel.clear(); redraw(); };
+  }
   const rq = $("#rq", body);
   rq.oninput = () => { q = rq.value; const pos = rq.selectionStart; redraw(); const n = $("#rq", body); n.focus(); n.setSelectionRange(pos, pos); };
   const goPage = (p, a) => { page = p; anchor = a || null; here = a ? [a, p] : null; openCh = null; side = false; redraw(); };

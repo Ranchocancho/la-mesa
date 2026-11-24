@@ -7,6 +7,7 @@
 //  - Visión en la oscuridad: dentro de su alcance, la luz tenue cuenta como brillante y la oscuridad como tenue.
 import { TERRAIN, PROPS, doorBlocksSight } from "../data/mapas.js";
 import { reliefBlocks } from "./alturas.js";
+import { findMonster } from "./srd.js";
 
 /** Fuentes de luz en casillas de 1,5 m: b = radio de luz brillante, d = radio total (brillante + tenue). */
 export const LIGHT_ITEMS = {
@@ -20,7 +21,7 @@ export const LIGHT_ITEMS = {
 const PROP_LIGHT = { antorcha: LIGHT_ITEMS.antorcha, velas: LIGHT_ITEMS.vela, hoguera: LIGHT_ITEMS.antorcha };
 export const LEVELS = { bright: "☀️ Luz brillante", dim: "◐ Luz tenue", dark: "● Oscuridad" };
 /** Luz de la escena: la que elija el máster; si no, de noche hay oscuridad y si no, luz brillante. */
-export const ambientLevel = g => g && LEVELS[g.light] ? g.light : g && g.ambient === "noche" ? "dark" : "bright";
+export const ambientLevel = g => g && LEVELS[g.light] ? g.light : g && (g.ambient === "noche" || g.ambient === "oscuro") ? "dark" : g && g.ambient === "penumbra" ? "dim" : "bright";
 /** ¿Está activada la visión de los personajes? (activa salvo que el máster la apague) */
 export const visionOn = g => !!g && g.fog !== false;
 
@@ -127,4 +128,19 @@ export function unseenFn(s, dm) {
   const vis = visionOn(s.board) ? computeVision(s.board, s.tokens || [], s.characters || []) : null;
   const f = t => !!t && t.kind !== "pc" && (!!t.hidden || (!!vis && !tokenSeen(t, vis)));
   unseenCache.set(s, { rev: s.rev, f }); return f;
+}
+
+/** Visión en la oscuridad de una criatura del compendio (o de un PNJ con plantilla), en metros. */
+export function monsterDarkvision(t) {
+  const m = t && t.srd && findMonster(t.srd), x = m && String(m.txt || "").match(/[Vv]isión en la oscuridad (\d+(?:,\d+)?) m/);
+  return x ? parseFloat(x[1].replace(",", ".")) : 0;
+}
+/** ¿Puede «v» ver a «t» por la luz? (SRD: una zona a oscuras está muy oscurecida y quien no ve en ella está
+ *  como cegado respecto a lo que hay dentro; la visión en la oscuridad ve la oscuridad como luz tenue). */
+export function canSeeTok(s, v, t) {
+  const g = s && s.board; if (!g || !visionOn(g) || !v || !t) return true;
+  if (lightMap(g, s.tokens || []).at(t.c + "," + t.r) >= 1) return true; // luz brillante o tenue: se ve
+  const ch = v.kind === "pc" && (s.characters || []).find(x => x.id === v.char);
+  const dv = v.kind === "pc" ? darkvisionOf(ch) : monsterDarkvision(v);
+  return Math.max(Math.abs(t.c - v.c), Math.abs(t.r - v.r)) * 1.5 <= dv;
 }

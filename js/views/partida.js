@@ -16,7 +16,9 @@ import { onAim } from "../core/apuntar.js";
 import { canLevelUp, levelGranted } from "../data/dnd.js";
 import { floorsHTML, bindFloors } from "./plantasui.js";
 import { AMBIENTES } from "../core/sonido.js";
-const LUCES = { dia: "☀️ Día", interior: "🕯 Interior", noche: "🌙 Noche" };
+// Una sola luz (Hito 69): el aspecto de la mesa (ambiente) y el nivel de luz de las reglas (SRD) van juntos
+const LUCES = { dia: ["☀️ Día", "bright"], interior: ["🕯 Interior", "bright"], penumbra: ["◐ Penumbra", "dim"], noche: ["🌙 Noche", "dark"], oscuro: ["● Oscuridad", "dark"] };
+const lightKey = b => { const lv = ambientLevel(b), a = b.ambient || "interior"; if (LUCES[a] && LUCES[a][1] === lv) return a; return lv === "dim" ? "penumbra" : lv === "dark" ? (a === "noche" ? "noche" : "oscuro") : a === "dia" ? "dia" : "interior"; };
 import { floorName, floorsOf } from "../core/plantas.js";
 import { visionOn, LEVELS, ambientLevel } from "../core/vision.js";
 import { $, $$, esc, toast } from "../core/ui.js";
@@ -182,13 +184,13 @@ function toolsBlock(state) {
     ${q("qtmon", "👹", "Añadir criaturas")}
     ${q("data-askroll", "🎲", "Pedir una tirada (habilidad, característica o salvación)")}
     ${q("data-lsearch", "🔎", "Buscar en el lore (tecla /)")}
+    ${(state.tokens || []).some(t => t.hidden) ? `<button class="qb" id="qtreveal" title="Mostrar las criaturas ocultas: los jugadores podrán verlas (si sus personajes alcanzan a verlas)">🙈<small class="qn">${state.tokens.filter(t => t.hidden).length}</small></button>` : ""}
+    <span class="dmq2">
+    <select class="qsel" id="qtluz" title="Luz de la escena. Cambia cómo se ve la mesa y las reglas de visión (SRD): con luz tenue hay desventaja en Percepción para ver; a oscuras no se ve sin visión en la oscuridad o una luz, y atacar a quien no ves es con desventaja." aria-label="Luz">${Object.entries(LUCES).map(([k, [n]]) => `<option value="${k}" ${lightKey(b) === k ? "selected" : ""}>${n}</option>`).join("")}</select>
+    <select class="qsel" id="qtsnd" title="Música y sonido ambiente" aria-label="Sonido ambiente">${Object.entries(AMBIENTES).map(([k, n]) => `<option value="${k}" ${(b.sound || "") === k ? "selected" : ""}>🎵 ${n}</option>`).join("")}</select>
     <button class="qb" id="qtfloor" aria-pressed="${floorsOpen}" title="Plantas del mapa (torres, sótanos…). Ahora: ${esc(floorName(b))}${floorsOf(b).length > 1 ? ` · ${floorsOf(b).length} plantas` : ""}">🏰${floorsOf(b).length > 1 ? `<small class="qn">${floorsOf(b).length}</small>` : ""}</button>
     ${q("qtfog", "👁", visionOn(b) ? "Visión de los personajes: activada. Los jugadores solo ven lo que sus personajes ven (muros, puertas cerradas y luz). Pulsa para que lo vean todo." : "Visión de los personajes: desactivada (los jugadores ven todo el mapa)", visionOn(b))}
-    <select class="qsel" id="qtlight" title="Luz de la escena (reglas): brillante, tenue (desventaja en Percepción para ver) u oscuridad (no se ve sin visión en la oscuridad ni luz)" aria-label="Nivel de luz">${Object.entries(LEVELS).map(([k, n]) => `<option value="${k}" ${ambientLevel(b) === k ? "selected" : ""}>${n}</option>`).join("")}</select>
-    ${(state.tokens || []).some(t => t.hidden) ? `<button class="qb wide" id="qtreveal" title="Los jugadores podrán verlas (si sus personajes alcanzan a verlas)">🙈 Mostrar ocultas <small>${state.tokens.filter(t => t.hidden).length}</small></button>` : ""}
-    <select class="qsel" id="qtluz" title="Luz de la mesa" aria-label="Luz">${Object.entries(LUCES).map(([k, n]) => `<option value="${k}" ${(b.ambient || "interior") === k ? "selected" : ""}>${n}</option>`).join("")}</select>
-    <select class="qsel" id="qtsnd" title="Música y sonido ambiente" aria-label="Sonido ambiente">${Object.entries(AMBIENTES).map(([k, n]) => `<option value="${k}" ${(b.sound || "") === k ? "selected" : ""}>🎵 ${n}</option>`).join("")}</select>
-</div>
+    </span></div>
     ${floorsOpen ? `<div class="dmfloors">${floorsHTML(state, tac && tac.selected ? tac.selected() : null)}</div>` : ""}`;
 }
 
@@ -327,7 +329,7 @@ function bind(state) {
   const toggleEdit = () => { tacEdit = !tacEdit; store.commit("board", st => { if (st.board) st.board.editing = tacEdit || null; }); draw(); };
   on("tedit", toggleEdit);
   on("qtedit", toggleEdit);
-  { const L = $("#qtluz", el); if (L) L.onchange = () => store.commit("board", st => { if (st.board) st.board.ambient = L.value; });
+  { const L = $("#qtluz", el); if (L) L.onchange = () => store.commit("board", st => { if (st.board) { st.board.ambient = L.value; st.board.light = (LUCES[L.value] || [, "bright"])[1]; } });
     const S2 = $("#qtsnd", el); if (S2) S2.onchange = () => store.commit("board", st => { if (st.board) st.board.sound = S2.value; }); }
   on("qtfog", () => store.commit("board", st => { if (st.board) st.board.fog = !visionOn(st.board); }));
   { const ql = $("#qtlight", el); if (ql) ql.onchange = () => store.commit("board", st => { if (st.board) st.board.light = ql.value; }); }

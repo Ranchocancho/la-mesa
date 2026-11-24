@@ -131,7 +131,7 @@ function side() {
   box.innerHTML = `<div class="panel">
       <label class="field">Nombre<input id="scname" value="${esc(sc.name)}"></label>
       <label class="field" style="margin-top:8px">Lugar<select id="scplace"><option value="">Biblioteca (sin lugar)</option>${s.world.places.map(p => `<option value="${p.id}" ${sc.place === p.id ? "selected" : ""}>${esc(p.name)}</option>`).join("")}</select></label>
-      <div class="tkgrid" style="margin-top:8px"><label class="field">Columnas<input type="number" min="5" max="40" id="sccols" value="${sc.cols}"></label><label class="field">Filas<input type="number" min="5" max="30" id="scrows" value="${sc.rows}"></label></div>
+      <div class="tkgrid" style="margin-top:8px"><label class="field">Columnas<input type="number" min="5" max="80" id="sccols" value="${sc.cols}"></label><label class="field">Filas<input type="number" min="5" max="80" id="scrows" value="${sc.rows}"></label></div>
       <label class="field" title="Reglas de visión: con luz tenue se ve con desventaja en Percepción; a oscuras no se ve sin visión en la oscuridad. Las antorchas, velas y hogueras de la escena iluminan alrededor.">Luz de la escena<select id="sclight">${Object.entries(LEVELS).map(([k, n]) => `<option value="${k}" ${ambientLevel(sc) === k ? "selected" : ""}>${n}</option>`).join("")}</select></label>
       <div class="row" style="margin-top:10px"><button class="btn small" id="scstart" aria-pressed="${placing}">${placing ? "Toca una casilla del mapa…" : "⚑ Punto de inicio del grupo"}</button>
         <label class="field" title="Al cargar la escena, cada jugador se coloca por turnos dentro de esta zona">Zona de despliegue<select id="scrad">${[0, 1, 2, 3, 4, 5, 6].map(n => `<option value="${n}" ${(+(sc.deployRad ?? 2)) === n ? "selected" : ""}>${n ? `${n} casilla${n > 1 ? "s" : ""} (${n * 1.5} m)` : "solo el punto"}</option>`).join("")}</select></label></div>
@@ -152,9 +152,9 @@ function side() {
   const M = fn => store.commit("board", st => fn(st.scenes.find(y => y.id === openId)));
   $("#scname", box).onchange = e => M(x => { x.name = e.target.value; });
   $("#scplace", box).onchange = e => M(x => { x.place = e.target.value || null; });
-  $("#sccols", box).onchange = e => M(x => { x.cols = Math.max(5, Math.min(40, +e.target.value)); });
+  $("#sccols", box).onchange = e => M(x => { x.cols = Math.max(5, Math.min(80, +e.target.value)); });
   $("#sclight", box).onchange = e => M(x => { x.light = e.target.value; });
-  $("#scrows", box).onchange = e => M(x => { x.rows = Math.max(5, Math.min(30, +e.target.value)); });
+  $("#scrows", box).onchange = e => M(x => { x.rows = Math.max(5, Math.min(80, +e.target.value)); });
   // Añadir criaturas: se eligen en el bestiario y se colocan tocando el mapa (herramienta 👹 del editor)
   $("#monpick", box).onclick = () => openCreaturePicker({ title: "Elige la criatura y toca el mapa para ponerla", onAdd: (m, n, h) => {
     if (board && board.setTool) { board.setTool("foe", { foePick: { m, n, h: !!h } }); toast(`Toca el mapa para poner ${n > 1 ? n + " × " : ""}${m.n}.`); return; }

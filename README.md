@@ -846,3 +846,13 @@ A partir de la auditoría de diseño comparada con Baldur's Gate 3:
 - **Barras compactas**: el botón de planta (🏰) pasa a la primera línea de herramientas del máster y los tres selectores (luz, interior y sonido) quedan en una sola línea. Los tres botones de la sesión en curso ocupan una línea. El orden de pestañas es Táctica, Iniciativa y Tiradas.
 - Los estados de la tira de iniciativa usan los iconos grabados.
 - Arreglado: el formulario «Añadir al botín» cerraba una etiqueta de más y podía descolocar lo que venía detrás.
+
+## Hito 69 · Reglas del libro a mano, una sola luz, mesa 3D a escala y pasos entre escenas
+- **Apartados del libro a mano**: en Reglas, el máster tiene junto a cada título del libro un 📌 que lo guarda en sus reglas a mano, y un ☐ para marcar varios apartados y guardarlos juntos con un nombre. En Mando se abren en una ventana con su texto (del título al siguiente apartado, aunque siga en la página siguiente).
+- **Una sola luz**: el selector de luz une el aspecto de la mesa y el nivel de luz de las reglas (SRD: luz tenue = desventaja en Percepción para ver; oscuridad = no se ve sin visión en la oscuridad o luz, y atacar sin ver es con desventaja). Las opciones son ☀️ Día, 🕯 Interior, ◐ Penumbra, 🌙 Noche y ● Oscuridad, y las dos últimas oscurecen de verdad la mesa 3D. La segunda línea de herramientas del máster tiene cuatro controles: luz, música, plantas y visión.
+- **Peanas iluminadas**: la ilustración de las figuras de cartón brilla un poco por sí misma y ya no se apaga con la luz de interior.
+- **Estados como en BG3**: en la placa de cada figura, debajo de la vida, en iconos pequeños con los turnos que quedan. Desaparece la fila de iconos que flotaba sobre la cabeza.
+- **Escenario a escala de las figuras**: mesas, sillas, barriles, cofres, columnas y demás miden lo que deben junto a una figura de 1,8 m, y los muros altos pasan de 1,5 m a unos 2,4 m (también las puertas). Antes todo salía a dos tercios.
+- **Mapas más grandes y pasos entre escenas**: las escenas pueden medir hasta 80 × 80 casillas (120 m). El nuevo objeto «🧭 Paso a otra escena» (en Marcas) une una mesa con otra. En partida, el máster lo toca y pulsa «Llevar al grupo», y el grupo aparece en la otra escena junto al paso de vuelta. Sirve para un castillo por alas o una mina por niveles; las plantas siguen sirviendo para lo vertical.
+- **Pestañas del máster**: Escenas y Mando van juntas justo después de Partida, con fondo rojizo propio.
+- **Tira de iniciativa limpia**: retrato, debajo la iniciativa y la vida en una línea, y los estados en iconos pequeños. Nada se monta encima de nada.

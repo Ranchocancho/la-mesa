@@ -17,6 +17,12 @@ function place(s, scene) {
   const { board, tokens } = sceneToBoard(scene, onlineChars(s), s.tokens);
   s.board = board; s.tokens = tokens; s.presentation = { type: "tactical" };
 }
+/** Pasar a otra escena enlazada (Hito 69): el grupo aparece junto al paso que vuelve a la escena de la que viene (si lo hay). */
+export const travelTo = sceneId => store.commit("board", s => {
+  const sc = s.scenes.find(x => x.id === sceneId); if (!sc) return;
+  const from = s.board && s.board.scene, back = (sc.props || []).find(p => p.k === "pasaje" && p.to === from);
+  place(s, back ? { ...sc, start: { c: back.c, r: back.r } } : sc);
+});
 export const loadScene = sceneId => store.commit("board", s => { const sc = s.scenes.find(x => x.id === sceneId); if (sc) place(s, sc); });
 export const blankBoard = () => store.commit("board", s => place(s, blankScene("Mesa improvisada", null, 16, 11, "piedra")));
 export const clearBoard = () => store.commit("board", s => { s.board = null; s.tokens = []; if (s.presentation && s.presentation.type === "tactical") s.presentation = null; });
