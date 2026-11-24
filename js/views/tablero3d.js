@@ -23,9 +23,12 @@ import { chipText, templateCells, templateOk } from "../core/objetivo.js";
 import { colors, onColors } from "../core/colores.js";
 import { playEffect, EFECTOS } from "./efectos3d.js";
 import { sound, AMBIENTES } from "../core/sonido.js";
-import { floatText, strike, motes } from "./golpes3d.js";
+import { floatText, strike, motes, dust, healMotes } from "./golpes3d.js";
 import { makeEnvironment, makeBloom } from "./brillo3d.js";
 import { hazardEdges, HAZ_COLOR, coverOf, trapState, TRAP_LOOK } from "../core/marcas.js";
+import { enhanceFloor, fringeMaterial, fringeGeometries } from "./suelo3d.js";
+import { buildDressing } from "./detalles3d.js";
+import { buildAtmosphere, envKindOf, ENV_TEMP, hourTemp, tint, climateZones } from "./atmosfera3d.js";
 import { toast } from "../core/ui.js";
 import { RES_TEXT, RES_COLOR, cells as cellDist } from "../core/golpes.js";
 import { impactOf } from "../core/impactos.js";
@@ -35,6 +38,8 @@ const CELL = 4, BASE = "assets/kaykit/";
 const pref = (k, d) => { try { return localStorage.getItem(k) ?? d; } catch (e) { return d; } };
 const setPref = (k, v) => { try { localStorage.setItem(k, v); } catch (e) { /* nada */ } };
 const GRID = () => pref("lamesa:rejilla3d", "0") === "1", QUAL = () => pref("lamesa:calidad", "alta");
+const DENS = () => +pref("lamesa:detalle", "1"); // Hito 85: detalles del suelo 0 sin, 1 normal, 2 muchos
+const DENS_TXT = ["Sin detalles en el suelo", "Detalles del suelo: normal", "Detalles del suelo: muchos"];
 const YS = 1.7; // unidades de la escena por metro de altura (3 m de risco ≈ algo más que un muro)
 const loader = new GLTFLoader();
 const cache = new Map();
@@ -64,7 +69,24 @@ const PROP3D = {
 const PROC_BIG = ["altar", "sarcofago", "estatua", "pozo", "brasero", "arbolmuerto", "setas", "cristales", "obsidiana"]; // piezas hechas por código que también se quedaban cortas
 const WALL_TALL = 1.6; // muros altos: 6,4 unidades ≈ 2,4 m (antes 1,5 m, más bajos que las figuras)
 // Texturas de terreno como materiales 3D (con relieve sacado de la propia imagen); una por tipo
-const TEXMAT = new Map();
+const TEXMAT = new Map(), FRINGE = new Map();
+// Hito 89: sombra de contacto (mancha radial suave), compartida por objetos y figuras
+let CONTACT = null;
+function contactMat() {
+  if (CONTACT) return CONTACT;
+  const c = document.createElement("canvas"); c.width = c.height = 128; const x = c.getContext("2d"), g = x.createRadialGradient(64, 64, 6, 64, 64, 62);
+  g.addColorStop(0, "rgba(0,0,0,.55)"); g.addColorStop(0.5, "rgba(0,0,0,.28)"); g.addColorStop(1, "rgba(0,0,0,0)"); x.fillStyle = g; x.fillRect(0, 0, 128, 128);
+  return (CONTACT = new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(c), transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }));
+}
+const CONTACT_GEO = (() => { const g = new THREE.PlaneGeometry(1, 1); g.rotateX(-Math.PI / 2); return g; })();
+function contactShadow(size) { const m = new THREE.Mesh(CONTACT_GEO, contactMat()); m.scale.set(size, 1, size); m.position.y = 0.03; m.renderOrder = 1; m.raycast = () => {}; m.userData.keep = true; return m; }
+// objetos planos o colgados que no llevan sombra de contacto
+const FLATP = new Set(["trampaoculta", "aguja", "dardos", "red", "techo", "foso", "carta", "mapa", "llave", "pasaje", "nota", "interes", "telarana", "nenufares", "flores", "tumbaabierta", "grieta"]);
+// piezas naturales: cada copia algo distinta (tamaño, giro, inclinación)
+const NATURAL = new Set(["arbol", "arbusto", "roca", "penasco", "tocon", "arbolmuerto", "setas", "cristales", "pinonevado", "manglar", "arbolgigante", "monticulo", "juncos", "raices", "huesos"]);
+// terreno → color del polvo al pisar
+const DUST = { nieve: "#eef2f6", rocanevada: "#e0e6ee", hielo: "#d8eef8", hielofino: "#d8eef8", barro: "#5a4430", hierba: "#8aa060", hierbalta: "#8aa060", musgo: "#6a8a50", hojarasca: "#b07a3a", arena: "#d8c49a", ceniza: "#6a6664", volcanica: "#5a5250", agua: "#bfe0f0", aguaprof: "#bfe0f0" };
+const fringeMat = k => { if (!FRINGE.has(k)) FRINGE.set(k, fringeMaterial(terrainMat(k), k)); return FRINGE.get(k); };
 // Hito 82: insignias pequeñas (estado de trampa, cobertura) dibujadas en un lienzo
 const BADGE = new Map();
 function badgeTex(key, draw) {
@@ -87,6 +109,7 @@ function terrainMat(k) {
   const bump = rep(new THREE.CanvasTexture(heightCanvas(k))), rough = rep(new THREE.CanvasTexture(roughCanvas(k)));
   const m = new THREE.MeshStandardMaterial({ map, bumpMap: bump, bumpScale: ty.liquid ? 0.25 : ty.wall ? 0.9 : 1.6, roughness: 1, roughnessMap: rough, metalness: 0,
     ...(ty.liquid && k !== "lava" ? { transparent: true, opacity: 0.9 } : {}), ...(ty.glow ? { emissive: 0xff5a10, emissiveMap: map, emissiveIntensity: 1.1 } : {}) });
+  if (!ty.wall) enhanceFloor(m, k); // Hito 84: menos repetición (tono a gran escala y segunda lectura)
   TEXMAT.set(k, m); return m;
 }
 /** Suelo continuo de un tipo de terreno: un cuadrado por casilla con coordenadas de textura del mundo (sin costuras). */
@@ -319,7 +342,7 @@ export function createBoard3D(host, opts) {
   const camHTML = opts.controlsHost ? `<div class="cam3d compact" role="toolbar" aria-label="Cámara">
       <span class="camsq"><button class="sq" data-cam="center" title="Centrar la cámara en la mesa" aria-label="Centrar">⌖</button><button class="sq" data-cam="top" title="Vista cenital (desde arriba)" aria-label="Cenital">⬇</button><button class="sq" data-cam="ruler" aria-pressed="false" title="Regla: arrastra de una casilla a otra para medir" aria-label="Regla">📏</button><button class="sq" data-cam="mute" title="Silenciar">${sound.muted ? "🔇" : "🔊"}</button></span>
       <span class="volv" title="Volumen"><input type="range" min="0" max="1" step="0.05" value="${sound.volume}" data-vol aria-label="Volumen" orient="vertical"></span>
-      <span class="camst"><button class="btn small" data-cam="mode" aria-pressed="false" title="Cámara en órbita (pulsa para libre)">⟳</button><button class="btn small" data-cam="walls" aria-pressed="true" title="Muros bajos (pulsa para altos)">▁</button><button class="btn small" data-cam="grid" aria-pressed="${GRID()}" title="Cuadrícula sobre el suelo">▦</button><button class="btn small" data-cam="quality" aria-pressed="${QUAL() === "alta"}" title="${QUAL() === "alta" ? "Calidad alta: reflejos y resplandor (pulsa para normal)" : "Calidad normal (pulsa para alta: resplandor del fuego y la magia)"}">✨</button></span>
+      <span class="camst"><button class="btn small" data-cam="mode" aria-pressed="false" title="Cámara en órbita (pulsa para libre)">⟳</button><button class="btn small" data-cam="walls" aria-pressed="true" title="Muros bajos (pulsa para altos)">▁</button><button class="btn small" data-cam="grid" aria-pressed="${GRID()}" title="Cuadrícula sobre el suelo">▦</button><button class="btn small" data-cam="dress" aria-pressed="${DENS() > 0}" title="${DENS_TXT[DENS()]} (pulsa para cambiar)">🌿</button><button class="btn small" data-cam="quality" aria-pressed="${QUAL() === "alta"}" title="${QUAL() === "alta" ? "Calidad alta: reflejos y resplandor (pulsa para normal)" : "Calidad normal (pulsa para alta: resplandor del fuego y la magia)"}">✨</button></span>
     </div>` : `<div class="cam3d" role="toolbar" aria-label="Cámara">
       <button class="btn small" data-cam="center" title="Centrar la cámara en la mesa">⌖ Centrar</button>
       <button class="btn small" data-cam="top" title="Vista desde arriba">⬇ Cenital</button>
@@ -327,6 +350,7 @@ export function createBoard3D(host, opts) {
       <button class="btn small" data-cam="mode" aria-pressed="false" title="Órbita alrededor del centro o cámara libre">Órbita</button>
       <button class="btn small" data-cam="walls" aria-pressed="true" title="Muros bajos para ver mejor">Muros bajos</button>
       <button class="btn small" data-cam="grid" aria-pressed="${GRID()}" title="Cuadrícula sobre el suelo">▦ Cuadrícula</button>
+      <button class="btn small" data-cam="dress" aria-pressed="${DENS() > 0}" title="${DENS_TXT[DENS()]} (pulsa para cambiar)">🌿 Detalles</button>
       <button class="btn small" data-cam="quality" aria-pressed="${QUAL() === "alta"}" title="Calidad alta: resplandor del fuego, la lava y la magia">✨ ${QUAL() === "alta" ? "Alta" : "Normal"}</button>
       ${opts.dm && opts.setFog ? `<button class="btn small" data-cam="fog" title="Niebla de guerra para los jugadores">Niebla</button>` : ""}
       ${opts.dm && opts.setSound ? `<select class="btn small" data-snd aria-label="Sonido ambiente">${Object.entries(AMBIENTES).map(([k, v]) => `<option value="${k}">🎵 ${v}</option>`).join("")}</select>` : ""}
@@ -341,7 +365,15 @@ export function createBoard3D(host, opts) {
   renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.05;
   const env = makeEnvironment(renderer); let bloom = null, quality = QUAL(), fpsProbe = { n: 0, sum: 0, done: quality !== "alta" };
-  let gridObj = null;
+  let gridObj = null, atmo = null;
+  // Hito 87: niebla baja, haces de luz y fondo lejano; se rehace al cambiar de mesa, de luz o de calidad
+  function refreshAtmo() {
+    if (atmo) { scene.remove(atmo.group); atmo.dispose(); atmo = null; }
+    if (!G || !G.cols) return;
+    atmo = buildAtmosphere({ g: G, cx, cz, CELL, elevY: (c, r) => elevAt(G, c, r) * YS, isWall: (c, r) => isWallIn(G, c, r), amb: ambient || "interior", high: quality === "alta", seed: G.scene || G.name || "mesa" });
+    scene.add(atmo.group);
+    if (shroud && atmo.shroud.length) { shroud.push(...atmo.shroud); fogSig = ""; }
+  }
   host.prepend(renderer.domElement);
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(42, 1, 0.5, 600);
@@ -393,6 +425,7 @@ export function createBoard3D(host, opts) {
     if (k === "ruler") { measuring = !measuring; b.setAttribute("aria-pressed", measuring); renderer.domElement.style.cursor = measuring ? "crosshair" : ""; if (!measuring) drawRuler(null); return; }
     if (k === "mute") { sound.setMuted(!sound.muted); b.textContent = sound.muted ? "🔇" : "🔊"; return; }
     if (k === "grid") { const on = !GRID(); setPref("lamesa:rejilla3d", on ? "1" : "0"); b.setAttribute("aria-pressed", on); if (gridObj) gridObj.visible = on; return; }
+    if (k === "dress") { const d = (DENS() + 1) % 3; setPref("lamesa:detalle", String(d)); ctl.querySelectorAll('[data-cam="dress"]').forEach(x => { x.setAttribute("aria-pressed", d > 0); x.title = DENS_TXT[d] + " (pulsa para cambiar)"; }); toast("🌿 " + DENS_TXT[d]); lastSig = ""; sync(); return; }
     if (k === "quality") { setQuality(quality === "alta" ? "normal" : "alta", true); return; }
     if (k === "walls") { lowWalls = !lowWalls; b.textContent = lowWalls ? "▁" : "▇"; b.title = lowWalls ? "Muros bajos (pulsa para altos)" : "Muros altos (pulsa para bajos)"; b.setAttribute("aria-pressed", lowWalls); lastSig = ""; sync(); }
   });
@@ -410,22 +443,34 @@ export function createBoard3D(host, opts) {
   const calm = matchMedia("(prefers-reduced-motion: reduce)").matches;
   function setMotes() {
     if (!G || calm) return;
-    const k = [ambient, G.cols, G.rows].join("|"); if (k === moteKey) return; moteKey = k;
+    const zones = climateZones(G, cx, cz, CELL, PROPS);
+    const k = [ambient, G.cols, G.rows, zones.length, zones.slice(0, 5).map(z => z.x + ":" + z.z).join(",")].join("|"); if (k === moteKey) return; moteKey = k;
     if (moteFx) { ticks.delete(moteFx.step); moteFx.dispose(); }
-    moteFx = motes(scene, G.cols * CELL, G.rows * CELL, ambient); ticks.add(moteFx.step);
+    moteFx = motes(scene, G.cols * CELL, G.rows * CELL, ambient, zones); ticks.add(moteFx.step);
   }
   function setQuality(q, byHand) {
     quality = q; setPref("lamesa:calidad", q); fpsProbe = { n: 0, sum: 0, done: !!byHand || q !== "alta" };
     if (q !== "alta" && bloom) { bloom.dispose(); bloom = null; }
+    refreshAtmo();
     ctl.querySelectorAll('[data-cam="quality"]').forEach(b => { b.setAttribute("aria-pressed", q === "alta"); if (b.textContent.includes("Alta") || b.textContent.includes("Normal")) b.textContent = "✨ " + (q === "alta" ? "Alta" : "Normal"); b.title = q === "alta" ? "Calidad alta: reflejos y resplandor (pulsa para normal)" : "Calidad normal (pulsa para alta: resplandor del fuego y la magia)"; });
   }
+  const EXPO = { dia: 1.05, interior: 1.0, noche: 0.96, penumbra: 0.98, oscuro: 0.93 };
+  const BLOOM_K = { dia: 0.26, interior: 0.38, noche: 0.5, penumbra: 0.46, oscuro: 0.55 };
+  let ambKey = "";
   function applyAmbient(k) {
     const a = AMBIENT[k] || AMBIENT.interior;
-    if (ambient === k) return; ambient = k;
-    hemi.color.set(a.hemi[0]); hemi.groundColor.set(a.hemi[1]); hemi.intensity = a.hemi[2];
-    sun.color.set(a.sun[0]); sun.intensity = a.sun[1];
-    scene.background = new THREE.Color(a.bg); scene.fog = new THREE.Fog(a.bg, 90, 260);
+    // Hito 89: el tono depende también del entorno (volcán cálido, cueva o nieve fríos…) y de la hora del reloj de campaña
+    const kind = G ? envKindOf(G) : "interior", clock = (store.get() || {}).clock, hour = clock ? Math.floor(clock.min / 30) : -1;
+    const temp = (ENV_TEMP[kind] || 0) + (k === "dia" || k === "penumbra" || k === "noche" ? hourTemp(clock ? clock.min : null) : 0);
+    const key = [k, kind, hour].join("|"); if (ambient === k && key === ambKey) return; ambient = k; ambKey = key;
+    hemi.color.copy(tint(a.hemi[0], temp * 0.6)); hemi.groundColor.copy(tint(a.hemi[1], temp * 0.5)); hemi.intensity = a.hemi[2];
+    sun.color.copy(tint(a.sun[0], temp * 0.75)); sun.intensity = a.sun[1];
+    renderer.toneMappingExposure = EXPO[k] ?? 1.05;
+    if (bloom && bloom.setStrength) bloom.setStrength(BLOOM_K[k] ?? 0.38);
+    const bg = tint(a.bg, temp * 0.4);
+    scene.background = bg; scene.fog = new THREE.Fog(bg, 90, 260);
     scene.environment = env.get(k, a.hemi[0], a.hemi[1], a.sun[0]); // Hito 81: reflejos según la luz
+    if (G) refreshAtmo();
     torches.forEach(t => (t.base = t.power * 34 * a.torch));
     if (amb) amb.value = k;
   }
@@ -505,6 +550,8 @@ export function createBoard3D(host, opts) {
     const wallGl = await load("dungeon/wall"); if (my !== build) return;
     let wallMesh = null; wallGl && wallGl.scene.traverse(o => { if (o.isMesh && !wallMesh) wallMesh = o; });
     const wh = lowWalls ? 0.36 : WALL_TALL, faces = [], blocks = [];
+    // Hito 86: cada tramo de muro con su tono (algo más claro, oscuro, cálido o frío), siempre igual para la misma casilla
+    const wallTint = (c, r) => { const h = Math.abs(Math.sin(c * 12.9898 + r * 78.233) * 43758.5453) % 1, h2 = Math.abs(Math.sin(c * 39.3468 + r * 11.135) * 24634.6345) % 1; const k = 0.86 + h * 0.2; return new THREE.Color(k * (0.97 + h2 * 0.06), k, k * (1.03 - h2 * 0.06)); };
     const shroudable = []; // piezas que se esconden mientras su casilla no se haya visto nunca (niebla)
     const byType = {};
     for (let r = 0; r < g.rows; r++) for (let c = 0; c < g.cols; c++) {
@@ -527,7 +574,7 @@ export function createBoard3D(host, opts) {
       mt.roughness = 1; mt.metalness = 0; mt.bumpScale = 0.5;
       const top = new THREE.MeshStandardMaterial({ color: kind === "seto" ? 0x2e4a22 : 0x2a2622, roughness: 1 });
       const bm = new THREE.InstancedMesh(new THREE.BoxGeometry(CELL, hgt, CELL), [mt, mt, top, top, mt, mt], list.length);
-      list.forEach(([c, r], i) => { bm.setMatrixAt(i, m4.compose(v.set(cx(c), hgt / 2 + elevAt(g, c, r) * YS, cz(r)), q.identity(), one)); shroudable.push({ im: bm, i, c, r, m: m4.clone() }); });
+      list.forEach(([c, r], i) => { bm.setMatrixAt(i, m4.compose(v.set(cx(c), hgt / 2 + elevAt(g, c, r) * YS, cz(r)), q.identity(), one)); shroudable.push({ im: bm, i, c, r, m: m4.clone() }); bm.setColorAt(i, wallTint(c, r)); });
       bm.castShadow = bm.receiveShadow = true; grp.add(bm);
     }
     if (faces.length && wallMesh) {
@@ -535,8 +582,46 @@ export function createBoard3D(host, opts) {
       const wmat = (Array.isArray(wallMesh.material) ? wallMesh.material : [wallMesh.material]).map(x => { const c = x.clone(); if ("roughness" in c) c.roughness = 1; if ("metalness" in c) c.metalness = 0; return c; });
       const fm = new THREE.InstancedMesh(wallMesh.geometry, wmat.length === 1 ? wmat[0] : wmat, faces.length);
       const sc = new THREE.Vector3(1, wh, 1);
-      faces.forEach(([x, z, rot, nc, nr, fy], i) => { fm.setMatrixAt(i, m4.compose(v.set(x, fy, z), q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), rot), sc)); shroudable.push({ im: fm, i, c: nc, r: nr, m: m4.clone() }); });
+      faces.forEach(([x, z, rot, nc, nr, fy], i) => { fm.setMatrixAt(i, m4.compose(v.set(x, fy, z), q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), rot), sc)); shroudable.push({ im: fm, i, c: nc, r: nr, m: m4.clone() }); fm.setColorAt(i, wallTint(nc * 3 + x, nr * 5 + z)); });
       fm.castShadow = fm.receiveShadow = true; grp.add(fm);
+    }
+    // Hito 86: columnas en las esquinas y en los extremos de los muros de piedra, y algún remate roto encima
+    {
+      const STONE = new Set(["muro", "muroladrillo", "murorunas", "muralla"]);
+      const doorAt = new Set((g.props || []).filter(p => (PROPS[p.k] || {}).door).map(p => p.c + "," + p.r));
+      const V = new Map(), tops = [], plinths = [];
+      const hash = (a, b) => Math.abs(Math.sin(a * 91.17 + b * 47.31) * 15731.743) % 1;
+      for (const [kind, list] of Object.entries(byType)) {
+        if (!STONE.has(kind)) continue;
+        list.forEach(([c, r]) => [[0, -1, "h", [c, r], [c + 1, r]], [1, 0, "v", [c + 1, r], [c + 1, r + 1]], [0, 1, "h", [c, r + 1], [c + 1, r + 1]], [-1, 0, "v", [c, r], [c, r + 1]]].forEach(([dc, dr, o, A, B]) => {
+          const nc = c + dc, nr = r + dr;
+          if (nc < 0 || nr < 0 || nc >= g.cols || nr >= g.rows || isWallIn(g, nc, nr) || doorAt.has(nc + "," + nr)) return;
+          [A, B].forEach(P => { const k = P.join(","); const e = V.get(k) || { h: 0, v: 0, c: nc, r: nr, y: elevAt(g, c, r) * YS }; e[o]++; V.set(k, e); });
+          plinths.push({ x: cx(c) + dc * (CELL / 2 + 0.05), z: cz(r) + dr * (CELL / 2 + 0.05), y: elevAt(g, nc, nr) * YS, rot: dc ? Math.PI / 2 : 0, c: nc, r: nr });
+          if (hash(c + dc * 0.3, r + dr * 0.3) < 0.16) tops.push({ c, r, dc, dr, nc, nr, y: elevAt(g, c, r) * YS });
+        }));
+      }
+      const colGl = await load("dungeon/column"); if (my !== build) return;
+      let colMesh = null; colGl && colGl.scene.traverse(o => { if (o.isMesh && !colMesh) colMesh = o; });
+      const pts = [...V.entries()].filter(([, e]) => (e.h && e.v) || e.h + e.v === 1);
+      if (colMesh && pts.length) {
+        const hgt = 4 * wh + 0.35, cm = (Array.isArray(colMesh.material) ? colMesh.material[0] : colMesh.material).clone(); cm.roughness = 1; cm.metalness = 0;
+        const im = new THREE.InstancedMesh(colMesh.geometry, cm, pts.length), sc = new THREE.Vector3(1.7, hgt / 1.4, 1.7);
+        pts.forEach(([k, e], i) => { const [vx, vy] = k.split(",").map(Number); im.setMatrixAt(i, m4.compose(v.set((vx - g.cols / 2) * CELL, e.y, (vy - g.rows / 2) * CELL), q.identity(), sc)); shroudable.push({ im, i, c: e.c, r: e.r, m: m4.clone() }); });
+        im.castShadow = im.receiveShadow = true; im.raycast = () => {}; grp.add(im);
+      }
+      // Hito 89: zócalo al pie de los muros altos
+      if (plinths.length && wh > 1) {
+        const zm = new THREE.InstancedMesh(new THREE.BoxGeometry(CELL, 0.45, 0.3), new THREE.MeshStandardMaterial({ color: 0x5a554e, roughness: 1, flatShading: true }), plinths.length);
+        plinths.forEach((P, i) => { zm.setMatrixAt(i, m4.compose(v.set(P.x, P.y + 0.22, P.z), q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), P.rot), one)); shroudable.push({ im: zm, i, c: P.c, r: P.r, m: m4.clone() }); });
+        zm.castShadow = false; zm.receiveShadow = true; zm.raycast = () => {}; grp.add(zm);
+      }
+      if (tops.length) {
+        const bits = []; tops.forEach(T => { const n = 2 + Math.floor(hash(T.c, T.r) * 3); for (let i = 0; i < n; i++) { const u = (hash(T.c + i, T.r - i) - 0.5) * (CELL - 0.8), w = 0.4 + hash(i, T.c) * 0.5; bits.push({ x: cx(T.c) + (T.dr ? u : T.dc * (CELL / 2 - 0.5)), z: cz(T.r) + (T.dc ? u : T.dr * (CELL / 2 - 0.5)), y: T.y + 4 * wh + 0.15, s: w, rot: hash(i, T.r) * 3, c: T.nc, r: T.nr }); } });
+        const bm2 = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 0.5, 0.8), new THREE.MeshStandardMaterial({ color: 0x8a847a, roughness: 1, flatShading: true }), bits.length);
+        bits.forEach((B, i) => { bm2.setMatrixAt(i, m4.compose(v.set(B.x, B.y, B.z), q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), B.rot), new THREE.Vector3(B.s, B.s * 0.8, B.s))); shroudable.push({ im: bm2, i, c: B.c, r: B.r, m: m4.clone() }); });
+        bm2.castShadow = bm2.receiveShadow = true; bm2.raycast = () => {}; grp.add(bm2);
+      }
     }
     // Hito 83: remates. Un borde de piedra clara en lo alto de cada desnivel y de cada muro que da a suelo
     // (las salas y las tarimas se leen desde cualquier ángulo) y una sombra suave al pie (asienta muros y riscos).
@@ -581,10 +666,22 @@ export function createBoard3D(host, opts) {
       else if (p.k === "hoguera") obj = campfire();
       else if (PROC[p.k]) { obj = PROC[p.k](fire); if (!["telarana"].includes(p.k)) obj.rotation.y = (p.rot || 0) * Math.PI / 2; if (PROC_BIG.includes(p.k)) obj.scale.multiplyScalar(1.35); }
       else if (PROP3D[p.k]) {
-        const [path, scale, how] = PROP3D[p.k];
+        let [path, scale, how] = PROP3D[p.k];
+        // Hito 86: variedad (algunas cajas son el cajón grande) y antorcha de pie cuando no hay pared cerca
+        if (p.k === "caja" && (p.c * 7 + p.r * 13) % 3 === 0) { path = "dungeon/box_large"; scale = 1.3; }
+        const standing = p.k === "antorcha" && ![[0, -1], [1, 0], [0, 1], [-1, 0]].some(([dc, dr]) => isWallIn(g, p.c + dc, p.r + dr));
+        if (standing) { path = "dungeon/torch_lit"; scale = 2; how = null; }
         const gl = await load(path); if (my !== build) return;
         if (!gl) continue;
         obj = gl.scene.clone(true); obj.scale.setScalar(scale);
+        if (standing) {
+          // pie de hierro de tres patas con la antorcha arriba
+          const st = new THREE.Group(), iron = new THREE.MeshStandardMaterial({ color: 0x2e2a26, metalness: 0.6, roughness: 0.5 });
+          const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.09, 2.4, 6), iron); pole.position.y = 1.2; st.add(pole);
+          [0, 1, 2].forEach(i => { const a = i / 3 * Math.PI * 2, l = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.9, 5), iron); l.position.set(Math.cos(a) * 0.3, 0.3, Math.sin(a) * 0.3); l.rotation.set(Math.sin(a) * 0.7, 0, -Math.cos(a) * 0.7); st.add(l); });
+          const cup = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.1, 0.25, 8), iron); cup.position.y = 2.45; st.add(cup);
+          obj.position.y = 2.4 + 0.8; st.add(obj); obj = st; obj.userData.firePos = new THREE.Vector3(0, 2.4 + 0.8 + 1.4, 0);
+        }
         if (how === "wall") {
           // Se cuelga en la pared más cercana, mirando hacia la casilla
           const dirs = [[0, -1, 0], [1, 0, -Math.PI / 2], [0, 1, Math.PI], [-1, 0, Math.PI / 2]].filter(([dc, dr]) => isWallIn(g, p.c + dc, p.r + dr));
@@ -593,9 +690,9 @@ export function createBoard3D(host, opts) {
           if (!dirs.length) obj.position.y = 0.6;
         } else if (how === "door") {
           obj.rotation.y = isWallIn(g, p.c - 1, p.r) || isWallIn(g, p.c + 1, p.r) ? 0 : Math.PI / 2;
-          obj.scale.set(1, wh < 1 ? 0.6 : WALL_TALL, 1);
+          obj.scale.set(1, WALL_TALL, 1); // la puerta conserva su tamaño aunque los muros se vean bajos
           // Hoja de madera: cerrada tapa el hueco; abierta, girada contra el marco
-          const lh = wh < 1 ? 1.9 : 3.1 * WALL_TALL;
+          const lh = 3.1 * WALL_TALL;
           const leaf = p.k === "rastrillo" ? (() => { const bars = new THREE.Group(), iron = new THREE.MeshStandardMaterial({ color: 0x2e2c2a, metalness: 0.7, roughness: 0.45 }); for (let i = 0; i < 6; i++) { const b = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, lh, 6), iron); b.position.set(-0.95 + i * 0.38, 0, 0); bars.add(b); } [-0.3, 0.3].forEach(y => { const b = new THREE.Mesh(new THREE.BoxGeometry(2.1, 0.08, 0.08), iron); b.position.set(0, y * lh, 0); bars.add(b); }); return bars; })()
             : new THREE.Mesh(new THREE.BoxGeometry(2.2, lh, 0.22), p.k === "puertasecreta" ? terrainMat("muro") : p.k === "puertarunas" ? terrainMat("murorunas") : new THREE.MeshStandardMaterial({ map: woodLeaf(), roughness: 0.8, ...(p.k === "puertallave" ? { color: 0xc8b0a0 } : {}) }));
           const hinge = new THREE.Group(); hinge.position.set(-1.1, 0, 0); leaf.position.set(1.1, lh / 2, 0); hinge.add(leaf);
@@ -607,7 +704,7 @@ export function createBoard3D(host, opts) {
           const f = fire(p.k === "velas" ? 0.35 : 0.55);
           const wrap = new THREE.Group(); wrap.add(obj);
           obj.updateMatrix();
-          const fpos = (p.k === "velas" ? new THREE.Vector3(0.05, 0.95, 0.03) : new THREE.Vector3(0, 0.78, 0.42)).applyMatrix4(obj.matrix);
+          const fpos = obj.userData.firePos ? obj.userData.firePos.clone() : (p.k === "velas" ? new THREE.Vector3(0.05, 0.95, 0.03) : new THREE.Vector3(0, 0.78, 0.42)).applyMatrix4(obj.matrix);
           f.position.copy(fpos); wrap.add(f);
           wrap.userData.light = { y: fpos.y + 0.4, dx: fpos.x, dz: fpos.z, power: p.k === "velas" ? 0.5 : 1 };
           obj = wrap;
@@ -631,6 +728,9 @@ export function createBoard3D(host, opts) {
         light.position.set(x + (L.dx || 0), L.y + py, z + (L.dz || 0));
         grp.add(light); newTorches.push({ light, power: L.power, base: 34 * L.power, seed: Math.random() * 10 });
       }
+      // Hito 89: variación en piezas naturales y sombra de contacto bajo los objetos que se apoyan en el suelo
+      if (NATURAL.has(p.k)) { const h = (a, b) => Math.abs(Math.sin(p.c * a + p.r * b) * 43758.5453) % 1; const k = 0.85 + h(12.9, 78.2) * 0.3; obj.scale.multiplyScalar(k); obj.rotation.y += h(39.3, 11.1) * Math.PI * 2; obj.rotation.x += (h(7.1, 3.3) - 0.5) * 0.12; obj.rotation.z += (h(5.7, 9.9) - 0.5) * 0.12; }
+      { const pv = PROPS[p.k] || {}; if (!pv.door && !FLATP.has(p.k) && !(PROP3D[p.k] && PROP3D[p.k][2] === "wall") && !ghostly) w.add(contactShadow(CELL * (PROC_BIG.includes(p.k) || pv.block ? 0.95 : 0.62))); }
       // Hito 82: estado de la trampa (anillo + insignia) y cobertura (escudo pequeño)
       const ts = trapState(p), cv = coverOf(p);
       if (ts) {
@@ -646,8 +746,29 @@ export function createBoard3D(host, opts) {
     } catch (e) { console.warn("Pieza sin montar", p.k, e); } }
     if (my !== build) return;
     // Sustituir el escenario anterior de golpe (sin parpadeos)
-    world.children.slice().forEach(o => world.remove(o));
+    // Hito 89: liberar lo que ocupaba el escenario viejo en la tarjeta gráfica (sin tocar lo compartido entre mesas)
+    const keepG = new Set([CONTACT_GEO]), keepM = new Set([CONTACT]);
+    TEXMAT.forEach(m => keepM.add(m)); FRINGE.forEach(m => keepM.add(m));
+    for (const pr of cache.values()) { const gl = await pr; if (gl) gl.scene.traverse(o => { if (o.geometry) keepG.add(o.geometry); (Array.isArray(o.material) ? o.material : [o.material]).forEach(m => m && keepM.add(m)); }); }
+    if (my !== build) return;
+    world.children.slice().forEach(o => {
+      world.remove(o);
+      o.traverse(x => {
+        if (x.geometry && !keepG.has(x.geometry)) x.geometry.dispose();
+        (Array.isArray(x.material) ? x.material : x.material ? [x.material] : []).forEach(m => { if (m && !keepM.has(m)) m.dispose(); });
+      });
+    });
     worldTicks = ticks;
+    // Hito 84: uniones entre terrenos con borde irregular (la hierba se mete entre las losas, el barro en la tierra…)
+    const FG = fringeGeometries(g, cx, cz, CELL, (c, r) => elevAt(g, c, r) * YS, (c, r) => isWallIn(g, c, r));
+    for (const [k, geo] of Object.entries(FG)) { const fm = new THREE.Mesh(geo, fringeMat(k)); fm.receiveShadow = true; fm.renderOrder = 1; fm.raycast = () => {}; grp.add(fm); }
+    // Hito 85: detalles repartidos por el suelo (matas, guijarros, hojas, charcos…), iguales para todos
+    {
+      const busy = new Set((g.props || []).map(p => p.c + "," + p.r));
+      const D = buildDressing({ g, cx, cz, CELL, elevY: (c, r) => elevAt(g, c, r) * YS, density: DENS(), seed: g.scene || g.name || "mesa",
+        skip: (c, r) => { if (isWallIn(g, c, r) || busy.has(c + "," + r)) return true; const t = TERRAIN[(g.terrain || {})[c + "," + r] || "piedra"]; return !t || t.liquid || t.haz === "fall"; } });
+      if (D.group.children.length) { grp.add(D.group); shroudable.push(...D.shroud); }
+    }
     // Hito 82: borde luminoso de las zonas peligrosas (lava, brasas, brea, hielo, abismo) y de los puentes
     const HE = hazardEdges(g);
     if (HE.length) {
@@ -669,7 +790,7 @@ export function createBoard3D(host, opts) {
     }
     // Hito 81: cuadrícula opcional (▦) sobre el suelo
     if (gridPts.length) { const gg = new THREE.BufferGeometry(); gg.setAttribute("position", new THREE.Float32BufferAttribute(gridPts, 3)); gridObj = new THREE.LineSegments(gg, new THREE.LineBasicMaterial({ color: 0xfff4dc, transparent: true, opacity: 0.09, depthWrite: false })); gridObj.raycast = () => {}; gridObj.renderOrder = 2; gridObj.visible = GRID(); grp.add(gridObj); } else gridObj = null;
-    world.add(grp); shroud = shroudable; pickFloors = floorsPick; fogSurf = null; fogSig = ""; // la niebla se vuelve a aplicar sobre el escenario nuevo
+    world.add(grp); shroud = shroudable; setTimeout(refreshAtmo, 0); pickFloors = floorsPick; fogSurf = null; fogSig = ""; // la niebla se vuelve a aplicar sobre el escenario nuevo
     torches.length = 0; torches.push(...newTorches.slice(0, 10));
     newTorches.slice(10).forEach(t => (t.light.visible = false));
     ambient = null; applyAmbient(g.ambient || "interior");
@@ -692,6 +813,7 @@ export function createBoard3D(host, opts) {
     rim.rotation.x = Math.PI / 2; rim.position.y = 0.28; rec.root.add(rim);
     const sel = new THREE.Mesh(new THREE.RingGeometry(1.75, 2.05, 48), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.85, side: THREE.DoubleSide, depthWrite: false }));
     sel.rotation.x = -Math.PI / 2; sel.position.y = 0.05; sel.visible = false; rec.root.add(sel); rec.sel = sel;
+    rec.shadow = contactShadow(4.3 * (+t.size || 1)); rec.root.add(rec.shadow); // Hito 89
     const turn = new THREE.Mesh(new THREE.CylinderGeometry(1.7, 1.7, 7, 32, 1, true), new THREE.MeshBasicMaterial({ color: 0xffc860, transparent: true, opacity: 0.12, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending }));
     turn.position.y = 3.5; turn.visible = false; rec.root.add(turn); rec.turn = turn;
     // Efecto de herida o curación: onda en la peana y columna de luz
@@ -803,7 +925,7 @@ export function createBoard3D(host, opts) {
         if (A && A.root && A !== rec) { dx = rec.root.position.x - A.root.position.x; dz = rec.root.position.z - A.root.position.z; const l = Math.hypot(dx, dz) || 1; dx /= l; dz /= l; }
         else { const a = Math.random() * Math.PI * 2; dx = Math.cos(a); dz = Math.sin(a); }
         nudge(rec, dx, dz, im.crit ? 1.25 : 0.85, "recoil"); flashRed(rec, im.crit ? 1 : 0.8);
-      } else if (im && im.heal && fxReady) flashRed(rec, 0.6, 0x5cff7a);
+      } else if (im && im.heal && fxReady) { flashRed(rec, 0.6, 0x5cff7a); if (!calm) fxList.push(healMotes(scene, rec.root.position.clone())); }
       if (hp && rec.lastHp != null && hp.cur < rec.lastHp && !down) {
         rec.hitT = 1.25; if (fxReady) sound.play("hit");
         if (rec.mixer) { play(rec, "Hit_A", true); setTimeout(() => { if (!rec.down) play(rec, "Idle"); }, 700); }
@@ -820,6 +942,7 @@ export function createBoard3D(host, opts) {
       if (down !== rec.down) {
         if (down && rec.lastHp != null) sound.play("down");
         rec.down = down; play(rec, down ? "Death_A" : "Idle", down);
+        if (down && fxReady) puff(rec, true); // Hito 89: polvo al caer
         if (rec.mini && rec.mini.userData.mats) rec.mini.userData.mats.forEach(m => { m.color.setScalar(down ? 0.45 : 1); if (m.emissiveMap) m.emissiveIntensity = down ? 0.12 : 0.55; });
       }
       // Estados: anillos de color en la peana, etiqueta escrita y algunos efectos en la figura
@@ -908,18 +1031,40 @@ export function createBoard3D(host, opts) {
     if (!rec.fmats) { rec.fmats = []; rec.mini.traverse(o => { const ms = o.material ? (Array.isArray(o.material) ? o.material : [o.material]) : []; ms.forEach(m => { if (m && m.emissive && !rec.fmats.some(x => x.m === m)) rec.fmats.push({ m, c: m.emissive.clone() }); }); }); }
     rec.flash = { t: 0, dur: 0.35, k, col: new THREE.Color(color) };
   }
+  /** Polvo al arrancar y al llegar (del color del terreno); más grande si baja de un desnivel o cae. */
+  function puff(rec, big) {
+    if (!fxReady || calm || !G || DENS() === 0) return;
+    const p = rec.root.position, c = Math.round(p.x / CELL + G.cols / 2 - 0.5), r = Math.round(p.z / CELL + G.rows / 2 - 0.5);
+    const t = (G.terrain || {})[c + "," + r] || "piedra";
+    fxList.push(dust(scene, p.clone(), DUST[t] || "#c8b89a", big));
+  }
+  /** Coloca la miniatura sumando el retroceso del golpe y el paso al andar (Hito 88). */
+  function placeMini(rec) {
+    if (!rec.mini) return;
+    const n = rec.nOff, wy = rec.walkY || 0;
+    if (!n && !wy && !rec.offOn) return;
+    if (!rec.mini.userData.p0) rec.mini.userData.p0 = rec.mini.position.clone();
+    const p0 = rec.mini.userData.p0;
+    rec.mini.position.set(p0.x + (n ? n.x : 0), p0.y + (n ? n.y : 0) + wy, p0.z + (n ? n.z : 0));
+    rec.offOn = !!(n || wy);
+    if (rec.shadow) { // la sombra se encoge cuando la figura se separa del suelo
+      if (!rec.shadowBase) rec.shadowBase = rec.shadow.scale.x;
+      const lift = Math.max(0, wy + (n ? n.y : 0)), k = rec.shadowBase * Math.max(0.7, 1 - lift * 1.6); rec.shadow.scale.set(k, 1, k);
+    }
+  }
   function stepHitFx(rec, dt) {
     if (rec.nudge && rec.mini) {
-      const n = rec.nudge; n.t += dt; const u = Math.min(1, n.t / n.dur), off = Math.sin(u * Math.PI) * n.amp * (1 - u * 0.3);
+      // Hito 88: un solo golpe con peso: sale rápido (25 %) y vuelve frenando
+      const n = rec.nudge; n.t += dt; const u = Math.min(1, n.t / n.dur);
+      const prof = u < 0.25 ? 1 - Math.pow(1 - u / 0.25, 2) : (() => { const v = (u - 0.25) / 0.75; return 1 - v * v * (3 - 2 * v); })();
+      const off = prof * n.amp;
       // de mundo a local de la figura (la raíz está girada)
       const th = rec.root.rotation.y, lx = n.dx * Math.cos(th) - n.dz * Math.sin(th), lz = n.dx * Math.sin(th) + n.dz * Math.cos(th);
-      if (!rec.mini.userData.p0) rec.mini.userData.p0 = rec.mini.position.clone();
-      const p0 = rec.mini.userData.p0;
-      rec.mini.position.set(p0.x + lx * off, p0.y + (n.dur > 0.5 ? 0 : Math.sin(u * Math.PI) * 0.15), p0.z + lz * off);
-      if (u >= 1) { rec.mini.position.copy(p0); rec.nudge = null; }
+      rec.nOff = u >= 1 ? null : { x: lx * off, y: (n.dur > 0.5 ? 0.04 : 0.16) * prof, z: lz * off };
+      if (u >= 1) rec.nudge = null;
     }
     if (rec.flash && rec.fmats) {
-      const f = rec.flash; f.t += dt; const u = Math.min(1, f.t / f.dur), k = f.k * (1 - u);
+      const f = rec.flash; f.t += dt; const u = Math.min(1, f.t / f.dur), k = f.k * (1 - u * u); // se apaga de forma más natural
       rec.fmats.forEach(({ m, c }) => m.emissive.copy(c).lerp(f.col, k));
       if (u >= 1) { rec.fmats.forEach(({ m, c }) => m.emissive.copy(c)); rec.flash = null; }
     }
@@ -1261,7 +1406,7 @@ export function createBoard3D(host, opts) {
       mv.multiplyScalar(s); controls.target.add(mv); camera.position.add(mv);
     }
     controls.update();
-    ticks.forEach(f => f(dt)); worldTicks.forEach(f => f(dt));
+    ticks.forEach(f => f(dt)); worldTicks.forEach(f => f(dt)); if (atmo) atmo.step(dt);
     if (fxList.length) fxList = fxList.filter(f => f(dt));
     // Luz de antorcha: una respiración lenta y suave (el parpadeo rápido hacía «bailar» los reflejos de las paredes)
     torches.forEach(t => { t.light.intensity = t.base * (0.95 + 0.035 * Math.sin(time * 2.1 + t.seed) + 0.015 * Math.sin(time * 4.7 + t.seed * 2)); });
@@ -1269,15 +1414,32 @@ export function createBoard3D(host, opts) {
       if (!rec.root) continue;
       if (rec.mixer) rec.mixer.update(dt);
       if (rec.nudge || rec.flash) stepHitFx(rec, dt);
+      if (rec.settle > 0) { rec.settle = Math.max(0, rec.settle - dt); const u = 1 - rec.settle / 0.3; rec.walkY = -Math.sin(u * Math.PI) * 0.09 * (1 - u * 0.5); if (!rec.settle) rec.walkY = 0; }
       if (rec.moving && (!drag || drag.id !== rec.root.userData.tok)) {
+        // Hito 88: movimiento con peso. Un instante de anticipación (se agacha y se gira), paso con balanceo
+        // de la miniatura (la altura sigue subiendo o bajando de forma continua) y un asiento suave al llegar.
         const p = rec.root.position, d = rec.target.clone().sub(p);
-        const len = d.length();
-        if (len < 0.08) { p.copy(rec.target); rec.moving = 0; if (!rec.down) play(rec, "Idle"); }
-        else { const turn = Math.hypot(d.x, d.z) > 0.05; p.add(d.multiplyScalar(Math.min(1, dt * 7 / Math.max(1, len / 4)))); if (turn) rec.root.rotation.y = Math.atan2(rec.target.x - p.x, rec.target.z - p.z); }
+        const len = d.length(), horiz = Math.hypot(d.x, d.z);
+        rec.walkT = (rec.walkT || 0) + dt;
+        const turnTo = () => { if (horiz > 0.05) { const want = Math.atan2(d.x, d.z), diff = ((want - rec.root.rotation.y + Math.PI * 3) % (Math.PI * 2)) - Math.PI; rec.root.rotation.y += diff * Math.min(1, dt * 12); } };
+        if (len < 0.08) {
+          const fell = rec.startY != null && rec.startY - rec.target.y > 1.5;
+          p.copy(rec.target); rec.moving = 0; rec.walkT = 0; rec.walkY = 0; if (rec.walked) { rec.settle = 0.3; puff(rec, fell); } rec.walked = false; rec.startY = null; if (!rec.down) play(rec, "Idle");
+        }
+        else if (rec.walkT < 0.1 && horiz > CELL * 0.6 && !rec.walked) { turnTo(); rec.walkY = -0.1 * Math.sin(rec.walkT / 0.1 * Math.PI / 2); }
+        else {
+          turnTo();
+          p.add(d.multiplyScalar(Math.min(1, dt * 7 / Math.max(1, len / 4))));
+          if (horiz > 0.05) { if (!rec.walked) { puff(rec, false); rec.startY = p.y; } rec.walked = true; rec.bob = (rec.bob || 0) + dt * 11; rec.walkY = Math.abs(Math.sin(rec.bob)) * 0.14 * Math.min(1, horiz / 2); rec.sway = Math.cos(rec.bob) * 0.07; }
+          else rec.walkY = 0;
+        }
       } else if (rec.face != null && !drag) {
         const diff = ((rec.face - rec.root.rotation.y + Math.PI * 3) % (Math.PI * 2)) - Math.PI;
         rec.root.rotation.y += diff * Math.min(1, dt * 4);
       }
+      // contoneo lateral al andar (Hito 89), que se apaga al parar
+      if (rec.mini) { const sw = rec.moving && rec.walked ? (rec.sway || 0) : 0; rec.swayZ = (rec.swayZ || 0) + (sw - (rec.swayZ || 0)) * Math.min(1, dt * 12); if (Math.abs(rec.swayZ) > 0.001 || rec.swayOn) { rec.mini.rotation.z = rec.swayZ; rec.swayOn = Math.abs(rec.swayZ) > 0.001; } }
+      placeMini(rec);
       if (rec.fxT > 0) {
         rec.fxT = Math.max(0, rec.fxT - dt / 1.1); const k = 1 - rec.fxT;
         rec.pulse.visible = rec.beam.visible = rec.fxT > 0;
@@ -1297,18 +1459,18 @@ export function createBoard3D(host, opts) {
         pv.rotation.x = rec.tilt; pv.rotation.z = Math.sin(time * 30) * 0.3 * Math.min(1, rec.hitT);
       } else if (rec.mini) {
         if (rec.hitT > 0) rec.hitT = Math.max(0, rec.hitT - dt * 1.6);
-        const want = rec.prone && !rec.down ? -1.35 : 0; rec.mini.rotation.x += (want - rec.mini.rotation.x) * Math.min(1, dt * 6);
+        const want = rec.prone && !rec.down ? -1.35 : rec.moving && rec.walked ? 0.1 : 0; rec.mini.rotation.x += (want - rec.mini.rotation.x) * Math.min(1, dt * 6);
       }
     }
     // Si este equipo no llega (más de ~34 ms por imagen al principio), se baja solo a calidad normal
     if (!fpsProbe.done && fxReady) { fpsProbe.n++; fpsProbe.sum += dt; if (fpsProbe.n >= 150) { fpsProbe.done = true; if (fpsProbe.sum / fpsProbe.n > 0.034) { setQuality("normal"); toast("✨ La mesa 3D va justa en este equipo: paso a calidad normal (puedes volver a la alta con ✨)."); } } }
     if (camShake > 0) { camShake = Math.max(0, camShake - dt); const k = camShake / 0.4 * 0.35; camOff.set((Math.random() - 0.5) * k, (Math.random() - 0.5) * k, (Math.random() - 0.5) * k); camera.position.add(camOff); }
-    if (quality === "alta") { if (!bloom) bloom = makeBloom(renderer); bloom.render(scene, camera); } else renderer.render(scene, camera);
+    if (quality === "alta") { if (!bloom) { bloom = makeBloom(renderer); bloom.setStrength(BLOOM_K[ambient] ?? 0.38); } bloom.render(scene, camera); } else renderer.render(scene, camera);
     if (camOff.lengthSq()) { camera.position.sub(camOff); camOff.set(0, 0, 0); }
   });
   function dispose() {
     if (disposed) return; disposed = true;
-    renderer.setAnimationLoop(null); ro.disconnect(); sound.ambient(""); controls.dispose(); env.dispose(); if (bloom) bloom.dispose(); renderer.dispose();
+    renderer.setAnimationLoop(null); ro.disconnect(); sound.ambient(""); controls.dispose(); env.dispose(); if (atmo) atmo.dispose(); if (bloom) bloom.dispose(); renderer.dispose();
     window.removeEventListener("keydown", kd); window.removeEventListener("keyup", ku); offColors();
   }
 

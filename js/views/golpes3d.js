@@ -39,7 +39,7 @@ export function floatText(scene, pos, text, color = "#ffffff", big = false, scal
 }
 
 /** Chispas que saltan del punto de impacto. */
-export function sparks(scene, pos, color = "#ffb15a", n = 18, power = 1) {
+export function sparks(scene, pos, color = "#ffb15a", n = 18, power = 1, floorY = pos.y - 1.4) {
   const g = new THREE.Group(); scene.add(g);
   const parts = Array.from({ length: n }, () => {
     const s = glowSprite(color, 0.35 + Math.random() * 0.35); s.position.copy(pos); g.add(s);
@@ -50,7 +50,11 @@ export function sparks(scene, pos, color = "#ffb15a", n = 18, power = 1) {
   let t = 0;
   return dt => {
     t += dt; const k = t / 0.7;
-    parts.forEach(p => { p.v.y -= 14 * dt; p.s.position.addScaledVector(p.v, dt); p.s.material.opacity = Math.max(0, 1 - k); });
+    parts.forEach(p => {
+      p.v.y -= 14 * dt; p.s.position.addScaledVector(p.v, dt); p.s.material.opacity = Math.max(0, 1 - k);
+      // Hito 89: rebotan en el suelo y se frenan
+      if (p.s.position.y < floorY + 0.08 && p.v.y < 0) { p.s.position.y = floorY + 0.08; p.v.y = -p.v.y * 0.35; p.v.x *= 0.55; p.v.z *= 0.55; }
+    });
     flash.material.opacity = Math.max(0, 1 - k * 3); flash.scale.setScalar(3.2 * power * (1 + k));
     if (k >= 1) { scene.remove(g); g.traverse(o => o.material && o.material.dispose()); return false; }
     return true;
@@ -107,22 +111,74 @@ export function strike(scene, from, to, { melee, magic, color, res, onHit }) {
 }
 
 /** Motas de ambiente sobre el tablero: polvo (interior), luciérnagas (noche) o polen (día). */
-export function motes(scene, W, H, kind) {
-  const cfg = kind === "noche" ? { n: 46, color: "#d8ff7a", size: 0.55, rise: 0.15, blink: true } : kind === "dia" ? { n: 40, color: "#fff4d0", size: 0.3, rise: 0.05, blink: false } : { n: 70, color: "#ffd9a0", size: 0.26, rise: 0.04, blink: false };
+export function motes(scene, W, H, kind, zones = []) {
+  // Partículas ambientales más vivas: deriva irregular, tamaños y velocidades más variados
+  const cfg = kind === "noche" ? { n: 52, color: "#d8ff7a", size: 0.55, rise: 0.16, blink: true } : kind === "dia" ? { n: 44, color: "#fff4d0", size: 0.32, rise: 0.055, blink: false } : { n: 78, color: "#ffd9a0", size: 0.28, rise: 0.045, blink: false };
   const g = new THREE.Group(); scene.add(g);
   const P = Array.from({ length: cfg.n }, () => {
-    const s = glowSprite(cfg.color, cfg.size * (0.6 + Math.random() * 0.8)); g.add(s);
-    s.position.set((Math.random() - 0.5) * W, 0.6 + Math.random() * 7, (Math.random() - 0.5) * H);
-    return { s, ph: Math.random() * 10, sp: 0.3 + Math.random() * 0.6, base: 0.25 + Math.random() * 0.45 };
+    const s = glowSprite(cfg.color, cfg.size * (0.5 + Math.random() * 1.0)); g.add(s);
+    s.position.set((Math.random() - 0.5) * W, 0.5 + Math.random() * 7.5, (Math.random() - 0.5) * H);
+    return { s, ph: Math.random() * 12, sp: 0.22 + Math.random() * 0.75, base: 0.2 + Math.random() * 0.5, sway: 0.25 + Math.random() * 0.4 };
   });
-  let t = 0;
+  // Hito 89: microclimas. Junto a lava, brasas o fuego las motas se vuelven cálidas (y suben más); junto a hielo o nieve, frías
+  const base = new THREE.Color(cfg.color), warmC = new THREE.Color("#ffb060"), coldC = new THREE.Color("#bfe4ff");
+  const climate = p => {
+    let w = 0; for (const z of zones) { const d = Math.hypot(p.s.position.x - z.x, p.s.position.z - z.z); if (d < z.r) w += z.warm * (1 - d / z.r); }
+    w = Math.max(-1, Math.min(1, w)); p.w = w;
+    p.s.material.color.copy(base).lerp(w > 0 ? warmC : coldC, Math.abs(w) * 0.85);
+  };
+  let t = 0, tick = 0;
   const step = dt => {
-    t += dt;
+    t += dt; tick++;
+    if (zones.length) P.forEach((p, i) => { if ((tick + i) % 20 === 0) climate(p); });
     P.forEach(p => {
-      p.s.position.x += Math.sin(t * p.sp + p.ph) * dt * 0.35; p.s.position.z += Math.cos(t * p.sp * 0.8 + p.ph) * dt * 0.35; p.s.position.y += cfg.rise * dt * (Math.sin(t * 0.5 + p.ph) + 0.4);
-      if (p.s.position.y > 8) p.s.position.y = 0.6;
-      p.s.material.opacity = cfg.blink ? Math.max(0, Math.sin(t * p.sp * 1.6 + p.ph)) * 0.95 : p.base * (0.7 + 0.3 * Math.sin(t * 1.3 + p.ph));
+      // deriva más orgánica (no solo senoidal pura)
+      p.s.position.x += (Math.sin(t * p.sp + p.ph) * 0.7 + Math.sin(t * p.sp * 1.7 + p.ph * 0.6) * 0.3) * dt * p.sway;
+      p.s.position.z += (Math.cos(t * p.sp * 0.85 + p.ph) * 0.7 + Math.cos(t * p.sp * 1.4 + p.ph * 0.5) * 0.3) * dt * p.sway;
+      p.s.position.y += cfg.rise * dt * (Math.sin(t * 0.45 + p.ph) + 0.35 + Math.max(0, p.w || 0) * 2.5);
+      if (p.s.position.y > 8.2) p.s.position.y = 0.5;
+      p.s.material.opacity = cfg.blink ? Math.max(0, Math.sin(t * p.sp * 1.55 + p.ph)) * 0.95 : p.base * (0.65 + 0.35 * Math.sin(t * 1.25 + p.ph));
     });
   };
   return { group: g, step, dispose() { scene.remove(g); g.children.forEach(s => s.material.dispose()); } };
+}
+
+
+/* ---------- Hito 89: polvo al pisar o caer, y chispitas al curar ---------- */
+/** Nubecilla de polvo con anillo en el suelo. `big`: caída. Devuelve tick(dt) → sigue vivo. */
+export function dust(scene, pos, color = "#c8b89a", big = false) {
+  const g = new THREE.Group(); scene.add(g);
+  const n = big ? 16 : 8, col = new THREE.Color(color);
+  const parts = Array.from({ length: n }, (_, i) => {
+    const s = glowSprite(color, (big ? 1.1 : 0.7) * (0.7 + Math.random() * 0.6)); s.material.blending = THREE.NormalBlending; s.material.opacity = 0.5;
+    s.position.set(pos.x, pos.y + 0.15, pos.z); g.add(s);
+    const a = i / n * Math.PI * 2 + Math.random() * 0.4, sp = (big ? 2.6 : 1.5) * (0.6 + Math.random() * 0.7);
+    return { s, v: new THREE.Vector3(Math.cos(a) * sp, (big ? 1.2 : 0.6) * Math.random(), Math.sin(a) * sp) };
+  });
+  const ring = new THREE.Mesh(new THREE.RingGeometry(0.4, 0.55, 28), new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.45, depthWrite: false, side: THREE.DoubleSide }));
+  ring.rotation.x = -Math.PI / 2; ring.position.set(pos.x, pos.y + 0.06, pos.z); g.add(ring);
+  let t = 0; const life = big ? 0.8 : 0.5, R0 = big ? 3.2 : 1.8;
+  return dt => {
+    t += dt; const k = t / life;
+    parts.forEach(p => { p.v.multiplyScalar(0.9); p.v.y -= 2 * dt; p.s.position.addScaledVector(p.v, dt); p.s.scale.multiplyScalar(1 + dt * 1.2); p.s.material.opacity = 0.5 * Math.max(0, 1 - k); });
+    ring.scale.setScalar(1 + (R0 - 1) * (1 - Math.pow(1 - Math.min(1, k), 2))); ring.material.opacity = 0.45 * Math.max(0, 1 - k);
+    if (k >= 1) { scene.remove(g); g.traverse(o => { if (o.geometry && o !== ring) o.geometry.dispose(); if (o.material) o.material.dispose(); }); ring.geometry.dispose(); return false; }
+    return true;
+  };
+}
+/** Chispitas verdes que suben al curar. */
+export function healMotes(scene, pos) {
+  const g = new THREE.Group(); scene.add(g);
+  const parts = Array.from({ length: 14 }, (_, i) => {
+    const s = glowSprite("#7dff9a", 0.4 + Math.random() * 0.3); const a = i / 14 * Math.PI * 2;
+    s.position.set(pos.x + Math.cos(a) * 0.9, pos.y + 0.3 + Math.random() * 0.6, pos.z + Math.sin(a) * 0.9); g.add(s);
+    return { s, a, v: 1.6 + Math.random() * 1.6 };
+  });
+  let t = 0;
+  return dt => {
+    t += dt; const k = t / 1.2;
+    parts.forEach(p => { p.a += dt * 2; p.s.position.y += p.v * dt; p.s.position.x += Math.cos(p.a) * dt * 0.6; p.s.position.z += Math.sin(p.a) * dt * 0.6; p.s.material.opacity = Math.max(0, Math.sin(Math.PI * Math.min(1, k))); });
+    if (k >= 1) { scene.remove(g); g.traverse(o => o.material && o.material.dispose()); return false; }
+    return true;
+  };
 }

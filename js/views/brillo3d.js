@@ -63,6 +63,8 @@ export function makeBloom(renderer, { threshold = 0.95, strength = 0.38 } = {}) 
     blur.uniforms.t.value = mid.texture; blur.uniforms.dir.value.set(0, 1 / h); pass(blur, dst);
   };
   return {
+    setStrength(v) { comp.uniforms.k.value = v; },   // Hito 89: más resplandor de noche, menos de día
+    setThreshold(v) { bright.uniforms.th.value = v; },
     render(scene, camera) {
       renderer.getDrawingBufferSize(sz);
       if (sz.x !== W || sz.y !== H) {

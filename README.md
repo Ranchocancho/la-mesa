@@ -962,3 +962,52 @@ A partir de la auditoría de diseño comparada con Baldur's Gate 3:
 
 - **Desniveles y muros rematados:** en lo alto de cada tarima, risco o foso, y de cada muro que da a suelo, un borde de piedra clara (sustituye a la línea fina, que casi no se veía); al pie, una sombra suave que asienta muros y riscos en el suelo. Las salas y los desniveles se leen desde cualquier ángulo, con muros bajos o altos. Lo que está bajo la niebla de guerra sigue oculto.
 - **Piezas hechas por código con más detalle**, para que no desentonen junto a los modelos KayKit: estatua (zócalo con moldura, brazos, espada, a veces musgo), altar (gradas, paño, candelabros), sarcófago (figura yacente en la tapa), fuente (dos tazas, borde y chorro), mausoleo (escalinata, columnas, cornisa, dintel y cruz), cabaña (troncos, pilotes, tejado a dos aguas y chimenea), cristales (roca madre y núcleo que brilla) y setas (corros de tamaños distintos con esporas que brillan). Cada copia sale un poco distinta.
+
+## Hito 84 · Uniones entre terrenos y menos repetición
+
+- **Uniones entre terrenos (3D):** el terreno «blando» se mete en el vecino con un borde irregular: la hierba sobre la tierra, la tierra y el barro entre las losas, la nieve sobre la roca… Manda el de más rango (hierba alta y juncos > hierba y musgo > hojarasca, raíces y nieve > ceniza y arena > barro > tierra y camino > cueva y roca > piedra y adoquín). Solo entre casillas a la misma altura. Los suelos construidos (madera, alfombra, pasarelas, mármol, runas), los líquidos y los peligros no se mezclan, para que su borde siga claro en combate.
+- **Menos repetición (3D):** cada suelo tiene variación de tono a gran escala (zonas más oscuras, gastadas o húmedas), y los terrenos naturales mezclan a manchas una segunda lectura de su textura girada, para que no se vea el patrón. Los suelos con dibujo regular (losas, madera) solo varían de tono.
+- **Puertas:** conservan su altura aunque los muros se vean bajos.
+
+## Hito 85 · Detalles repartidos por el suelo
+
+- **La mesa 3D se llena sola** según el terreno: matas y flores en la hierba (más altas en la hierba alta), juncos, hojas de colores y ramitas en la hojarasca, guijarros y piedras en la tierra, los caminos y la cueva, charcos en el barro, montículos en la nieve, paja, ceniza con brasas, cascotes y, muy de vez en cuando, algún hueso en la mazmorra.
+- Sale **igual para todos** (se reparte con una semilla por escena y casilla), no va en casillas con muro, objeto, líquido o abismo, y **respeta la niebla de guerra**.
+- **🌿 Detalles** en los controles de la cámara: normal → muchos → sin detalles (se recuerda en cada navegador). Son miles de piezas en pocos dibujos: pesa poco.
+- Uniones entre terrenos: ahora también se redondean las esquinas en diagonal, para que no queden escalones.
+
+## Hito 86 · Arquitectura
+
+- **Columnas** de KayKit en las esquinas y en los extremos de los muros de piedra (muro, ladrillo, runas, muralla), a la altura de los muros bajos o altos. No se ponen junto a las puertas.
+- **Remates rotos:** algunos tramos de muro tienen piedras sueltas encima (siempre los mismos).
+- **Variantes de muro:** cada tramo con su tono, algo más claro, oscuro, cálido o frío, para que no sean todos iguales.
+- **Antorcha de pie:** si no hay pared al lado, la antorcha va en un pie de hierro de tres patas, encendida (antes flotaba).
+- **Cajas:** algunas son el cajón grande de KayKit, para variar.
+
+## Hito 87 · Atmósfera
+
+- **Niebla baja** que se mueve despacio sobre barro, juncos, agua, cueva, musgo, ceniza…; más de noche y en penumbra. Respeta la niebla de guerra.
+- **Haces de luz con polvo** en interiores y de día bajo techo (solo en calidad alta ✨).
+- **Fondo lejano en exteriores:** colinas y árboles en silueta alrededor de la mesa, difuminados por la distancia, con el tono de la luz elegida. Se ve al inclinar la cámara.
+
+## Hito 88 · Movimiento con peso y ajustes del experimento
+
+Revisión de una propuesta externa: se adoptan sus buenas ideas y se corrigen sus fallos.
+- **Movimiento con peso:** al arrancar, la figura se agacha y se gira un instante (anticipación); al andar, la miniatura se balancea a cada paso y se inclina hacia delante; al llegar, se asienta con un pequeño rebote. El giro es suave. La altura sigue subiendo o bajando de forma continua (escaleras, tarimas, vuelo).
+- **Golpe con peso:** el retroceso es un solo empujón que sale rápido y vuelve frenando, con un leve salto; el destello se apaga de forma más natural.
+- **Suelo:** una tercera lectura de la textura (solo en terrenos naturales) y zonas algo más cálidas o más frías de verdad, además de las claras y oscuras.
+- **Detalles del suelo** menos regulares: más inclinados, con tamaños variados y un leve hundimiento para que asienten.
+- **Niebla en dos capas** (a ras de suelo y a media altura, sin tapar las figuras) que sube y baja despacio; **partículas ambientales** con una deriva más irregular.
+
+## Hito 89 · Lo mejor de las propuestas externas
+
+Segunda revisión de archivos de otra IA: se adopta lo útil, adaptado a esta mesa.
+- **Sombra de contacto** (mancha suave) bajo cada figura y cada objeto que se apoya en el suelo; la de la figura se encoge al dar el paso.
+- **Figuras:** contoneo lateral al andar, **polvo** del color del terreno al arrancar y al llegar (más grande al bajar de un desnivel o al caer derribado) y **chispitas verdes** que suben al curarse.
+- **Golpes:** las chispas del impacto rebotan en el suelo.
+- **Piezas naturales** (árboles, arbustos, rocas, setas, cristales…): cada copia algo distinta de tamaño, giro e inclinación. Los muros, puertas, trampas y objetos tácticos no se tocan.
+- **Detalles del suelo** con tono propio por pieza; **suelo** con un ruido más suave (sin patrón de cuadrícula).
+- **Luz según el entorno:** la mesa deduce si es volcán, cueva, nieve, costa, interior o exterior por la proporción de terrenos y entibia o enfría la luz; **la hora del reloj de campaña** calienta el amanecer y el atardecer y enfría la madrugada. Cada ambiente tiene su exposición, y el **resplandor** (calidad alta) es más fuerte de noche que de día.
+- **Microclimas:** las partículas ambientales se vuelven cálidas (y suben más) junto a lava, brasas o fuego, y frías junto a hielo o nieve.
+- **Zócalo** al pie de los muros altos.
+- **Memoria:** al rehacer la mesa (otra escena, muros bajos/altos, cambios) se libera lo que ocupaba el escenario anterior en la tarjeta gráfica; antes se acumulaba en sesiones largas.
