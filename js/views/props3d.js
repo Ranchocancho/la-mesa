@@ -105,3 +105,133 @@ Object.assign(PROC, {
   rocarodante() { const g = new THREE.Group(); g.add(M(new THREE.DodecahedronGeometry(1.4, 1), stone(), 0, 1.4)); return g; },
   estatuafuego() { const g = PROC.estatua(); const mz = M(new THREE.ConeGeometry(0.25, 0.6, 6), glowMat(0xff6a1a, 0xff3a00), 0, 3.1, 0.45); mz.rotation.x = Math.PI / 2; g.add(mz); return g; }
 });
+
+/* ---------- Hito 80: tesoros y marcas que no tenían figura en 3D (no se veían) ---------- */
+const cloth = c => mat(c, { roughness: 0.95 }), paper = () => mat(0xe8d8b0, { roughness: 0.95 });
+const gemMat = c => mat(c, { emissive: c, emissiveIntensity: 0.45, roughness: 0.08, metalness: 0.1, transparent: true, opacity: 0.92 });
+const brass = () => mat(0xb8862e, { metalness: 0.75, roughness: 0.35 });
+function chestBody(w, h, d, woodC, bands) {
+  const g = new THREE.Group(), wd = mat(woodC);
+  g.add(M(box(w, h, d), wd, 0, h / 2));
+  const lid = M(new THREE.CylinderGeometry(d / 2, d / 2, w, 10, 1, false, 0, Math.PI), wd, 0, h, 0); lid.rotation.z = Math.PI / 2; g.add(lid);
+  bands.forEach(x => { g.add(M(box(0.12, h + 0.02, d + 0.04), iron(), x, h / 2)); const b = M(new THREE.CylinderGeometry(d / 2 + 0.03, d / 2 + 0.03, 0.12, 10, 1, false, 0, Math.PI), iron(), x, h, 0); b.rotation.z = Math.PI / 2; g.add(b); });
+  return g;
+}
+function bag(c, s = 1, tie = 0x8a6a3a) {
+  const g = new THREE.Group(), m = cloth(c);
+  const body = M(new THREE.SphereGeometry(0.55 * s, 9, 7), m, 0, 0.48 * s); body.scale.set(1, 0.9, 1); g.add(body);
+  g.add(M(new THREE.ConeGeometry(0.22 * s, 0.35 * s, 7), m, 0, 1.05 * s));
+  g.add(M(new THREE.TorusGeometry(0.17 * s, 0.04 * s, 5, 10), cloth(tie), 0, 0.92 * s)).children; g.children[2].rotation.x = Math.PI / 2;
+  return g;
+}
+function book(c, w = 0.9, d = 1.2, t = 0.28) {
+  const g = new THREE.Group();
+  g.add(M(box(w, t, d), mat(c), 0, t / 2));
+  g.add(M(box(w - 0.08, t - 0.08, d - 0.04), paper(), 0.03, t / 2)); // páginas, asoman por un lado
+  return g;
+}
+Object.assign(PROC, {
+  cofregrande() { const g = chestBody(2.2, 1.1, 1.4, 0x6a4424, [-0.75, 0.75]); g.add(M(box(0.3, 0.35, 0.08), brass(), 0, 1.0, 0.72)); return g; },
+  cofrefuerte() {
+    const g = chestBody(1.8, 1, 1.25, 0x4a2e1a, [-0.75, -0.25, 0.25, 0.75]);
+    g.add(M(box(0.42, 0.5, 0.12), iron(), 0, 0.85, 0.66)); g.add(M(new THREE.TorusGeometry(0.14, 0.05, 6, 10, Math.PI), iron(), 0, 1.12, 0.7));
+    return g;
+  },
+  bolsa() { const g = bag(0x7a4a2a, 0.75, 0xd0a040); for (let i = 0; i < 5; i++) g.add(M(cyl(0.14, 0.14, 0.04, 10), gold(), 0.5 + (R() - 0.5) * 0.5, 0.03 + i * 0.01, 0.35 + (R() - 0.5) * 0.4)); return g; },
+  saco() { const g = bag(0xb89a68, 1.25); g.rotation.z = 0.12; return g; },
+  mochila() {
+    const g = new THREE.Group(), m = cloth(0x5a4a2e);
+    g.add(M(box(1.1, 1.2, 0.6), m, 0, 0.6)); const top = M(cyl(0.3, 0.3, 1.1, 10, 1), m, 0, 1.2); top.rotation.z = Math.PI / 2; g.add(top);
+    g.add(M(box(0.8, 0.45, 0.2), cloth(0x4a3a22), 0, 0.5, 0.38));
+    const roll = M(cyl(0.2, 0.2, 1.2, 8), cloth(0x7a2a24), 0, 1.5); roll.rotation.z = Math.PI / 2; g.add(roll);
+    g.rotation.x = -0.25; return g;
+  },
+  reliquia() {
+    const g = new THREE.Group(); g.add(M(cyl(0.55, 0.65, 0.3, 8), mat(0x6a645a), 0, 0.15));
+    g.add(M(box(0.7, 0.8, 0.5), gold(), 0, 0.7)); const roof = M(new THREE.ConeGeometry(0.55, 0.45, 4), gold(), 0, 1.32); roof.rotation.y = Math.PI / 4; g.add(roof);
+    g.add(M(new THREE.OctahedronGeometry(0.16, 0), gemMat(0xd02a40), 0, 0.75, 0.27));
+    return g;
+  },
+  gema() {
+    const g = new THREE.Group(), cs = [0x3ad0ff, 0xff3a6a, 0x5aff8a, 0xb06aff, 0xffe04a];
+    for (let i = 0; i < 6; i++) { const o = M(new THREE.OctahedronGeometry(0.16 + R() * 0.12, 0), gemMat(cs[i % cs.length]), (R() - 0.5) * 1.1, 0.16, (R() - 0.5) * 1.1); o.rotation.set(R(), R() * 6, R()); g.add(o); }
+    const big = M(new THREE.OctahedronGeometry(0.32, 0), gemMat(0x3ad0ff), 0, 0.5); big.userData.spin = true; g.add(big);
+    return g;
+  },
+  joyas() {
+    const g = new THREE.Group(), au = gold();
+    g.add(M(box(1, 0.5, 0.7), mat(0x5a1a2a), 0, 0.25)); g.add(M(box(1.02, 0.06, 0.72), au, 0, 0.5));
+    const neck = M(new THREE.TorusGeometry(0.4, 0.04, 5, 16), au, 0.15, 0.56, 0); neck.rotation.x = Math.PI / 2; g.add(neck);
+    g.add(M(new THREE.OctahedronGeometry(0.1, 0), gemMat(0x3a8aff), 0.15, 0.58, 0.4));
+    [[0.75, 0.3], [-0.7, -0.35]].forEach(([x, z]) => { const r = M(new THREE.TorusGeometry(0.12, 0.035, 5, 12), au, x, 0.04, z); r.rotation.x = Math.PI / 2; g.add(r); });
+    return g;
+  },
+  libro() { const g = book(0x6a2a1a); g.rotation.y = 0.4; const b2 = book(0x2a4a6a, 0.8, 1.05, 0.22); b2.position.y = 0.28; b2.rotation.y = -0.5; g.add(b2); return g; },
+  grimorio() {
+    const g = book(0x3a1a4a, 1.1, 1.4, 0.36);
+    g.add(M(box(0.5, 0.04, 0.5), glowMat(0xb06aff, 0x7a2aff), 0, 0.37)); [[-0.5, -0.65], [0.5, -0.65], [-0.5, 0.65], [0.5, 0.65]].forEach(([x, z]) => g.add(M(box(0.16, 0.38, 0.16), brass(), x, 0.18, z)));
+    g.userData.glow = { color: 0x9a5aff, power: 0.25, y: 0.8 };
+    return g;
+  },
+  llave() {
+    const g = new THREE.Group(), m = brass();
+    const ring = M(new THREE.TorusGeometry(0.22, 0.06, 6, 12), m, -0.5, 0.06, 0); ring.rotation.x = Math.PI / 2; g.add(ring);
+    const shaft = M(cyl(0.05, 0.05, 0.9, 6), m, 0.05, 0.06, 0); shaft.rotation.z = Math.PI / 2; g.add(shaft);
+    g.add(M(box(0.08, 0.06, 0.22), m, 0.4, 0.06, 0.1)); g.add(M(box(0.08, 0.06, 0.16), m, 0.25, 0.06, 0.08));
+    g.scale.setScalar(1.4); return g;
+  },
+  mapa() {
+    const g = new THREE.Group(), sh = M(box(1.4, 0.03, 1), mat(0xd8c08a), 0, 0.02); g.add(sh);
+    [[-0.7, 0], [0.7, 0]].forEach(([x]) => { const r = M(cyl(0.1, 0.1, 1.05, 8), mat(0xc8b078), x, 0.1, 0); r.rotation.x = Math.PI / 2; g.add(r); });
+    g.add(M(box(0.5, 0.035, 0.04), mat(0xa02020), 0.1, 0.04, 0.1)); g.add(M(box(0.04, 0.035, 0.4), mat(0xa02020), -0.2, 0.04, -0.05));
+    return g;
+  },
+  carta() {
+    const g = new THREE.Group(); g.add(M(box(0.9, 0.03, 0.6), mat(0xf0e4c4), 0, 0.02));
+    g.add(M(cyl(0.11, 0.11, 0.05, 10), mat(0xb01a1a, { roughness: 0.4 }), 0, 0.05, 0.05));
+    g.rotation.y = R() * 3; return g;
+  },
+  armasuelo() {
+    const g = new THREE.Group(), steel = mat(0xb8bcc2, { metalness: 0.8, roughness: 0.3 });
+    g.add(M(box(1.6, 0.06, 0.16), steel, 0.3, 0.06)); g.add(M(box(0.1, 0.1, 0.55), brass(), -0.5, 0.07)); g.add(M(box(0.45, 0.1, 0.1), mat(0x4a2e1a), -0.75, 0.07));
+    const ax = new THREE.Group(); ax.add(M(box(1.2, 0.08, 0.08), mat(0x5a3d22), 0, 0.06)); ax.add(M(box(0.3, 0.06, 0.4), steel, 0.5, 0.06, 0.12)); ax.position.set(0, 0, 0.6); ax.rotation.y = 0.7; g.add(ax);
+    return g;
+  },
+  escudo() {
+    const g = new THREE.Group();
+    const sh = M(cyl(0.65, 0.65, 0.1, 14), mat(0x7a2a24), 0, 0.12); sh.rotation.x = -0.15; g.add(sh);
+    g.add(M(cyl(0.18, 0.18, 0.12, 10), mat(0xb8bcc2, { metalness: 0.8, roughness: 0.3 }), 0, 0.2)); const rim = M(new THREE.TorusGeometry(0.65, 0.05, 5, 18), iron(), 0, 0.13); rim.rotation.x = Math.PI / 2 - 0.15; g.add(rim);
+    const helm = M(new THREE.SphereGeometry(0.32, 10, 7, 0, Math.PI * 2, 0, Math.PI / 2), mat(0x9a9ea4, { metalness: 0.7, roughness: 0.35 }), 0.9, 0, -0.4); g.add(helm);
+    return g;
+  },
+  urna() {
+    const g = new THREE.Group(), m = mat(0x8a5a3a, { roughness: 0.6 });
+    const pts = [[0, 0], [0.35, 0], [0.45, 0.15], [0.6, 0.6], [0.5, 1.0], [0.28, 1.15], [0.32, 1.3], [0, 1.3]].map(([x, y]) => new THREE.Vector2(x, y));
+    g.add(M(new THREE.LatheGeometry(pts, 12), m)); g.add(M(new THREE.TorusGeometry(0.6, 0.035, 5, 16), mat(0xd0a040, { metalness: 0.6 }), 0, 0.62)).children; g.children[1].rotation.x = Math.PI / 2;
+    return g;
+  },
+  restos() {
+    const g = new THREE.Group(), bone = mat(0xdcd2b8);
+    g.add(M(new THREE.SphereGeometry(0.28, 8, 6), bone, -0.6, 0.25, 0)); g.add(M(box(0.12, 0.12, 0.9), bone, 0, 0.08, 0)); for (let i = 0; i < 3; i++) { const rb = M(new THREE.TorusGeometry(0.28, 0.04, 4, 8, Math.PI), bone, -0.1 + i * 0.22, 0.12, 0); rb.rotation.y = Math.PI / 2; g.add(rb); }
+    [[0.55, 0.3, 0.8], [0.55, -0.3, -0.7]].forEach(([x, z, r]) => { const l = M(box(0.9, 0.09, 0.09), bone, x, 0.05, z); l.rotation.y = r; g.add(l); });
+    const pk = bag(0x5a4a2e, 0.55); pk.position.set(0.3, 0, 0.75); g.add(pk);
+    return g;
+  },
+  ofrenda(fire) {
+    const g = new THREE.Group(); g.add(M(box(1.8, 0.9, 1.1), stone(), 0, 0.45)); g.add(M(box(2, 0.12, 1.3), mat(0x6a6058), 0, 0.96));
+    g.add(M(cyl(0.35, 0.25, 0.15, 10), gold(), 0, 1.1)); g.add(M(new THREE.SphereGeometry(0.12, 6, 5), mat(0xb0301a), 0.05, 1.22));
+    [-0.65, 0.65].forEach(x => { g.add(M(cyl(0.07, 0.07, 0.4, 6), mat(0xf0e8d0), x, 1.22)); const f = fire(0.22); f.position.set(x, 1.45, 0); g.add(f); });
+    g.userData.glow = { color: 0xffb060, power: 0.35, y: 1.6 };
+    return g;
+  },
+  pasaje() {
+    // Marca de paso: un arco de luz azulada en el suelo que invita a cruzar
+    const g = new THREE.Group(), m = glowMat(0x6ac8ff, 0x2a7aff);
+    const arch = M(new THREE.TorusGeometry(1.3, 0.12, 6, 20, Math.PI), m, 0, 0.05); g.add(arch);
+    const disc = M(new THREE.CircleGeometry(1.3, 24), new THREE.MeshBasicMaterial({ color: 0x4aa8ff, transparent: true, opacity: 0.22, depthWrite: false }), 0, 0.04); disc.rotation.x = -Math.PI / 2; g.add(disc);
+    const arrow = new THREE.Shape(); arrow.moveTo(0, 0.6); arrow.lineTo(0.45, 0); arrow.lineTo(0.18, 0); arrow.lineTo(0.18, -0.6); arrow.lineTo(-0.18, -0.6); arrow.lineTo(-0.18, 0); arrow.lineTo(-0.45, 0);
+    const ar = M(new THREE.ShapeGeometry(arrow), new THREE.MeshBasicMaterial({ color: 0xbfe6ff, transparent: true, opacity: 0.85, depthWrite: false }), 0, 0.06); ar.rotation.x = -Math.PI / 2; g.add(ar);
+    g.userData.glow = { color: 0x4aa8ff, power: 0.3, y: 1 };
+    return g;
+  }
+});

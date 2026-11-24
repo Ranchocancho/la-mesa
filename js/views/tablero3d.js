@@ -9,7 +9,7 @@ import { getImage } from "../core/images.js";
 import { TERRAIN, dist } from "./tablero.js";
 import { PROPS, isDoor, propVisible } from "../data/mapas.js";
 import { pathTo, moveHint } from "../core/movimiento.js";
-import { terrainCanvas } from "./texturas.js";
+import { terrainCanvas, heightCanvas, roughCanvas } from "./texturas.js";
 import { PROC } from "./props3d.js";
 import { siluetaFor, siluetaURL } from "../data/siluetas.js";
 import { COND } from "../data/iconos.js";
@@ -24,10 +24,16 @@ import { colors, onColors } from "../core/colores.js";
 import { playEffect, EFECTOS } from "./efectos3d.js";
 import { sound, AMBIENTES } from "../core/sonido.js";
 import { floatText, strike, motes } from "./golpes3d.js";
+import { makeEnvironment, makeBloom } from "./brillo3d.js";
+import { toast } from "../core/ui.js";
 import { RES_TEXT, RES_COLOR, cells as cellDist } from "../core/golpes.js";
 import { impactOf } from "../core/impactos.js";
 
 const CELL = 4, BASE = "assets/kaykit/";
+// Hito 81: preferencias de este navegador (cuadrícula y calidad)
+const pref = (k, d) => { try { return localStorage.getItem(k) ?? d; } catch (e) { return d; } };
+const setPref = (k, v) => { try { localStorage.setItem(k, v); } catch (e) { /* nada */ } };
+const GRID = () => pref("lamesa:rejilla3d", "0") === "1", QUAL = () => pref("lamesa:calidad", "alta");
 const YS = 1.7; // unidades de la escena por metro de altura (3 m de risco ≈ algo más que un muro)
 const loader = new GLTFLoader();
 const cache = new Map();
@@ -62,8 +68,10 @@ function terrainMat(k) {
   if (TEXMAT.has(k)) return TEXMAT.get(k);
   const ty = TERRAIN[k] || TERRAIN.piedra, map = new THREE.CanvasTexture(terrainCanvas(k));
   map.wrapS = map.wrapT = THREE.RepeatWrapping; map.colorSpace = THREE.SRGBColorSpace; map.anisotropy = 8;
-  const bump = new THREE.CanvasTexture(terrainCanvas(k)); bump.wrapS = bump.wrapT = THREE.RepeatWrapping;
-  const m = new THREE.MeshStandardMaterial({ map, bumpMap: bump, bumpScale: ty.liquid ? 0.3 : ty.wall ? 0.5 : 1.1, roughness: k === "hielo" || k === "marmol" ? 0.5 : ty.liquid ? 0.2 : 1, metalness: 0,
+  // Hito 80: relieve y rugosidad con mapas propios (antes, el relieve salía de la imagen de color)
+  const rep = t => { t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = 8; return t; };
+  const bump = rep(new THREE.CanvasTexture(heightCanvas(k))), rough = rep(new THREE.CanvasTexture(roughCanvas(k)));
+  const m = new THREE.MeshStandardMaterial({ map, bumpMap: bump, bumpScale: ty.liquid ? 0.25 : ty.wall ? 0.9 : 1.6, roughness: 1, roughnessMap: rough, metalness: 0,
     ...(ty.liquid && k !== "lava" ? { transparent: true, opacity: 0.9 } : {}), ...(ty.glow ? { emissive: 0xff5a10, emissiveMap: map, emissiveIntensity: 1.1 } : {}) });
   TEXMAT.set(k, m); return m;
 }
@@ -297,13 +305,15 @@ export function createBoard3D(host, opts) {
   const camHTML = opts.controlsHost ? `<div class="cam3d compact" role="toolbar" aria-label="Cámara">
       <span class="camsq"><button class="sq" data-cam="center" title="Centrar la cámara en la mesa" aria-label="Centrar">⌖</button><button class="sq" data-cam="top" title="Vista cenital (desde arriba)" aria-label="Cenital">⬇</button><button class="sq" data-cam="ruler" aria-pressed="false" title="Regla: arrastra de una casilla a otra para medir" aria-label="Regla">📏</button><button class="sq" data-cam="mute" title="Silenciar">${sound.muted ? "🔇" : "🔊"}</button></span>
       <span class="volv" title="Volumen"><input type="range" min="0" max="1" step="0.05" value="${sound.volume}" data-vol aria-label="Volumen" orient="vertical"></span>
-      <span class="camst"><button class="btn small" data-cam="mode" aria-pressed="false" title="Cámara en órbita (pulsa para libre)">⟳</button><button class="btn small" data-cam="walls" aria-pressed="true" title="Muros bajos (pulsa para altos)">▁</button></span>
+      <span class="camst"><button class="btn small" data-cam="mode" aria-pressed="false" title="Cámara en órbita (pulsa para libre)">⟳</button><button class="btn small" data-cam="walls" aria-pressed="true" title="Muros bajos (pulsa para altos)">▁</button><button class="btn small" data-cam="grid" aria-pressed="${GRID()}" title="Cuadrícula sobre el suelo">▦</button><button class="btn small" data-cam="quality" aria-pressed="${QUAL() === "alta"}" title="${QUAL() === "alta" ? "Calidad alta: reflejos y resplandor (pulsa para normal)" : "Calidad normal (pulsa para alta: resplandor del fuego y la magia)"}">✨</button></span>
     </div>` : `<div class="cam3d" role="toolbar" aria-label="Cámara">
       <button class="btn small" data-cam="center" title="Centrar la cámara en la mesa">⌖ Centrar</button>
       <button class="btn small" data-cam="top" title="Vista desde arriba">⬇ Cenital</button>
       <button class="btn small" data-cam="ruler" aria-pressed="false" title="Regla: arrastra de una casilla a otra para medir">📏 Medir</button>
       <button class="btn small" data-cam="mode" aria-pressed="false" title="Órbita alrededor del centro o cámara libre">Órbita</button>
       <button class="btn small" data-cam="walls" aria-pressed="true" title="Muros bajos para ver mejor">Muros bajos</button>
+      <button class="btn small" data-cam="grid" aria-pressed="${GRID()}" title="Cuadrícula sobre el suelo">▦ Cuadrícula</button>
+      <button class="btn small" data-cam="quality" aria-pressed="${QUAL() === "alta"}" title="Calidad alta: resplandor del fuego, la lava y la magia">✨ ${QUAL() === "alta" ? "Alta" : "Normal"}</button>
       ${opts.dm && opts.setFog ? `<button class="btn small" data-cam="fog" title="Niebla de guerra para los jugadores">Niebla</button>` : ""}
       ${opts.dm && opts.setSound ? `<select class="btn small" data-snd aria-label="Sonido ambiente">${Object.entries(AMBIENTES).map(([k, v]) => `<option value="${k}">🎵 ${v}</option>`).join("")}</select>` : ""}
       <span class="volbox"><button class="btn small" data-cam="mute" title="Silenciar">${sound.muted ? "🔇" : "🔊"}</button><input type="range" min="0" max="1" step="0.05" value="${sound.volume}" data-vol aria-label="Volumen"></span>
@@ -316,6 +326,8 @@ export function createBoard3D(host, opts) {
   renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
   renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.05;
+  const env = makeEnvironment(renderer); let bloom = null, quality = QUAL(), fpsProbe = { n: 0, sum: 0, done: quality !== "alta" };
+  let gridObj = null;
   host.prepend(renderer.domElement);
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(42, 1, 0.5, 600);
@@ -366,6 +378,8 @@ export function createBoard3D(host, opts) {
     if (k === "fog") { opts.setFog(!visionOn(G)); return; }
     if (k === "ruler") { measuring = !measuring; b.setAttribute("aria-pressed", measuring); renderer.domElement.style.cursor = measuring ? "crosshair" : ""; if (!measuring) drawRuler(null); return; }
     if (k === "mute") { sound.setMuted(!sound.muted); b.textContent = sound.muted ? "🔇" : "🔊"; return; }
+    if (k === "grid") { const on = !GRID(); setPref("lamesa:rejilla3d", on ? "1" : "0"); b.setAttribute("aria-pressed", on); if (gridObj) gridObj.visible = on; return; }
+    if (k === "quality") { setQuality(quality === "alta" ? "normal" : "alta", true); return; }
     if (k === "walls") { lowWalls = !lowWalls; b.textContent = lowWalls ? "▁" : "▇"; b.title = lowWalls ? "Muros bajos (pulsa para altos)" : "Muros altos (pulsa para bajos)"; b.setAttribute("aria-pressed", lowWalls); lastSig = ""; sync(); }
   });
   const amb = ctl.querySelector("[data-amb]");
@@ -386,12 +400,18 @@ export function createBoard3D(host, opts) {
     if (moteFx) { ticks.delete(moteFx.step); moteFx.dispose(); }
     moteFx = motes(scene, G.cols * CELL, G.rows * CELL, ambient); ticks.add(moteFx.step);
   }
+  function setQuality(q, byHand) {
+    quality = q; setPref("lamesa:calidad", q); fpsProbe = { n: 0, sum: 0, done: !!byHand || q !== "alta" };
+    if (q !== "alta" && bloom) { bloom.dispose(); bloom = null; }
+    ctl.querySelectorAll('[data-cam="quality"]').forEach(b => { b.setAttribute("aria-pressed", q === "alta"); if (b.textContent.includes("Alta") || b.textContent.includes("Normal")) b.textContent = "✨ " + (q === "alta" ? "Alta" : "Normal"); b.title = q === "alta" ? "Calidad alta: reflejos y resplandor (pulsa para normal)" : "Calidad normal (pulsa para alta: resplandor del fuego y la magia)"; });
+  }
   function applyAmbient(k) {
     const a = AMBIENT[k] || AMBIENT.interior;
     if (ambient === k) return; ambient = k;
     hemi.color.set(a.hemi[0]); hemi.groundColor.set(a.hemi[1]); hemi.intensity = a.hemi[2];
     sun.color.set(a.sun[0]); sun.intensity = a.sun[1];
     scene.background = new THREE.Color(a.bg); scene.fog = new THREE.Fog(a.bg, 90, 260);
+    scene.environment = env.get(k, a.hemi[0], a.hemi[1], a.sun[0]); // Hito 81: reflejos según la luz
     torches.forEach(t => (t.base = t.power * 34 * a.torch));
     if (amb) amb.value = k;
   }
@@ -417,16 +437,25 @@ export function createBoard3D(host, opts) {
       const e = elevAt(g, c, r); (cells[t + "|" + e] = cells[t + "|" + e] || []).push([c, r]);
     }
     const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), v = new THREE.Vector3(), one = new THREE.Vector3(1, 1, 1);
-    const floorsPick = [];
+    const floorsPick = [], gridPts = [];
     for (const [tk, list] of Object.entries(cells)) {
       const [t, es] = tk.split("|"), e0 = +es * YS;
       const ty = TERRAIN[t] || TERRAIN.piedra, y = e0 + (t === "abismo" ? -1.6 : ty.liquid ? -0.18 : 0.01);
+      if (t !== "abismo") { const gyv = y + (ty.liquid ? 0.1 : 0.05), h = CELL / 2; list.forEach(([c, r]) => { const X = cx(c), Z = cz(r); gridPts.push(X - h, gyv, Z - h, X + h, gyv, Z - h, X - h, gyv, Z - h, X - h, gyv, Z + h, X + h, gyv, Z - h, X + h, gyv, Z + h, X - h, gyv, Z + h, X + h, gyv, Z + h); }); }
       const mesh = new THREE.Mesh(floorGeometry(list, cx, cz, y), terrainMat(t)); mesh.receiveShadow = true; grp.add(mesh); floorsPick.push(mesh);
       if (ty.liquid || t === "abismo") { // lecho y orillas debajo del agua, la lava o el abismo
         const bed = new THREE.Mesh(floorGeometry(list, cx, cz, y - 0.5), new THREE.MeshStandardMaterial({ color: t === "lava" ? 0x1a0804 : 0x1a2a2a, roughness: 1 })); grp.add(bed);
       }
       if (ty.liquid) { const tex = mesh.material.map; ticks.add(dt => { tex.offset.x += dt * (t === "lava" ? 0.006 : 0.018); tex.offset.y += dt * (t === "lava" ? 0.004 : 0.011); }); }
       if (t === "lava") { const mm = mesh.material; let k = 0; ticks.add(dt => { k += dt; mm.emissiveIntensity = 0.95 + Math.sin(k * 1.7) * 0.25; }); }
+      if (t === "brasas") { const mm = mesh.material; let k = Math.random() * 5; ticks.add(dt => { k += dt; mm.emissiveIntensity = 0.9 + Math.sin(k * 2.3) * 0.2 + Math.sin(k * 5.1) * 0.08; }); }
+      // Hito 81: segunda capa que se mueve en otra dirección, para que el agua y la lava tengan fondo
+      if (ty.liquid) {
+        const tex2 = terrainMat(t).map.clone(); tex2.needsUpdate = true; tex2.repeat.set(0.62, 0.62);
+        const lay = new THREE.Mesh(floorGeometry(list, cx, cz, y + 0.04), new THREE.MeshBasicMaterial({ map: tex2, color: t === "lava" ? 0xffa060 : 0x9fd8ff, transparent: true, opacity: t === "lava" ? 0.28 : 0.16, blending: THREE.AdditiveBlending, depthWrite: false }));
+        lay.raycast = () => {}; grp.add(lay);
+        let k = 0; ticks.add(dt => { k += dt; tex2.offset.x -= dt * (t === "lava" ? 0.004 : 0.012); tex2.offset.y += dt * (t === "lava" ? 0.007 : 0.02); lay.material.opacity = (t === "lava" ? 0.28 : 0.16) * (0.8 + Math.sin(k * 0.9) * 0.2); });
+      }
     }
     // Desniveles: paredes de roca entre casillas de distinta altura (riscos, tarimas, fosos)
     if (hasElev(g)) {
@@ -542,7 +571,13 @@ export function createBoard3D(host, opts) {
       const w = new THREE.Group(); w.add(obj); w.position.set(x, py, z);
       const ghostly = opts.dm && !propVisible(p, false); // oculto a los jugadores: el máster lo ve translúcido
       w.traverse(o => { o.userData.prop = p.id; if (o.isMesh) { o.castShadow = !ghostly; o.receiveShadow = true; if (ghostly) { o.material = (Array.isArray(o.material) ? o.material : [o.material]).map(mm => { const c = mm.clone(); c.transparent = true; c.opacity = 0.42; return c; }); if (o.material.length === 1) o.material = o.material[0]; } if (o.userData.spin) ticks.add(dt => { o.rotation.y += dt * 1.2; }); } if (o.isPoints) ticks.add(o.userData.tick); });
-      if (obj.userData.glow) { const G0 = obj.userData.glow, pl = new THREE.PointLight(G0.color, 14 * G0.power, 9, 1.6); pl.position.set(x, G0.y + py, z); grp.add(pl); }
+      // Hito 81: los objetos con luz en el catálogo (forja, farolillos, gran hoguera…) alumbran con su radio; parpadean como las antorchas
+      const catL = (PROPS[p.k] || {}).light;
+      if (obj.userData.glow || catL) {
+        const G0 = obj.userData.glow || { color: 0xffa050, power: 1, y: 1.6 }, dist = catL ? catL * CELL * 1.1 : 9, pw = catL ? 10 + catL * 4 : 14 * G0.power;
+        const pl = new THREE.PointLight(G0.color, pw, dist, 1.6); pl.position.set(x, G0.y + py, z); grp.add(pl);
+        if (catL && !ghostly) newTorches.push({ light: pl, power: pw / 34, base: pw, seed: Math.random() * 10 });
+      }
       const L = obj.userData.light;
       if (L) {
         const light = new THREE.PointLight(0xff9a4a, 30, 22, 1.6);
@@ -554,6 +589,8 @@ export function createBoard3D(host, opts) {
     if (my !== build) return;
     // Sustituir el escenario anterior de golpe (sin parpadeos)
     world.children.slice().forEach(o => world.remove(o));
+    // Hito 81: cuadrícula opcional (▦) sobre el suelo
+    if (gridPts.length) { const gg = new THREE.BufferGeometry(); gg.setAttribute("position", new THREE.Float32BufferAttribute(gridPts, 3)); gridObj = new THREE.LineSegments(gg, new THREE.LineBasicMaterial({ color: 0xfff4dc, transparent: true, opacity: 0.09, depthWrite: false })); gridObj.raycast = () => {}; gridObj.renderOrder = 2; gridObj.visible = GRID(); grp.add(gridObj); } else gridObj = null;
     world.add(grp); shroud = shroudable; pickFloors = floorsPick; fogSurf = null; fogSig = ""; // la niebla se vuelve a aplicar sobre el escenario nuevo
     torches.length = 0; torches.push(...newTorches.slice(0, 10));
     newTorches.slice(10).forEach(t => (t.light.visible = false));
@@ -1185,13 +1222,15 @@ export function createBoard3D(host, opts) {
         const want = rec.prone && !rec.down ? -1.35 : 0; rec.mini.rotation.x += (want - rec.mini.rotation.x) * Math.min(1, dt * 6);
       }
     }
+    // Si este equipo no llega (más de ~34 ms por imagen al principio), se baja solo a calidad normal
+    if (!fpsProbe.done && fxReady) { fpsProbe.n++; fpsProbe.sum += dt; if (fpsProbe.n >= 150) { fpsProbe.done = true; if (fpsProbe.sum / fpsProbe.n > 0.034) { setQuality("normal"); toast("✨ La mesa 3D va justa en este equipo: paso a calidad normal (puedes volver a la alta con ✨)."); } } }
     if (camShake > 0) { camShake = Math.max(0, camShake - dt); const k = camShake / 0.4 * 0.35; camOff.set((Math.random() - 0.5) * k, (Math.random() - 0.5) * k, (Math.random() - 0.5) * k); camera.position.add(camOff); }
-    renderer.render(scene, camera);
+    if (quality === "alta") { if (!bloom) bloom = makeBloom(renderer); bloom.render(scene, camera); } else renderer.render(scene, camera);
     if (camOff.lengthSq()) { camera.position.sub(camOff); camOff.set(0, 0, 0); }
   });
   function dispose() {
     if (disposed) return; disposed = true;
-    renderer.setAnimationLoop(null); ro.disconnect(); sound.ambient(""); controls.dispose(); renderer.dispose();
+    renderer.setAnimationLoop(null); ro.disconnect(); sound.ambient(""); controls.dispose(); env.dispose(); if (bloom) bloom.dispose(); renderer.dispose();
     window.removeEventListener("keydown", kd); window.removeEventListener("keyup", ku); offColors();
   }
 

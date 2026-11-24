@@ -2,15 +2,16 @@
 // Las usa el plano 2D (como patrones) y la mesa 3D (como textura y relieve).
 import { TERRAIN } from "../data/mapas.js";
 
-const SIZE = 256;
-const cache = new Map(), urls = new Map();
+// Las recetas dibujan en un cuadro lógico de 256; el lienzo real es de 512 (Hito 80: más nítido)
+const SIZE = 256, RES = 512;
+const cache = new Map(), urls = new Map(), heights = new Map(), roughs = new Map();
 
 function rng(seed) { let s = 0; for (const ch of seed) s = (s * 31 + ch.charCodeAt(0)) >>> 0; return () => { s ^= s << 13; s ^= s >>> 17; s ^= s << 5; return ((s >>> 0) % 100000) / 100000; }; }
 const hex = (c, k = 0) => { const n = parseInt(c.slice(1), 16), f = v => Math.max(0, Math.min(255, Math.round(v + k * 255))); return `rgb(${f(n >> 16)},${f((n >> 8) & 255)},${f(n & 255)})`; };
 /** Dibuja repitiendo en los bordes para que la textura no tenga costuras. */
 const wrap = (fn, x, y, m) => { for (const dx of [-SIZE, 0, SIZE]) for (const dy of [-SIZE, 0, SIZE]) if (x + dx > -m && x + dx < SIZE + m && y + dy > -m && y + dy < SIZE + m) fn(x + dx, y + dy); };
 function grain(g, R, amt, scale = 1) {
-  const img = g.getImageData(0, 0, SIZE, SIZE), d = img.data;
+  const W = g.canvas.width, img = g.getImageData(0, 0, W, W), d = img.data;
   for (let i = 0; i < d.length; i += 4) { const v = (R() - 0.5) * amt * 255 * scale; d[i] += v; d[i + 1] += v; d[i + 2] += v; }
   g.putImageData(img, 0, 0);
 }
@@ -126,10 +127,45 @@ const DRAW = {
 /** Lienzo de la textura de un terreno (se dibuja una vez). */
 export function terrainCanvas(k) {
   if (cache.has(k)) return cache.get(k);
-  const c = document.createElement("canvas"); c.width = c.height = SIZE;
-  const g = c.getContext("2d"), R = rng(k + "·mesa");
+  const c = document.createElement("canvas"); c.width = c.height = RES;
+  const g = c.getContext("2d", { willReadFrequently: true }), R = rng(k + "·mesa");
+  g.scale(RES / SIZE, RES / SIZE);
   (DRAW[k] || ((gg) => { gg.fillStyle = (TERRAIN[k] || TERRAIN.piedra).f; gg.fillRect(0, 0, SIZE, SIZE); grain(gg, R, 0.1); }))(g, R);
   cache.set(k, c); return c;
 }
 /** La misma textura como imagen (para los patrones del plano 2D). */
-export function terrainURL(k) { if (!urls.has(k)) urls.set(k, terrainCanvas(k).toDataURL("image/jpeg", 0.85)); return urls.get(k); }
+export function terrainURL(k) { if (!urls.has(k)) urls.set(k, terrainCanvas(k).toDataURL("image/jpeg", 0.93)); return urls.get(k); }
+
+/* ---------- Hito 80: relieve y brillo propios para la mesa 3D ---------- */
+// Brillo de cada superficie (0 espejo, 1 mate). Lo que no está aquí es mate.
+const ROUGH = { hielo: 0.18, hielofino: 0.28, marmol: 0.32, agua: 0.06, aguaprof: 0.05, lava: 0.5, brea: 0.22, barro: 0.5, runas: 0.55, railes: 0.4,
+  madera: 0.72, pasarela: 0.78, muelle: 0.8, cubierta: 0.74, muromadera: 0.8, volcanica: 0.7, plataforma: 0.6, nieve: 0.7, veta: 0.45, murorunas: 0.6 };
+const FLAT = new Set(["agua", "aguaprof", "lava", "brea", "abismo", "vacio"]);
+const lumaOf = (k) => {
+  const src = terrainCanvas(k), W = src.width, d = src.getContext("2d", { willReadFrequently: true }).getImageData(0, 0, W, W).data, L = new Float32Array(W * W);
+  for (let i = 0, j = 0; i < d.length; i += 4, j++) L[j] = (d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114) / 255;
+  return { L, W };
+};
+/** Mapa de altura: juntas y grietas hondas (oscuras), piezas en relieve (claras). Suavizado y con el contraste estirado. */
+export function heightCanvas(k) {
+  if (heights.has(k)) return heights.get(k);
+  const { L, W } = lumaOf(k), B = new Float32Array(W * W);
+  // desenfoque 3×3 con vuelta (sin costuras)
+  for (let y = 0; y < W; y++) for (let x = 0; x < W; x++) { let a = 0; for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) a += L[((y + dy + W) % W) * W + ((x + dx + W) % W)]; B[y * W + x] = a / 9; }
+  // estirar el contraste entre los percentiles 3 y 97
+  const sorted = Float32Array.from(B).sort(), lo = sorted[Math.floor(B.length * 0.03)], hi = sorted[Math.floor(B.length * 0.97)], span = Math.max(0.02, hi - lo);
+  const flat = FLAT.has(k) ? 0.25 : 1;
+  const c = document.createElement("canvas"); c.width = c.height = W;
+  const g = c.getContext("2d"), img = g.createImageData(W, W), d = img.data;
+  for (let j = 0; j < B.length; j++) { let h = Math.max(0, Math.min(1, (B[j] - lo) / span)); h = Math.pow(h, 0.8); h = 0.5 + (h - 0.5) * flat; const v = Math.round(h * 255); d[j * 4] = d[j * 4 + 1] = d[j * 4 + 2] = v; d[j * 4 + 3] = 255; }
+  g.putImageData(img, 0, 0); heights.set(k, c); return c;
+}
+/** Mapa de rugosidad: el brillo de la superficie, y en las juntas, más mate. */
+export function roughCanvas(k) {
+  if (roughs.has(k)) return roughs.get(k);
+  const base = ROUGH[k] ?? 0.95, h = heightCanvas(k), W = h.width, hd = h.getContext("2d").getImageData(0, 0, W, W).data;
+  const c = document.createElement("canvas"); c.width = c.height = W;
+  const g = c.getContext("2d"), img = g.createImageData(W, W), d = img.data;
+  for (let i = 0; i < hd.length; i += 4) { const hh = hd[i] / 255, r = Math.max(0.03, Math.min(1, base + (1 - hh) * (base < 0.6 ? 0.25 : 0.08))); d[i] = d[i + 1] = d[i + 2] = Math.round(r * 255); d[i + 3] = 255; }
+  g.putImageData(img, 0, 0); roughs.set(k, c); return c;
+}

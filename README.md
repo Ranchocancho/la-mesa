@@ -936,3 +936,17 @@ A partir de la auditoría de diseño comparada con Baldur's Gate 3:
 - **En la figura** (3D y 2D): al recibir daño retrocede alejándose de quien golpea, tiembla más y destella en rojo; si falla el ataque, se aparta de lado (esquiva); al curarse, destello verde. En los críticos tiembla un poco la cámara. El número de daño sale del color de su tipo (los físicos, rojo).
 - **En la tira de iniciativa**: el retrato del golpeado tiembla, su barra baja en dos tiempos (queda un trozo claro de lo perdido que se vacía) y aparece 6 s una etiqueta «⚔ Mirra −8» (o «✚ Osric +4» al curar); el retrato de quien golpea o cura brilla a la vez. Al pasar el ratón: «Último golpe: Mirra, 8 cortante (ronda 2)» hasta que acaba la ronda.
 - Sale de las tiradas compartidas: todos ven lo mismo. Si el máster cambia los PG a mano dice «Máster»; si quien golpea está oculto para ti, «?».
+
+## Hito 80 · Objetos que faltaban, conjuros con cuerpo y texturas más nítidas
+
+- **19 objetos que no se veían en la mesa 3D** ahora tienen figura: cofre grande, cofre con cerradura, bolsa de monedas, saco, mochila, reliquia, gemas, joyas, libro, libro de conjuros (con brillo), llave, mapa, carta, arma en el suelo, escudo o armadura, urna, restos con pertenencias, ofrenda (con velas) y paso a otra escena (arco de luz con flecha).
+- **Conjuros:** el relámpago y el rayo de escarcha son haces con volumen (núcleo y halo; el relámpago cambia de forma y suelta ramas, la escarcha avanza y deja carámbanos), con destello en el origen y en el impacto. La bola de fuego deja estela, onda en el suelo y pavesas; la llama sagrada, anillos que suben y onda; la onda atronadora, dos ondas y polvo.
+- **Texturas del suelo** a 512 px (antes 256) y mejor compresión en 2D. En 3D, relieve propio (las juntas y grietas se hunden) y rugosidad por terreno: hielo, agua, mármol, brea y metal brillan; piedra, tierra y madera son mates.
+
+## Hito 81 · Acabado de la mesa 3D
+
+- **✨ Calidad (alta / normal)** en los controles de la cámara: la alta añade resplandor suave a fuego, lava, cristales y conjuros. Si el equipo va justo al abrir la mesa, baja sola a normal y lo avisa. Se recuerda en cada navegador.
+- **Reflejos de entorno** según la luz elegida (más de día, casi nada en la oscuridad), discretos: dan brillo a metales, agua y hielo.
+- **Agua y lava con fondo:** una segunda capa que se mueve en otra dirección; las brasas laten.
+- **▦ Cuadrícula** opcional sobre el suelo 3D (se recuerda en cada navegador).
+- **Luces del catálogo:** la forja, los farolillos y la gran hoguera alumbran con su radio y parpadean como las antorchas.
