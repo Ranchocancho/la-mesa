@@ -127,7 +127,9 @@ function drawStage(force) {
     if (!force && fk === lastKey && st.childElementCount) return;
     lastKey = fk; st.innerHTML = freeStageHTML(s); bindFreeStage(st, () => drawStage(true)); return;
   }
-  const key = JSON.stringify(presentationFor(s)) + JSON.stringify(s.world.places.map(p => [p.map, p.summary, p.items.length]));
+  const pf0 = presentationFor(s), onMap = pf0 && (pf0.type === "world" || pf0.type === "region");
+  const key = JSON.stringify(pf0) + JSON.stringify(s.world.places.map(p => [p.map, p.summary, p.items.length, onMap ? [p.x, p.y, p.visible] : 0]))
+    + (onMap ? JSON.stringify([s.world.party, (s.sessions || []).map(x => (x.route || []).length)]) : ""); // en el mapa, la ruta del grupo se ve moverse
   if (!force && key === lastKey && st.childElementCount) return;
   lastKey = key; renderStage(st);
 }

@@ -8,6 +8,26 @@ import { esc } from "../core/ui.js";
 import { bboxOf } from "../core/regiones.js";
 import { isDM } from "../core/session.js";
 import { timeline, tellTimeline } from "../core/lore.js";
+import { routesOf, partyPos } from "../core/ruta.js";
+import { genURL } from "../core/generamapa.js";
+
+/* ---------- La ruta del grupo sobre el mapa mostrado (Hito 75) ----------
+   toPx(x, y) pasa de coordenadas del mundo (0–1) a las del dibujo (W×H). Va encima de la imagen, ajustada por código. */
+function routeOverlay(state, W, H, toPx) {
+  const R = routesOf(state), P = partyPos(state), dm = isDM(state);
+  const lines = R.slice().reverse().map(r => { const pts = r.pts.map(p => toPx(p.x, p.y)); if (pts.length < 2) return "";
+    return `<g class="route ${r.live ? "live" : ""}"><title>${esc(r.name)}</title><polyline points="${pts.map(p => p.map(v => v.toFixed(1)).join(",")).join(" ")}" class="rline"/>${pts.map(([x, y]) => `<circle cx="${x}" cy="${y}" r="${r.live ? 0.006 * W : 0.004 * W}" class="rdot"/>`).join("")}</g>`; }).join("");
+  const places = (state.world.places || []).filter(p => !p.parent && !p.detail && (dm || p.visible)).map(p => { const [x, y] = toPx(p.x, p.y); return x < 0 || y < 0 || x > W || y > H ? "" : `<g class="splace"><circle cx="${x}" cy="${y}" r="${0.005 * W}"/><text x="${x}" y="${y - 0.012 * W}" style="font-size:${(0.016 * W).toFixed(1)}px">${esc(p.name)}</text></g>`; }).join("");
+  let party = ""; if (P) { const [x, y] = toPx(P.x, P.y); party = `<g class="sparty"><circle cx="${x}" cy="${y}" r="${0.009 * W}"/><text x="${x}" y="${y + 0.004 * W}" style="font-size:${(0.011 * W).toFixed(1)}px">⚑</text><text class="lab" x="${x}" y="${y + 0.026 * W}" style="font-size:${(0.013 * W).toFixed(1)}px">${P.p && (state.world.places.find(q => q.id === P.p) || {}).name ? "El grupo · en " + esc(state.world.places.find(q => q.id === P.p).name) : "El grupo"}</text></g>`; }
+  return `<svg class="stageroute" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-label="Ruta del grupo">${lines}${places}${party}</svg>`;
+}
+/** Coloca la capa de la ruta exactamente encima de la imagen (que se ajusta a la pantalla). */
+function fitOverlay(el) {
+  const art = el.querySelector(".art"), img = art && art.querySelector("img, .regcrop"), svg = art && art.querySelector(".stageroute"); if (!img || !svg) return;
+  const place = () => { Object.assign(svg.style, { left: img.offsetLeft + "px", top: img.offsetTop + "px", width: img.offsetWidth + "px", height: img.offsetHeight + "px" }); };
+  if (img.tagName === "IMG" && !img.complete) img.addEventListener("load", place, { once: true });
+  place(); new ResizeObserver(place).observe(art);
+}
 
 let token = 0;
 
@@ -51,7 +71,11 @@ export async function renderStage(el) {
     html = `<div class="pres" style="background-image:url('${mapURL}')"><div class="shade"></div>
       ${caption("ANTERIORMENTE EN " + state.campaign.name.toUpperCase(), last ? last.title : "La historia hasta ahora", last ? last.recap : "Esta es vuestra primera sesión.")}</div>`;
   } else if (p.type === "world") {
-    html = `<div class="pres mapstage"><div class="art"><img src="${mapURL}" alt="Mapa del mundo"></div>
+    // el mapa del mundo con el grupo y su ruta encima (lo ven todos en la mesa)
+    let url = state.world.map ? await getImage(state.world.map) : null, W = state.world.mapW, H = state.world.mapH;
+    if (!url && state.world.gen) { W = 1600; H = 1000; url = genURL(state.world.gen, W, H, state.world.gen.autoRoads ? state.world.places.filter(x => !x.parent && (isDM(state) || x.visible)).map(x => ({ x: +x.x.toFixed(3), y: +x.y.toFixed(3) })) : [], null); }
+    if (!url) { const m = exampleMap(); url = m.url; W = m.w; H = m.h; }
+    html = `<div class="pres mapstage"><div class="art"><img src="${url}" alt="Mapa del mundo">${routeOverlay(state, W, H, (x, y) => [x * W, y * H])}</div>
       <div class="body slim"><div class="eyebrow">MAPA DEL MUNDO</div><h2>${esc(state.campaign.name)}</h2><p><a class="btn small" href="#mundo">Explorar el mapa y sus lugares</a></p></div></div>`;
   } else if (p.type === "region") {
     const r = (state.world.regions || []).find(x => x.id === p.region);
@@ -64,6 +88,8 @@ export async function renderStage(el) {
         const px = b.w >= 0.999 ? 0 : b.x0 / (1 - b.w) * 100, py = b.h >= 0.999 ? 0 : b.y0 / (1 - b.h) * 100;
         art = `<div class="art"><div class="regcrop" role="img" aria-label="Mapa de ${esc(r.name)}" style="aspect-ratio:${(b.w * W).toFixed(0)}/${(b.h * H).toFixed(0)};width:min(100%, calc(72vh * ${(b.w * W / (b.h * H)).toFixed(3)}));background:url('${mapURL}') ${px.toFixed(2)}% ${py.toFixed(2)}% / ${(100 / b.w).toFixed(2)}% ${(100 / b.h).toFixed(2)}% no-repeat"></div></div>`;
       }
+      if (!own) { const b = bboxOf(r), W = state.world.map ? state.world.mapW : exampleMap().w, H = state.world.map ? state.world.mapH : exampleMap().h, w = b.w * W, h = b.h * H;
+        art = art.replace(/<\/div>$/, routeOverlay(state, w, h, (x, y) => [(x - b.x0) * W, (y - b.y0) * H]) + "</div>"); }
       html = `<div class="pres mapstage">${art}<div class="body slim"><div class="eyebrow">REGIÓN</div><h2>${esc(r.name)}</h2>${r.summary ? `<p>${esc(r.summary)}</p>` : ""}<p><a class="btn small" href="#mundo">Ver en el mapa</a></p></div></div>`;
     }
   } else if (p.type === "tactical") {
@@ -90,6 +116,7 @@ export async function renderStage(el) {
   }
   if (my !== token || !el.isConnected) return; // cambió mientras cargaban las imágenes
   el.innerHTML = html;
+  fitOverlay(el);
   el.querySelectorAll("[data-tlgo]").forEach(b => b.onclick = () => tellTimeline(b.dataset.tlgo));
   const now = el.querySelector(".tls.now"), row = el.querySelector(".tlrow");
   if (now && row) row.scrollLeft = now.offsetLeft - row.clientWidth / 2 + now.offsetWidth / 2;

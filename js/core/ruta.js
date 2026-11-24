@@ -8,7 +8,10 @@ import { liveSession, pastSessions, sessionName } from "./sesiones.js";
 
 export const partyPos = s => (s.world && s.world.party) || null;
 /** Mueve al grupo (y apunta el paso en la sesión en curso). */
+const hist = []; // posiciones anteriores (en esta pestaña), para deshacer aunque no haya sesión abierta
+export const canUndoParty = () => hist.length > 0;
 export function moveParty(x, y, placeId = null) {
+  hist.push(JSON.parse(JSON.stringify(store.get().world.party || null))); if (hist.length > 50) hist.shift();
   store.commit("map", s => {
     const p = { x: +(+x).toFixed(4), y: +(+y).toFixed(4), ...(placeId ? { p: placeId } : {}) };
     const prev = s.world.party; s.world.party = p;
@@ -21,9 +24,15 @@ export function moveParty(x, y, placeId = null) {
 }
 /** Lleva al grupo a un lugar del mapa. */
 export function partyToPlace(s, placeId) { const pl = (s.world.places || []).find(x => x.id === placeId); if (pl) moveParty(pl.x, pl.y, pl.id); }
-/** Quitar el último paso (si se marcó sin querer). */
+/** Deshacer el último movimiento del grupo: vuelve adonde estaba y quita ese paso de la ruta de la sesión. */
 export function undoStep() {
-  store.commit("map", s => { const l = liveSession(s); if (!l || !l.route || !l.route.length) return; l.route.pop(); const b = l.route[l.route.length - 1]; if (b) s.world.party = { x: b.x, y: b.y, ...(b.p ? { p: b.p } : {}) }; });
+  const prev = hist.length ? hist.pop() : undefined;
+  store.commit("map", s => {
+    const l = liveSession(s), cur = s.world.party;
+    if (l && l.route && l.route.length && cur) { const last = l.route[l.route.length - 1]; if (Math.hypot(last.x - cur.x, last.y - cur.y) < 0.002) l.route.pop(); }
+    if (prev !== undefined) s.world.party = prev;
+    else if (l && l.route && l.route.length) { const b = l.route[l.route.length - 1]; s.world.party = { x: b.x, y: b.y, ...(b.p ? { p: b.p } : {}) }; }
+  });
 }
 /** Rutas para dibujar: la de la sesión en curso y las anteriores (de la más nueva a la más vieja). */
 export function routesOf(s) {

@@ -2668,3 +2668,28 @@ button.hbr:hover{box-shadow:0 0 0 1px var(--react,#c9a0ff)}
 .pin.party .medal b{-webkit-mask:none;mask:none;background:none;color:#fff3d6;font-style:normal;font-size:20px;display:grid;place-items:center;width:100%;height:100%}
 .pin.party span{background:#8a1f12;color:#fff3d6;border-color:#ffd76a}
 .maptabs #routesel{flex:1 1 100%;font-size:12.5px;padding:4px}
+/* Hito 75: ruta del grupo sobre el mapa mostrado en la mesa */
+.pres .art .stageroute{position:absolute;pointer-events:none;overflow:visible}
+.stageroute .rline{fill:none;stroke:#8a5a2b;stroke-width:2.5px;vector-effect:non-scaling-stroke;stroke-dasharray:9 6;opacity:.55;stroke-linecap:round;stroke-linejoin:round}
+.stageroute .route.live .rline{stroke:#c0392b;stroke-width:3.5px;opacity:.95}
+.stageroute .rdot{fill:#8a5a2b;stroke:#f3e6c8;stroke-width:1.5px;vector-effect:non-scaling-stroke;opacity:.8}.stageroute .route.live .rdot{fill:#c0392b}
+.stageroute .splace circle{fill:#3a2a1a;stroke:#f3e6c8;stroke-width:1.5px;vector-effect:non-scaling-stroke}
+.stageroute .splace text,.stageroute .sparty text{text-anchor:middle;font-family:Alegreya,Georgia,serif;paint-order:stroke;stroke:#f3e6c8;stroke-width:3px;fill:#3a2a1a}
+.stageroute .sparty circle{fill:#b0301f;stroke:#ffd76a;stroke-width:2.5px;vector-effect:non-scaling-stroke;filter:drop-shadow(0 0 6px rgba(255,120,80,.8))}
+.stageroute .sparty text{fill:#fff3d6;stroke:none;font-weight:700}.stageroute .sparty text.lab{fill:#8a1f12;stroke:#f3e6c8;stroke-width:3px}
+/* ---------- Hito 76: lugares con el punto en el centro del círculo, candado, el grupo más menudo ---------- */
+.world .pin{transform:translate(-50%,-50%);display:block}
+.world .pin .medal::after{display:none}
+.world .pin span{position:absolute;top:100%;left:50%;transform:translateX(-50%);margin-top:4px;pointer-events:none}
+.world .pin.unlocked{cursor:grab}.world .pin.unlocked .medal{outline:2px dashed rgba(255,215,106,.8);outline-offset:3px}
+.world .pin.here .medal{box-shadow:0 0 0 3px #b0301f,0 0 0 5px #ffd76a,0 0 16px rgba(255,120,80,.75)}
+.world .pin.here span::before{content:"⚑ ";color:#b0301f}
+.herebadge{position:absolute;right:-9px;top:-9px;width:20px;height:20px;border-radius:50%;display:grid;place-items:center;font-style:normal;font-size:12px;color:#fff3d6;
+  background:radial-gradient(circle at 50% 35%,#e05a46,#8a1f12);border:2px solid #ffd76a;box-shadow:0 2px 4px rgba(0,0,0,.6);cursor:grab;z-index:2}
+.world .pin.party .medal{--d:22px;width:22px;height:22px;border-width:2px}
+.world .pin.party .medal b{font-size:12px}
+.world .pin.party span{font-size:10px;padding:0 4px;margin-top:2px}
+.partyghost{position:absolute;width:22px;height:22px;border-radius:50%;display:grid;place-items:center;font-size:12px;color:#fff3d6;background:#b0301f;border:2px solid #ffd76a;pointer-events:none;opacity:.85;z-index:9}
+.world .pin.droptarget .medal{outline:3px solid #ffd76a;outline-offset:4px}
+.partybar{position:absolute;left:12px;bottom:12px;z-index:6;display:flex;gap:8px;align-items:center;flex-wrap:wrap;max-width:calc(100% - 90px);padding:6px 10px;border-radius:12px;background:rgba(22,18,15,.92);border:1px solid var(--linea);font-size:13.5px}
+.partybar b{color:#ff9a7a}

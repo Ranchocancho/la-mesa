@@ -899,3 +899,16 @@ A partir de la auditoría de diseño comparada con Baldur's Gate 3:
 - **Notas privadas**: el cuaderno de cada personaje y las nuevas «🔒 Mis notas» de cada entrada del Lore solo las ven su jugador y el máster. El máster ve en cada entrada lo que ha apuntado cada jugador. Los cuadernos que ya existían se mudan solos la primera vez que el máster abre la campaña.
 - **Arreglo**: el mapa generado del mundo (Hito 72) no se guardaba en la nube. Ahora sí.
 - ⚠️ **Hay que publicar las reglas de Firestore** (`firestore.rules`): añaden la colección `notes`. Sin ellas, los jugadores no pueden guardar sus notas.
+
+## Hito 75 · La ruta del grupo, en la mesa
+- Cuando el máster muestra «Mapa del mundo» (o una región) en la Partida, el mapa que ven todos lleva encima la ficha ⚑ del grupo, la ruta de la sesión en curso (roja y marcada) y las de sesiones anteriores (más tenues), con los nombres de los lugares conocidos. Se actualiza en directo cuando el máster mueve al grupo, sin que nadie salga de la Partida.
+- Si el mundo usa el mapa generado (Hito 72), la mesa también lo muestra (antes salía el de ejemplo).
+
+## Hito 76 · Lugares fijos, el grupo más claro y deshacer sus movimientos
+- **El punto de cada lugar es el centro de su círculo**: el nombre va debajo y ya no cuenta. Las rutas y el grupo llegan al centro del círculo, no al texto.
+- **Lugares bloqueados**: en el mapa del mundo los lugares ya no se mueven sin querer. Abajo a la izquierda, «🔒 Lugares fijos» / «🔓 Moviendo lugares» los desbloquea para arrastrarlos (se marcan con un contorno discontinuo) y vuelve a fijarlos.
+- **El grupo**:
+  - De camino, es una ficha pequeña ⚑.
+  - Al soltarlo sobre un lugar (que se ilumina al pasar por encima), **entra**: la bandera se prende en el círculo del lugar, que lleva un anillo rojo, y su nombre muestra «⚑».
+  - La barra del máster dice dónde está («El grupo está en Puerto Salobre» o «de camino»), con «↶ Deshacer movimiento», que lo devuelve adonde estaba y quita el paso de la ruta (también sin sesión abierta), y «🚪 Salir de…», que lo deja a las puertas.
+  - En la mesa se lee «El grupo · en Puerto Salobre».

@@ -7,7 +7,7 @@ import { MAP_ICONS, ICON_CATS, iconURL, PIN_SIZES, PIN_TINTS, pinDefaults } from
 import { $, $$, esc, toast, debounce, pickFile } from "../core/ui.js";
 import { regionsOf, regionById, seeRegion, bboxOf, regionAt, toLocal, toGlobal, centroid, placesIn, addRegion, editRegion, deleteRegion, REG_COLORS } from "../core/regiones.js";
 import { REGIONS } from "../data/mapas.js";
-import { partyPos, moveParty, partyToPlace, routesOf, undoStep } from "../core/ruta.js";
+import { partyPos, moveParty, partyToPlace, routesOf, undoStep, canUndoParty } from "../core/ruta.js";
 import { liveSession } from "../core/sesiones.js";
 import { sampleSource, maskFrom, genURL, CLIMAS, FORMAS, bake, paintMask, Q, UQ, pairs } from "../core/generamapa.js";
 
@@ -24,6 +24,7 @@ let genDraft = null, genSample = null, drawKind = "region";
 // Retoque a mano (Hito 73): herramienta, tamaño del pincel y elemento seleccionado ({ k: "m"|"f"|"r"|"c"|"t", i, v: vértice })
 let gTool = "sel", gBrush = 40, gSel = null;
 // Ruta del grupo (Hito 74): qué rutas se dibujan («live», «all», «none» o el id de una sesión)
+let placesLocked = true; // los lugares no se mueven sin querer: se desbloquean con el candado (Hito 76)
 let routeView = (() => { try { return sessionStorage.getItem("lamesa:route") || "live"; } catch (e) { return "live"; } })();
 
 export function mount(root) {
@@ -110,7 +111,7 @@ async function loadMap() {
 function apply() {
   stage.style.transform = `translate(${view.x}px,${view.y}px) scale(${view.k})`;
   stage.style.setProperty("--ik", 1 / view.k);
-  $$(".pin", pinsEl).forEach(p => (p.style.transform = `translate(-50%,-100%) scale(${1 / view.k})`));
+  $$(".pin", pinsEl).forEach(p => (p.style.transform = `translate(-50%,-50%) scale(${1 / view.k})`)); // el punto es el centro del círculo
 }
 function fit() {
   const r = vp.getBoundingClientRect();
@@ -133,7 +134,7 @@ function zoomAt(f, cx, cy) {
 function bindViewport() {
   let drag = null;
   vp.addEventListener("pointerdown", e => {
-    if (e.target.closest(".pin,.maptools,.mapzoom,.maptabs")) return;
+    if (e.target.closest(".pin,.maptools,.mapzoom,.maptabs,.partybar")) return;
     if (genEditing() && !drawing && e.button === 0 && genDown(e)) { vp.setPointerCapture(e.pointerId); return; }
     drag = { x: e.clientX, y: e.clientY, vx: view.x, vy: view.y, moved: false };
     vp.setPointerCapture(e.pointerId);
@@ -205,8 +206,7 @@ function drawTools() {
     return;
   }
   if (genDraft) { t.innerHTML = `<span class="drawhint">🧭 Ajustando el mapa generado: lo ves en directo. Guárdalo abajo.</span>`; return; }
-  const lr = (liveSession(state) || {}).route || [];
-  t.innerHTML = `<button class="btn small" id="addplace" aria-pressed="${adding}">+ Añadir lugar</button>${!partyPos(state) ? `<button class="btn small" id="partyput" title="Pon la ficha del grupo en el mapa; luego arrástrala para moverla">⚑ Colocar al grupo</button>` : lr.length ? `<button class="btn small" id="partyundo" title="Quita el último paso de la ruta de esta sesión">↶ Último paso</button>` : ""}
+  t.innerHTML = `<button class="btn small" id="addplace" aria-pressed="${adding}">+ Añadir lugar</button>${!partyPos(state) ? `<button class="btn small" id="partyput" title="Pon la ficha del grupo en el mapa; luego arrástrala para moverla">⚑ Colocar al grupo</button>` : ""}
     ${reg && reg.map ? "" : reg ? `<button class="btn small gold" id="genopen" title="Genera un mapa detallado de la región calcando la costa del mapa de debajo: costa, montañas, bosques, ríos y caminos. Se guarda como datos, no como imagen.">🧭 ${reg.gen ? "Ajustar el detalle" : "Detallar la región"}</button>`
       : `<button class="btn small" id="genopen" title="Genera un mapa completo (isla, continente, archipiélago). Se usa si no habéis subido un mapa.">🧭 ${state.world.gen ? "Ajustar el mapa generado" : "Generar un mapa"}</button>`}
     ${reg ? `<button class="btn small" id="upreg">${reg.map ? "Cambiar mapa de la región" : "Subir mapa de la región"}</button>${reg.map ? `<button class="btn small" id="noreg">Usar el mapa global</button>` : ""}`
@@ -450,12 +450,12 @@ function drawPins() {
   const shown = reg ? placesIn(state, reg) : state.world.places.filter(p => !p.parent && !p.detail);
   pinsEl.innerHTML = shown.filter(p => can.seePlace(state, p)).map(p =>
     { const d = pinDefaults(p), z = PIN_SIZES[d.size] || PIN_SIZES.normal, t = PIN_TINTS[d.tint] || PIN_TINTS.neutro;
-      return `<button class="pin sz-${d.size} ${p.visible ? "" : "hidden"} ${p.id === sel ? "sel" : ""} ${p.id === live ? "live" : ""}" data-id="${p.id}" style="left:${g2i(p.x, p.y)[0]}px;top:${g2i(p.x, p.y)[1]}px;--d:${z.d}px;--f:${z.f}px;--ring:${t.ring};--bg:${t.bg};--ink:${t.ink}" aria-label="${esc(p.name)}">
+      return `<button class="pin sz-${d.size} ${p.visible ? "" : "hidden"} ${p.id === sel ? "sel" : ""} ${p.id === live ? "live" : ""} ${(partyPos(state) || {}).p === p.id ? "here" : ""} ${placesLocked || !isDM(state) ? "" : "unlocked"}" data-id="${p.id}" style="left:${g2i(p.x, p.y)[0]}px;top:${g2i(p.x, p.y)[1]}px;--d:${z.d}px;--f:${z.f}px;--ring:${t.ring};--bg:${t.bg};--ink:${t.ink}" aria-label="${esc(p.name)}">
       <i class="medal"><b style="-webkit-mask-image:url(${iconURL(d.icon)});mask-image:url(${iconURL(d.icon)})"></b></i><span>${esc(p.name)}</span></button>`; }).join("");
   $$(".pin", pinsEl).forEach(b => {
     b.onclick = e => { e.stopPropagation(); if (adding || drawing) return; sel = b.dataset.id; drawPins(); drawSide(); };
-    // El máster puede arrastrar los marcadores para recolocarlos
-    if (isDM(state)) {
+    // El máster puede arrastrar los marcadores para recolocarlos, con el candado abierto
+    if (isDM(state) && !placesLocked) {
       let d = null;
       b.onpointerdown = e => { e.stopPropagation(); d = { x: e.clientX, y: e.clientY, moved: false }; b.setPointerCapture(e.pointerId); };
       b.onpointermove = e => {
@@ -480,22 +480,53 @@ function drawPins() {
 /* ---------- El grupo y su ruta (Hito 74) ---------- */
 const ROUTE_COLORS = ["#c0392b", "#8e5a2b", "#5a6a8e", "#6a8e5a", "#8e5a8e", "#5a8e8a"];
 function drawParty(state) {
-  const P = partyPos(state);
+  const P = partyPos(state), dm = isDM(state);
   if (P) {
-    const [x0, y0] = g2i(P.x, P.y), x = P.p ? x0 + 30 / view.k : x0, y = P.p ? y0 - 6 / view.k : y0, names = state.characters.filter(c => c.owner).map(c => c.name.split(" ")[0]).join(", ");
-    pinsEl.insertAdjacentHTML("beforeend", `<button class="pin party" data-party style="left:${x}px;top:${y}px" title="El grupo${names ? ": " + esc(names) : ""}${isDM(state) ? " · arrástralo para moverlo (se apunta en la ruta de la sesión)" : ""}"><i class="medal"><b>⚑</b></i><span>El grupo</span></button>`);
-    const b = $("[data-party]", pinsEl);
-    if (isDM(state)) { let d = null;
-      b.onpointerdown = e => { e.stopPropagation(); d = { x: e.clientX, y: e.clientY, moved: false }; b.setPointerCapture(e.pointerId); };
-      b.onpointermove = e => { if (!d) return; if (!d.moved && Math.hypot(e.clientX - d.x, e.clientY - d.y) > 4) d.moved = true; if (d.moved) { const r = vp.getBoundingClientRect(); b.style.left = (e.clientX - r.left - view.x) / view.k + "px"; b.style.top = (e.clientY - r.top - view.y) / view.k + "px"; } };
-      b.onpointerup = e => { if (d && d.moved) { const [px, py] = evPoint(e), g = i2g(px, py), st = store.get();
-        // si se suelta sobre un lugar, el grupo está en ese lugar
-        const near = st.world.places.filter(p => can.seePlace(st, p)).map(p => ({ p, d: Math.hypot(g2i(p.x, p.y)[0] - px, g2i(p.x, p.y)[1] - py) * view.k })).sort((a, b2) => a.d - b2.d)[0];
-        if (near && near.d < 22) partyToPlace(st, near.p.id); else moveParty(Math.max(0, Math.min(1, g.x)), Math.max(0, Math.min(1, g.y))); } d = null; };
-      b.onclick = e => e.stopPropagation(); }
-    else b.onclick = e => e.stopPropagation();
+    const names = state.characters.filter(c => c.owner).map(c => c.name.split(" ")[0]).join(", "), at = P.p && $(`.pin[data-id="${P.p}"]`, pinsEl);
+    const tip = `El grupo${names ? ": " + names : ""}${at ? " · está en " + ((state.world.places.find(x => x.id === P.p) || {}).name || "") : ""}${dm ? " · arrástralo para moverlo" : ""}`;
+    let b;
+    if (at) { // dentro de un lugar: una bandera prendida en su medallón (y el lugar, con un anillo)
+      at.querySelector(".medal").insertAdjacentHTML("beforeend", `<i class="herebadge" data-party title="${esc(tip)}">⚑</i>`);
+      b = $("[data-party]", at);
+    } else {
+      const [x, y] = g2i(P.x, P.y);
+      pinsEl.insertAdjacentHTML("beforeend", `<button class="pin party" data-party style="left:${x}px;top:${y}px" title="${esc(tip)}"><i class="medal"><b>⚑</b></i><span>El grupo</span></button>`);
+      b = $(".pin.party", pinsEl);
+    }
+    if (dm) { let d = null;
+      b.onpointerdown = e => { e.stopPropagation(); e.preventDefault(); d = { x: e.clientX, y: e.clientY, moved: false, ghost: null }; b.setPointerCapture(e.pointerId); };
+      b.onpointermove = e => { if (!d) return; if (!d.moved && Math.hypot(e.clientX - d.x, e.clientY - d.y) > 4) { d.moved = true; vp.classList.add("dragparty"); }
+        if (d.moved) { const [px, py] = evPoint(e); if (!d.ghost) { d.ghost = document.createElement("div"); d.ghost.className = "partyghost"; d.ghost.textContent = "⚑"; pinsEl.appendChild(d.ghost); }
+          d.ghost.style.left = px + "px"; d.ghost.style.top = py + "px"; d.ghost.style.transform = `translate(-50%,-50%) scale(${1 / view.k})`;
+          const near = nearPlace(px, py); $$(".pin.droptarget", pinsEl).forEach(x => x.classList.remove("droptarget")); if (near) { const pn = $(`.pin[data-id="${near.id}"]`, pinsEl); if (pn) pn.classList.add("droptarget"); } } };
+      b.onpointerup = e => { vp.classList.remove("dragparty"); if (d && d.ghost) d.ghost.remove();
+        if (d && d.moved) { const [px, py] = evPoint(e), g = i2g(px, py), st = store.get(), near = nearPlace(px, py);
+          if (near) { partyToPlace(st, near.id); toast(`El grupo entra en ${near.name}.`); } else moveParty(Math.max(0, Math.min(1, g.x)), Math.max(0, Math.min(1, g.y))); }
+        d = null; };
+    }
+    b.onclick = e => { e.stopPropagation(); e.preventDefault(); };
   }
   drawRoutes(state);
+  drawPartyBar(state);
+}
+/** Lugar visible cuyo círculo está bajo el puntero (para entrar en él al soltar al grupo). */
+function nearPlace(px, py) {
+  const st = store.get(), reg = curRegion(), shown = reg ? placesIn(st, reg) : st.world.places.filter(p => !p.parent && !p.detail);
+  const hit = shown.filter(p => can.seePlace(st, p)).map(p => ({ p, d: Math.hypot(g2i(p.x, p.y)[0] - px, g2i(p.x, p.y)[1] - py) * view.k })).sort((a, b) => a.d - b.d)[0];
+  return hit && hit.d < 26 ? hit.p : null;
+}
+/** Barra del grupo (máster): dónde está, deshacer el último movimiento y el candado de los lugares. */
+function drawPartyBar(state) {
+  let bar = $("#partybar", el); if (!isDM(state) || genDraft) { if (bar) bar.remove(); return; }
+  if (!bar) { bar = document.createElement("div"); bar.id = "partybar"; bar.className = "partybar"; vp.appendChild(bar); }
+  const P = partyPos(state), pl = P && P.p && state.world.places.find(x => x.id === P.p);
+  bar.innerHTML = `<span>⚑ ${P ? (pl ? `El grupo está <b>en ${esc(pl.name)}</b>` : "El grupo está <b>de camino</b>") : "El grupo no está en el mapa"}</span>
+    ${P && canUndoParty() ? `<button class="btn small" data-pundo title="Vuelve adonde estaba y quita el paso de la ruta">↶ Deshacer movimiento</button>` : ""}
+    ${P && pl ? `<button class="btn small" data-pout title="Sale del lugar y se queda a sus puertas">🚪 Salir de ${esc(pl.name)}</button>` : ""}
+    <button class="btn small ${placesLocked ? "" : "gold"}" data-plock title="${placesLocked ? "Los lugares están fijos: no se mueven sin querer. Pulsa para poder moverlos." : "Ahora puedes arrastrar los lugares. Pulsa para fijarlos."}">${placesLocked ? "🔒 Lugares fijos" : "🔓 Moviendo lugares"}</button>`;
+  const u = $("[data-pundo]", bar); if (u) u.onclick = () => { undoStep(); toast("Movimiento deshecho."); };
+  const o = $("[data-pout]", bar); if (o) o.onclick = () => { const [x, y] = g2i(P.x, P.y), g = i2g(x + 34 / view.k, y + 20 / view.k); moveParty(g.x, g.y); };
+  $("[data-plock]", bar).onclick = () => { placesLocked = !placesLocked; drawPins(); };
 }
 function drawRoutes(state) {
   const svg = $("#routesvg", el); if (!svg) return;
