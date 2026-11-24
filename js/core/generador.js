@@ -13,19 +13,38 @@ const ROOMS = [
   { n: "dormitorio", props: ["cama", "cama", "baul", "velas"] }
 ];
 
-export function generateDungeon(cols, rows, { cave = false, floor = "piedra", wall = "muro" } = {}) {
-  return cave ? makeCave(cols, rows) : makeDungeon(cols, rows, floor === "madera" ? "piedra" : floor, wall);
+const CRYPT_ROOMS = [
+  { n: "osario", props: ["calavera", "calavera", "sarcofago", "telarana", "velas"] },
+  { n: "capilla", props: ["altar", "velas", "velas", "estatua", "alfombra:t"] },
+  { n: "nichos", props: ["sarcofago", "sarcofago", "sarcofago", "velas"] },
+  { n: "antecámara", props: ["estatua", "estatua", "brasero", "trampaoculta"] },
+  { n: "cámara del tesoro", props: ["cofre", "oro", "sarcofago", "trampaoculta"] }
+];
+// Sala principal (Hito 74): la grande del fondo, con lo suyo según el tipo de mapa
+const BOSS = { dungeon: { n: "sala principal", props: ["altar", "columna", "columna", "columna", "columna", "estatua", "estatua", "brasero", "brasero", "cofre", "oro", "estandarte"] },
+  crypt: { n: "cripta mayor", props: ["sarcofago", "altar", "columna", "columna", "columna", "columna", "velas", "velas", "brasero", "brasero", "cofre"] } };
+/** opt: { cave, crypt, floor, wall, size: "s"|"m"|"l", count: "few"|"normal"|"many", boss: bool } */
+export function generateDungeon(cols, rows, { cave = false, crypt = false, floor = "piedra", wall = "muro", size = "m", count = "normal", boss = false } = {}) {
+  if (cave) return makeCave(cols, rows, { boss });
+  return makeDungeon(cols, rows, floor === "madera" ? "piedra" : floor, wall, crypt ? CRYPT_ROOMS : ROOMS, { size, count, boss, bossKind: crypt ? "crypt" : "dungeon" });
 }
 // Trampas del SRD que puede esconder una sala (data/trampas.js)
 const SRD_TRAPS = [["foso", "pozo"], ["pinchos", "pozopinchos"], ["dardos", "dardos"], ["red", "red"], ["techo", "techo"]];
 const randTrap = () => { const [k, srd] = SRD_TRAPS[Math.floor(Math.random() * SRD_TRAPS.length)]; return { k, srd }; };
 
-function makeDungeon(cols, rows, floor, wall, roomKinds = ROOMS) {
+const SIZES = { s: [4, 3, 4, 2], m: [4, 5, 4, 4], l: [6, 6, 6, 4] }; // [ancho mín, +azar, alto mín, +azar] (con paredes)
+function makeDungeon(cols, rows, floor, wall, roomKinds = ROOMS, opt = {}) {
   const T = {}, props = [], rooms = [];
   for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) T[key(c, r)] = "vacio";
-  const want = Math.max(3, Math.min(9, Math.round(cols * rows / 70)));
-  for (let tries = 0; tries < 300 && rooms.length < want; tries++) {
-    const w = 4 + Math.floor(Math.random() * 5), h = 4 + Math.floor(Math.random() * 4);
+  const [w0, wr, h0, hr] = SIZES[opt.size] || SIZES.m, per = { s: 45, m: 70, l: 110 }[opt.size] || 70, mult = { few: 0.6, normal: 1, many: 1.5 }[opt.count] || 1;
+  const want = Math.max(2, Math.min(18, Math.round(cols * rows / per * mult)));
+  let bossRoom = null;
+  if (opt.boss) { // la sala principal, grande, al fondo (a la derecha); la entrada queda a la izquierda
+    const w = Math.min(cols - 4, w0 + wr + 3), h = Math.min(rows - 4, h0 + hr + 2), c = cols - w - 2, r = 1 + Math.floor(Math.random() * Math.max(1, rows - h - 2));
+    if (w >= 5 && h >= 5) { bossRoom = { c, r, w, h, boss: true }; rooms.push(bossRoom); }
+  }
+  for (let tries = 0; tries < 400 && rooms.length < want; tries++) {
+    const w = w0 + Math.floor(Math.random() * wr), h = h0 + Math.floor(Math.random() * hr);
     const c = 1 + Math.floor(Math.random() * (cols - w - 2)), r = 1 + Math.floor(Math.random() * (rows - h - 2));
     if (c < 1 || r < 1) continue;
     if (rooms.some(o => c < o.c + o.w + 1 && c + w + 1 > o.c && r < o.r + o.h + 1 && r + h + 1 > o.r)) continue;
@@ -37,13 +56,13 @@ function makeDungeon(cols, rows, floor, wall, roomKinds = ROOMS) {
   const onEdge = (c, r) => rooms.find(o => c >= o.c && c <= o.c + o.w - 1 && r >= o.r && r <= o.r + o.h - 1 && !inRoom(c, r));
   // Pasillos en L entre salas consecutivas (ordenadas de izquierda a derecha); puertas donde cruzan una pared
   const ctr = o => ({ c: o.c + Math.floor(o.w / 2), r: o.r + Math.floor(o.h / 2) });
-  const sorted = [...rooms].sort((a, b) => a.c - b.c), doors = new Set();
+  const sorted = [...rooms].sort((a, b) => (a.boss ? 1 : 0) - (b.boss ? 1 : 0) || a.c - b.c), doors = new Set();
   const carve = (c, r) => {
     if (c < 1 || r < 1 || c >= cols - 1 || r >= rows - 1) return;
     const e = onEdge(c, r);
     if (e && !doors.has(key(c, r))) {
       doors.add(key(c, r)); T[key(c, r)] = floor;
-      const x = Math.random(), k = x < 0.62 ? "puerta" : x < 0.77 ? "puertallave" : x < 0.84 ? "puertasecreta" : x < 0.9 ? "rastrillo" : null;
+      const x = Math.random(), k = e.boss ? (x < 0.6 ? "puertallave" : "rastrillo") : x < 0.62 ? "puerta" : x < 0.77 ? "puertallave" : x < 0.84 ? "puertasecreta" : x < 0.9 ? "rastrillo" : null;
       if (k) props.push({ id: pid(), c, r, k, rot: 0, hidden: k === "puertasecreta" });
       return;
     }
@@ -71,19 +90,22 @@ function makeDungeon(cols, rows, floor, wall, roomKinds = ROOMS) {
     // Antorchas en las paredes
     const byWall = f.filter(x => T[key(x.c, x.r - 1)] === wall || T[key(x.c - 1, x.r)] === wall);
     for (let t = 0; t < Math.min(2, byWall.length); t++) { const x = byWall.splice(Math.floor(Math.random() * byWall.length), 1)[0]; const j = f.findIndex(y => y.c === x.c && y.r === x.r); if (j >= 0) f.splice(j, 1); props.push({ id: pid(), c: x.c, r: x.r, k: "antorcha", rot: 0, hidden: false }); }
-    if (i === 0) return; // la primera sala es la entrada: despejada
-    const kind = roomKinds[Math.floor(Math.random() * roomKinds.length)];
-    kind.props.forEach(k0 => { const x = pick(); if (!x) return; const tr = k0 === "trampaoculta" ? randTrap() : null, k = tr ? tr.k : k0;
+    if (o === sorted[0] && !o.boss) return; // la primera sala es la entrada: despejada
+    const kind = o.boss ? BOSS[opt.bossKind || "dungeon"] : roomKinds[Math.floor(Math.random() * roomKinds.length)];
+    if (o.boss) { // alfombra hasta el fondo y columnas a los lados
+      const mr = o.r + Math.floor(o.h / 2); for (let c = o.c + 1; c < o.c + o.w - 1; c++) if (T[key(c, mr)] === floor) T[key(c, mr)] = "alfombra"; }
+    kind.props.forEach(k0 => { if (k0 === "alfombra:t") { const x = pick(); if (x) { T[key(x.c, x.r)] = "alfombra"; busy.delete(key(x.c, x.r)); } return; }
+      const x = pick(); if (!x) return; const tr = k0 === "trampaoculta" ? randTrap() : null, k = tr ? tr.k : k0;
       if (k0.startsWith("t:")) { T[key(x.c, x.r)] = k0.slice(2); busy.delete(key(x.c, x.r)); return; }
       props.push({ id: pid(), c: x.c, r: x.r, k, rot: Math.floor(Math.random() * 4), hidden: !!tr,
       ...(["cofre", "oro", "sarcofago", "pergamino"].includes(k) ? { loot: "" } : {}), ...(tr ? { trap: { srd: tr.srd } } : {}), ...(k === "pozomina" ? { h: 9 } : {}) }); });
-    props.push({ id: pid(), c: o.c + 1, r: o.r + 1, k: "nota", rot: 0, hidden: true, label: `Sala ${i + 1}: ${kind.n}` });
+    props.push({ id: pid(), c: o.c + 1, r: o.r + 1, k: "nota", rot: 0, hidden: true, label: o.boss ? `★ ${kind.n[0].toUpperCase() + kind.n.slice(1)}: el final` : `Sala ${i + 1}: ${kind.n}` });
   });
   const s = rooms[0] ? ctr(sorted[0]) : { c: 1, r: 1 };
   return { terrain: T, props, start: s };
 }
 
-function makeCave(cols, rows) {
+function makeCave(cols, rows, opt = {}) {
   let W = Array.from({ length: rows }, (_, r) => Array.from({ length: cols }, (_, c) => c === 0 || r === 0 || c === cols - 1 || r === rows - 1 || Math.random() < 0.45));
   for (let it = 0; it < 5; it++) W = W.map((row, r) => row.map((_, c) => { if (c === 0 || r === 0 || c === cols - 1 || r === rows - 1) return true; let n = 0; for (let dr = -1; dr <= 1; dr++) for (let dc = -1; dc <= 1; dc++) if (W[r + dr][c + dc]) n++; return n >= 5; }));
   // Solo la zona abierta más grande (para que todo esté conectado)
@@ -104,7 +126,50 @@ function makeCave(cols, rows) {
   for (let i = 0; i < Math.round(best.length / 14) && cells.length; i++) { const p = pick(); props.push({ id: pid(), c: p.c, r: p.r, k: deco[Math.floor(Math.random() * deco.length)], rot: Math.floor(Math.random() * 4), hidden: false }); }
   if (cells.length) { const p = pick(); props.push({ id: pid(), c: p.c, r: p.r, k: "cofre", rot: 0, hidden: false, loot: "" }); }
   const s = best.sort((a, b) => a[0] - b[0])[0] || [1, 1];
+  if (opt.boss && best.length) { // la gruta del fondo: una cámara abierta lo más lejos posible de la entrada
+    const far = best[best.length - 1], R = Math.max(3, Math.min(5, Math.floor(Math.min(cols, rows) / 6))), cc = Math.min(cols - R - 2, far[0]), cr = Math.max(R + 1, Math.min(rows - R - 2, far[1]));
+    for (let r = cr - R; r <= cr + R; r++) for (let c = cc - R; c <= cc + R; c++) if (Math.hypot(c - cc, (r - cr) * 1.1) <= R + 0.3 && c > 0 && r > 0 && c < cols - 1 && r < rows - 1) T[key(c, r)] = "cueva";
+    for (let c = cc - R; c > 1; c--) { if (T[key(c, cr)] === "cueva" && c < cc - R) break; T[key(c, cr)] = "cueva"; }
+    for (let i = props.length - 1; i >= 0; i--) if (Math.hypot(props[i].c - cc, props[i].r - cr) <= R) props.splice(i, 1);
+    props.push({ id: pid(), c: cc, r: cr, k: "altar", rot: 3, hidden: false }, { id: pid(), c: cc + 1, r: cr - 1, k: "cofre", rot: 0, hidden: false, loot: "" },
+      { id: pid(), c: cc - 1, r: cr - 1, k: "brasero", rot: 0, hidden: false }, { id: pid(), c: cc - 1, r: cr + 1, k: "brasero", rot: 0, hidden: false },
+      { id: pid(), c: cc - R + 1, r: cr - 1, k: "nota", rot: 0, hidden: true, label: "★ Gruta del fondo: el final" });
+  }
   return { terrain: T, props, start: { c: s[0], r: s[1] } };
+}
+
+/* ---------- Torre (Hito 74): varias plantas redondas unidas por escaleras que llevan de una a otra ---------- */
+// Cada planta: un muro circular, alguna sala interior, escalera de subida y de bajada (enlazadas: al pisarlas, el grupo cambia de planta).
+// La última planta es la sala principal. Devuelve la planta baja y las demás en «floors», como las guarda la mesa.
+export function generateTower(cols, rows, nFloors = 3, { boss = true } = {}) {
+  nFloors = Math.max(2, Math.min(6, nFloors));
+  const cx = Math.floor(cols / 2), cy = Math.floor(rows / 2), R = Math.max(4, Math.min(cx, cy) - 1);
+  const NAMES = ["Planta baja", "Primera planta", "Segunda planta", "Tercera planta", "Cuarta planta", "Quinta planta"];
+  const up = { c: cx + R - 2, r: cy }, down = { c: cx - R + 2, r: cy };
+  const floors = [];
+  for (let f = 0; f < nFloors; f++) {
+    const T = {}, props = [], top = f === nFloors - 1;
+    for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) { const d = Math.hypot(c - cx, (r - cy) * 1.0); T[key(c, r)] = d <= R - 0.5 ? "piedra" : d <= R + 0.6 ? "muro" : "vacio"; }
+    if (!top && R >= 6) { // un tabique con puerta que separa una estancia
+      const wc = cx + (f % 2 ? -2 : 2); for (let r = cy - R + 1; r <= cy + R - 1; r++) if (T[key(wc, r)] === "piedra" && Math.abs(r - cy) > 1) T[key(wc, r)] = "muro";
+      props.push({ id: pid(), c: wc, r: cy - 2, k: "puerta", rot: 1, hidden: false });
+      if (T[key(wc, cy - 2)] !== "muro") props.pop(); else T[key(wc, cy - 2)] = "piedra";
+    }
+    if (f === 0) { T[key(cx, cy + R)] = "piedra"; props.push({ id: pid(), c: cx, r: cy + R, k: "puerta", rot: 0, hidden: false }); }
+    if (!top) props.push({ id: pid(), c: up.c, r: up.r, k: "escaleras", rot: 1, hidden: false, toFloor: f + 1, label: `Sube a ${NAMES[f + 1]}` });
+    if (f > 0) props.push({ id: pid(), c: down.c, r: down.r, k: "escaleras", rot: 3, hidden: false, toFloor: f - 1, label: `Baja a ${NAMES[f - 1]}` });
+    const busy = new Set(props.map(p => key(p.c, p.r)));
+    const freeCells = []; for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) if (T[key(c, r)] === "piedra" && !busy.has(key(c, r)) && Math.hypot(c - up.c, r - up.r) > 1.5 && Math.hypot(c - down.c, r - down.r) > 1.5) freeCells.push({ c, r });
+    const pick = () => freeCells.length ? freeCells.splice(Math.floor(Math.random() * freeCells.length), 1)[0] : null;
+    const kind = top && boss ? BOSS.dungeon : ROOMS[(f + Math.floor(Math.random() * ROOMS.length)) % ROOMS.length];
+    if (top && boss) { for (let c = cx - R + 2; c <= cx + R - 2; c++) if (T[key(c, cy)] === "piedra") T[key(c, cy)] = "alfombra"; }
+    (f === 0 ? ["barril", "caja", "antorcha", "antorcha"] : [...kind.props, "antorcha"]).forEach(k0 => { if (k0.startsWith("t:") || k0 === "alfombra:t") return; const x = pick(); if (!x) return; const tr = k0 === "trampaoculta" ? randTrap() : null;
+      props.push({ id: pid(), c: x.c, r: x.r, k: tr ? tr.k : k0, rot: Math.floor(Math.random() * 4), hidden: !!tr, ...(["cofre", "oro", "sarcofago"].includes(k0) ? { loot: "" } : {}), ...(tr ? { trap: { srd: tr.srd } } : {}) }); });
+    props.push({ id: pid(), c: cx, r: cy - R + 2, k: "nota", rot: 0, hidden: true, label: top && boss ? "★ Lo alto de la torre: el final" : `${NAMES[f]}: ${f === 0 ? "entrada" : kind.n}` });
+    floors.push({ name: NAMES[f], cols, rows, terrain: T, props, tokens: [] });
+  }
+  const g0 = floors[0];
+  return { terrain: g0.terrain, props: g0.props, start: { c: cx, r: cy + R - 1 }, floors: [{ name: g0.name }, ...floors.slice(1)], floor: 0 };
 }
 
 /* ---------- Mapas por región ---------- */

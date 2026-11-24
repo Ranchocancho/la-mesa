@@ -59,7 +59,7 @@ function draw() {
       return `<section class="chron ${x.status === "open" ? "live" : ""}">
       <header><button class="chfold open" data-fold="${x.id}" aria-expanded="true"><h2>${esc(sessionName(x))}${x.title ? ` · ${esc(x.title)}` : ""}</h2><i>▾</i></button><small>${x.status === "open" ? "En curso" : esc(x.date || "")}${x.status !== "open" && dm ? ` · <a href="#lore/ses:${x.id}">✎ Editar</a>` : ""}</small></header>
       ${x.recap ? `<p class="recaptext">${esc(x.recap)}</p>` : ""}
-      ${statChips(sessionStats(s, x), true, noData(x))}${statDetail(sessionStats(s, x))}
+      ${statChips(sessionStats(s, x), true, noData(x))}${statDetail(sessionStats(s, x))}${(x.route || []).length > 1 ? `<button class="btn small" data-route="${x.id}">🧭 Ver la ruta de esta sesión en el mapa</button>` : ""}
       ${(x.xp || []).length ? `<div class="xpgot">${x.xp.map(g => `<span><b>+${g.amount} PX</b> ${esc(g.name)}${g.reason ? ` · ${esc(g.reason)}` : ""}</span>`).join("")}</div>` : ""}
       <div class="entries">${entries(x.id).map(e => {
         const u = who(e.by) || { name: e.name, initials: "?" }, mine = e.by === me.id;
@@ -71,6 +71,7 @@ function draw() {
   </div></div>`;
   $$("[data-fold]", el).forEach(b => b.onclick = () => { const id = b.dataset.fold, x = s.sessions.find(y => y.id === id); const open = opened.has(id) || (x && x.status === "open" && !closedLive);
     if (open) { opened.delete(id); if (x && x.status === "open") closedLive = true; } else { opened.add(id); if (x && x.status === "open") closedLive = false; } draw(); });
+  $$("[data-route]", el).forEach(b => b.onclick = () => { try { sessionStorage.setItem("lamesa:route", b.dataset.route); } catch (e) { /* nada */ } location.hash = "mundo"; });
   const ex = $("#cexp", el); if (ex) ex.onclick = () => { list.forEach(x => opened.add(x.id)); closedLive = false; draw(); };
   const co = $("#ccol", el); if (co) co.onclick = () => { opened.clear(); closedLive = true; draw(); };
   $$("[data-add]", el).forEach(b => b.onclick = () => { const t = $(`[data-new="${b.dataset.add}"]`, el); if (t.value.trim()) { addEntry(b.dataset.add, t.value); toast("Anotado en la crónica"); } });

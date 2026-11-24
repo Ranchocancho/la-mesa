@@ -885,3 +885,17 @@ A partir de la auditoría de diseño comparada con Baldur's Gate 3:
 - Los lugares (castillos, posadas, ciudades…) se mueven como siempre, arrastrando su marcador.
 - «↺ Volver a generar» descarta los retoques y vuelve a los deslizadores.
 - Sigue sin guardarse ninguna imagen: un mapa retocado ocupa unos 10 KB de datos.
+
+## Hito 74 · Ruta del grupo, escenas ordenadas, mazmorras a medida y notas privadas
+- **El grupo en el mapa del mundo**: una ficha ⚑ «El grupo» marca dónde está y todos la ven. El máster la coloca («⚑ Colocar al grupo»), la arrastra (si la suelta sobre un lugar, el grupo queda en ese lugar) o pulsa «⚑ El grupo está aquí» en un lugar. También se mueve sola al marcar dónde estáis desde la partida o al mostrar un lugar.
+- **Ruta de cada sesión**: con una sesión abierta, cada paso del grupo se apunta en la ruta de esa sesión y se dibuja en el mapa como un trazo discontinuo con sus paradas. Arriba de la columna derecha se elige qué ver: la ruta de esta sesión, todas, la de una sesión concreta o ninguna. «↶ Último paso» quita un paso marcado sin querer. En la Crónica, cada sesión con ruta tiene «🧭 Ver la ruta de esta sesión en el mapa».
+- **Escenas ordenadas**: buscador, carpetas (campo «Carpeta» en cada escena, con sugerencias de las ya usadas), agrupar por carpeta o por lugar, plegar carpetas, orden propio (▲▼ al pasar el ratón), A–Z o recientes, y una marca «Jugada» (✓) para las que ya salieron.
+- **Mazmorras a medida** (Nueva escena › «Tamaño y salas»):
+  - Ancho y alto de la cuadrícula, salas pequeñas, medianas o grandes, y pocas, normales o muchas.
+  - **Sala principal al final**: una sala grande al fondo, lejos de la entrada, con puerta cerrada o rastrillo, alfombra, columnas, altar y tesoro. En una cueva es una gruta abierta al fondo.
+  - Tipos nuevos:
+    - ⚰ **Cripta**: osarios, capillas, nichos y la cripta mayor.
+    - 🗼 **Torre**: de 2 a 6 plantas redondas. Las escaleras ya llevan de una planta a otra: al pisarlas, el grupo sube o baja. La última planta es la sala principal.
+- **Notas privadas**: el cuaderno de cada personaje y las nuevas «🔒 Mis notas» de cada entrada del Lore solo las ven su jugador y el máster. El máster ve en cada entrada lo que ha apuntado cada jugador. Los cuadernos que ya existían se mudan solos la primera vez que el máster abre la campaña.
+- **Arreglo**: el mapa generado del mundo (Hito 72) no se guardaba en la nube. Ahora sí.
+- ⚠️ **Hay que publicar las reglas de Firestore** (`firestore.rules`): añaden la colección `notes`. Sin ellas, los jugadores no pueden guardar sus notas.

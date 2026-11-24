@@ -3,6 +3,7 @@
 // Todo vive en la sesión abierta (documento de campaña) y en las propias entradas del lore: no hace falta tocar reglas.
 import { store } from "./store.js";
 import { liveSession } from "./sesiones.js";
+import { partyToPlace } from "./ruta.js";
 import { loreOf, entry, placeOf, placePath, descendants, related } from "./lore.js";
 
 export const VITAL = { vivo: ["🙂", "Vivo"], herido: ["🩸", "Herido"], preso: ["⛓", "Preso"], desaparecido: ["❔", "Desaparecido"], muerto: ["💀", "Muerto"] };
@@ -18,11 +19,14 @@ export const badges = e => [e.vital && e.vital !== "vivo" ? VITAL[e.vital] : nul
 /** Lugar donde está ahora el grupo (lo marca el máster o se deduce al mostrar un lugar o cargar una escena). */
 export const hereOf = s => { const l = liveSession(s); return l && l.here ? placeOf(s, l.here) : null; };
 export function setHere(id) {
+  const before = liveSession(store.get());
   store.commit("session", s => {
     const l = liveSession(s); if (!l || l.here === (id || null)) return;
     l.here = id || null;
     if (id) { l.visited = l.visited || []; if (!l.visited.includes(id)) l.visited.push(id); }
   });
+  // y el grupo se mueve allí en el mapa del mundo (Hito 74), con su paso en la ruta de la sesión
+  if (id && before) { const s = store.get(), pl = (s.world.places || []).find(x => x.id === id), cur = s.world.party; if (pl && !(cur && cur.p === id)) partyToPlace(s, id); }
 }
 /** Recuerda que una entrada ha salido en la sesión (para proponerla al cerrar). */
 export function touch(id) {

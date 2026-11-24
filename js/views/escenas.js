@@ -7,7 +7,7 @@ import { blankScene, exampleScenes } from "../data/escenas.js";
 import { loadScene } from "../core/mesa.js";
 import { createBoard, TERRAIN } from "./tablero.js";
 import { propEditorHTML, bindPropEditor } from "./propeditor.js";
-import { generateDungeon, generateRegion, addRelief } from "../core/generador.js";
+import { generateDungeon, generateRegion, addRelief, generateTower } from "../core/generador.js";
 import { openCreaturePicker } from "./criaturas.js";
 import { difficulty, difficultyHTML, partyOf } from "../core/encuentro.js";
 // Todas las criaturas de la escena, en todas sus plantas
@@ -35,20 +35,51 @@ export function mount(root) {
 
 const scene = () => store.get().scenes.find(x => x.id === openId);
 
+/* ---------- Biblioteca ordenada (Hito 74): carpetas, buscar, ordenar, plegar y marcar las jugadas ---------- */
+const lib = { q: "", sort: "manual", closed: new Set(), group: "folder" };
+const folderOf = (s, x) => lib.group === "place" ? ((x.place && (s.world.places.find(p => p.id === x.place) || {}).name) || "Sin lugar") : (x.folder || "").trim() || ((x.place && (s.world.places.find(p => p.id === x.place) || {}).name) || "Biblioteca (para improvisar)");
+function listHTML(s) {
+  const n = t => String(t || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  let L = s.scenes.map((x, i) => ({ x, i })).filter(({ x }) => !lib.q || n(x.name).includes(n(lib.q)) || n(x.folder).includes(n(lib.q)));
+  if (lib.sort === "az") L.sort((a, b) => a.x.name.localeCompare(b.x.name, "es"));
+  if (lib.sort === "new") L.sort((a, b) => (b.x.at || 0) - (a.x.at || 0) || b.i - a.i);
+  const groups = new Map(); for (const o of L) { const f = folderOf(s, o.x); if (!groups.has(f)) groups.set(f, []); groups.get(f).push(o); }
+  const keys = [...groups.keys()].sort((a, b) => (/^Biblioteca/.test(a) ? 1 : 0) - (/^Biblioteca/.test(b) ? 1 : 0) || a.localeCompare(b, "es"));
+  return `<div class="sctools"><input id="scq" placeholder="🔎 Buscar escena…" value="${esc(lib.q)}"><select id="scsort" title="Orden"><option value="manual" ${lib.sort === "manual" ? "selected" : ""}>Tu orden</option><option value="az" ${lib.sort === "az" ? "selected" : ""}>A–Z</option><option value="new" ${lib.sort === "new" ? "selected" : ""}>Recientes</option></select>
+      <select id="scgroup" title="Agrupar"><option value="folder" ${lib.group === "folder" ? "selected" : ""}>Por carpeta</option><option value="place" ${lib.group === "place" ? "selected" : ""}>Por lugar</option></select></div>
+    ${keys.map(k => { const list = groups.get(k), shut = lib.closed.has(k) && !lib.q, done = list.filter(o => o.x.done).length;
+      return `<div class="sgroup"><button class="sghead" data-sgtog="${esc(k)}"><i>${shut ? "▸" : "▾"}</i> ${esc(k)} <small>${list.length}${done ? ` · ✓${done}` : ""}</small></button>${shut ? "" : list.map(({ x }) => `<div class="scrow ${x.id === openId ? "on" : ""} ${x.done ? "done" : ""}"><button class="place ${x.id === openId ? "on" : ""}" data-open="${x.id}"><span>${x.done ? "✓ " : ""}${esc(x.name)}</span><small>${x.tokens.length}</small></button>${lib.sort === "manual" ? `<span class="scmv"><button data-scmv="${x.id}|-1" aria-label="Subir">▲</button><button data-scmv="${x.id}|1" aria-label="Bajar">▼</button></span>` : ""}</div>`).join("")}</div>`; }).join("") || `<p class="empty">${lib.q ? "Ninguna escena con ese nombre." : "Ninguna todavía."}</p>`}`;
+}
+function bindList() {
+  const q = $("#scq", el); if (q) q.oninput = () => { lib.q = q.value; const p = q.selectionStart; draw(); const q2 = $("#scq", el); if (q2) { q2.focus(); q2.setSelectionRange(p, p); } };
+  const so = $("#scsort", el); if (so) so.onchange = () => { lib.sort = so.value; draw(); };
+  const gr = $("#scgroup", el); if (gr) gr.onchange = () => { lib.group = gr.value; draw(); };
+  $$("[data-sgtog]", el).forEach(b => b.onclick = () => { const k = b.dataset.sgtog; lib.closed.has(k) ? lib.closed.delete(k) : lib.closed.add(k); draw(); });
+  $$("[data-scmv]", el).forEach(b => b.onclick = () => { const [id, d] = b.dataset.scmv.split("|"); store.commit("board", st => {
+    const S = st.scenes, x = S.find(y => y.id === id), f = folderOf(st, x), same = S.filter(y => folderOf(st, y) === f), j = same.indexOf(x) + +d; if (j < 0 || j >= same.length) return;
+    const a = S.indexOf(x), bI = S.indexOf(same[j]); [S[a], S[bI]] = [S[bI], S[a]]; }); });
+}
+
 function draw() {
   if (!el) return;
   const s = store.get();
   if (!isDM(s)) { el.innerHTML = `<div class="page"><div class="wrap"><h1 class="title">Escenas</h1><p class="lead">Esta sección es solo para el máster.</p></div></div>`; return; }
   if (!scene()) openId = null;
-  const groups = [["", "Biblioteca (para improvisar)"], ...s.world.places.map(p => [p.id, p.name])];
   el.innerHTML = `<aside class="scenes-side">
       <h2 class="sec">Escenas</h2>
-      ${groups.map(([pid, n]) => { const list = s.scenes.filter(x => (x.place || "") === pid || (!pid && x.place && !s.world.places.some(p => p.id === x.place))); return list.length || !pid ? `<div class="sgroup"><small>${esc(n)}</small>${list.map(x => `<button class="place ${x.id === openId ? "on" : ""}" data-open="${x.id}"><span>${esc(x.name)}</span><small>${x.tokens.length}</small></button>`).join("") || `<p class="empty">Ninguna todavía.</p>`}</div>` : ""; }).join("")}
+      ${listHTML(s)}
       <form id="newsc" class="panel" style="margin-top:12px;display:flex;flex-direction:column;gap:8px;padding:12px">
         <h2 class="sec" style="margin:0">Nueva escena</h2>
         <label class="field">Nombre<input id="nsname" required placeholder="Asalto al almacén"></label>
         <label class="field">Lugar<select id="nsplace"><option value="">Biblioteca (sin lugar)</option>${s.world.places.map(p => `<option value="${p.id}">${esc(p.name)}</option>`).join("")}</select></label>
-        <label class="field">Suelo inicial<select id="nsfill"><option value="gen:dungeon">🎲 Mazmorra generada</option><option value="gen:cave">🕳 Cueva generada</option>${Object.entries(REGIONS).map(([k, v]) => `<option value="reg:${k}">${v.i} ${esc(v.n)} (generado)</option>`).join("")}<option value="vacio">Vacío (para dibujar salas)</option>${Object.entries(TERRAIN).filter(([, v]) => !v.wall).map(([k, v]) => `<option value="${k}">${v.n}</option>`).join("")}</select></label><label class="field" title="Lomas, riscos, tarimas y galerías con escaleras o rampas (se retocan con la herramienta de alturas)">Alturas<select id="nsrelief"><option value="0">Sin alturas</option><option value="1" selected>Algunas</option><option value="2">Muchas</option></select></label>
+        <label class="field">Suelo inicial<select id="nsfill"><option value="gen:dungeon">🎲 Mazmorra generada</option><option value="gen:cave">🕳 Cueva generada</option><option value="gen:crypt">⚰ Cripta generada</option><option value="gen:tower">🗼 Torre generada (varias plantas)</option>${Object.entries(REGIONS).map(([k, v]) => `<option value="reg:${k}">${v.i} ${esc(v.n)} (generado)</option>`).join("")}<option value="vacio">Vacío (para dibujar salas)</option>${Object.entries(TERRAIN).filter(([, v]) => !v.wall).map(([k, v]) => `<option value="${k}">${v.n}</option>`).join("")}</select></label><label class="field" title="Lomas, riscos, tarimas y galerías con escaleras o rampas (se retocan con la herramienta de alturas)">Alturas<select id="nsrelief"><option value="0">Sin alturas</option><option value="1" selected>Algunas</option><option value="2">Muchas</option></select></label>
+        <details class="genopts"><summary>Tamaño y salas (al generar)</summary>
+          <div class="row"><label class="field">Ancho<input type="number" id="nscols" min="10" max="80" value="26"></label><label class="field">Alto<input type="number" id="nsrows" min="8" max="80" value="18"></label></div>
+          <div class="row"><label class="field">Salas<select id="nssize"><option value="s">Pequeñas</option><option value="m" selected>Medianas</option><option value="l">Grandes</option></select></label>
+            <label class="field">Cuántas<select id="nscount"><option value="few">Pocas</option><option value="normal" selected>Normal</option><option value="many">Muchas</option></select></label></div>
+          <div class="row"><label class="field">Plantas (torre)<input type="number" id="nsfloors" min="2" max="6" value="3"></label>
+            <label class="switch" title="Una sala grande al fondo, lejos de la entrada, con su puerta cerrada: el final de la mazmorra"><input type="checkbox" id="nsboss" checked> Sala principal al final</label></div>
+        </details>
         <button class="btn gold small">Crear</button>
       </form>
     </aside>
@@ -60,6 +91,7 @@ function draw() {
         <button class="btn gold small" id="renew">🔄 Renovar escenas de ejemplo</button>
         <p class="note" style="margin:8px 0 0">Quita las cuatro antiguas (taberna, camino, cripta y puente, con sus «enemigos» genéricos) si siguen sin tocar, añade las nuevas y actualiza las de ejemplo a su versión equilibrada. Tus escenas no se tocan.</p></div></div></div>`}</section>
     <aside class="scenes-props" ${openId ? "" : "hidden"}></aside>`;
+  bindList();
   $$("[data-open]", el).forEach(b => b.onclick = () => { openId = b.dataset.open; sel = null; placing = false; board = null; draw(); });
   const rn = $("#renew", el);
   if (rn) rn.onclick = () => {
@@ -84,14 +116,17 @@ function draw() {
   $("#newsc", el).onsubmit = e => {
     e.preventDefault();
     const fill = $("#nsfill", el).value, reg = fill.startsWith("reg:") ? fill.slice(4) : "", gen = fill.startsWith("gen:") || !!reg, place = $("#nsplace", el).value || null;
-    const sc = blankScene($("#nsname", el).value.trim() || "Nueva escena", place, gen ? 26 : 16, gen ? 18 : 11, gen ? "vacio" : fill);
+    const V = id => ($("#" + id, el) || {}).value, cols = Math.max(10, Math.min(80, +V("nscols") || 26)), rows = Math.max(8, Math.min(80, +V("nsrows") || 18));
+    const gopt = { size: V("nssize") || "m", count: V("nscount") || "normal", boss: !!($("#nsboss", el) || {}).checked };
+    const sc = blankScene($("#nsname", el).value.trim() || "Nueva escena", place, gen ? cols : 16, gen ? rows : 11, gen ? "vacio" : fill);
     // La región del lugar decide las piezas del editor (y su luz y sonido)
     const pack = reg || (place ? regionPackOf(store.get(), place) : "");
     if (pack && REGIONS[pack]) Object.assign(sc, { region: pack, ambient: REGIONS[pack].light, sound: REGIONS[pack].sound });
     const relief = +(($("#nsrelief", el) || {}).value || 0);
     if (reg) { const d = generateRegion(sc.cols, sc.rows, reg); sc.terrain = d.terrain; sc.props = d.props; sc.start = d.start; sc.elev = addRelief(d, sc.cols, sc.rows, relief, reg !== "enano"); }
-    else if (gen) { const d = generateDungeon(sc.cols, sc.rows, { cave: fill === "gen:cave" }); sc.terrain = d.terrain; sc.props = d.props; sc.start = d.start; sc.ambient = "interior"; sc.elev = addRelief(d, sc.cols, sc.rows, relief, false); }
-    store.commit("board", st => st.scenes.push(sc));
+    else if (fill === "gen:tower") { const d = generateTower(sc.cols, sc.rows, +V("nsfloors") || 3, gopt); Object.assign(sc, { terrain: d.terrain, props: d.props, start: d.start, floors: d.floors, floor: 0, ambient: "interior" }); }
+    else if (gen) { const d = generateDungeon(sc.cols, sc.rows, { cave: fill === "gen:cave", crypt: fill === "gen:crypt", ...gopt }); sc.terrain = d.terrain; sc.props = d.props; sc.start = d.start; sc.ambient = "interior"; sc.elev = addRelief(d, sc.cols, sc.rows, relief, false); }
+    sc.at = Date.now(); store.commit("board", st => st.scenes.push(sc));
     openId = sc.id; board = null; draw();
   };
   if (openId && preview3d) {
@@ -130,6 +165,8 @@ function side() {
   const ae = document.activeElement; if (ae && box.contains(ae) && ae.closest(".propedit") && /INPUT|TEXTAREA/.test(ae.tagName)) return;
   box.innerHTML = `<div class="panel">
       <label class="field">Nombre<input id="scname" value="${esc(sc.name)}"></label>
+      <div class="row" style="margin-top:8px;gap:6px"><label class="field" style="flex:1">Carpeta<input id="scfolder" list="scfolders" value="${esc(sc.folder || "")}" placeholder="Cripta de Ulm, Acto II…"></label><label class="switch" style="align-self:flex-end" title="Márcala cuando ya se haya jugado"><input type="checkbox" id="scdone" ${sc.done ? "checked" : ""}> Jugada</label></div>
+      <datalist id="scfolders">${[...new Set(s.scenes.map(x => (x.folder || "").trim()).filter(Boolean))].map(f => `<option value="${esc(f)}">`).join("")}</datalist>
       <label class="field" style="margin-top:8px">Lugar<select id="scplace"><option value="">Biblioteca (sin lugar)</option>${s.world.places.map(p => `<option value="${p.id}" ${sc.place === p.id ? "selected" : ""}>${esc(p.name)}</option>`).join("")}</select></label>
       <div class="tkgrid" style="margin-top:8px"><label class="field">Columnas<input type="number" min="5" max="80" id="sccols" value="${sc.cols}"></label><label class="field">Filas<input type="number" min="5" max="80" id="scrows" value="${sc.rows}"></label></div>
       <label class="field" title="Reglas de visión: con luz tenue se ve con desventaja en Percepción; a oscuras no se ve sin visión en la oscuridad. Las antorchas, velas y hogueras de la escena iluminan alrededor.">Luz de la escena<select id="sclight">${Object.entries(LEVELS).map(([k, n]) => `<option value="${k}" ${ambientLevel(sc) === k ? "selected" : ""}>${n}</option>`).join("")}</select></label>
@@ -152,6 +189,8 @@ function side() {
   const M = fn => store.commit("board", st => fn(st.scenes.find(y => y.id === openId)));
   $("#scname", box).onchange = e => M(x => { x.name = e.target.value; });
   $("#scplace", box).onchange = e => M(x => { x.place = e.target.value || null; });
+  $("#scfolder", box).onchange = e => M(x => { x.folder = e.target.value.trim() || null; });
+  $("#scdone", box).onchange = e => M(x => { x.done = e.target.checked; });
   $("#sccols", box).onchange = e => M(x => { x.cols = Math.max(5, Math.min(80, +e.target.value)); });
   $("#sclight", box).onchange = e => M(x => { x.light = e.target.value; });
   $("#scrows", box).onchange = e => M(x => { x.rows = Math.max(5, Math.min(80, +e.target.value)); });
@@ -172,7 +211,7 @@ function side() {
   $("#scstart", box).onclick = () => { placing = !placing; side(); };
   { const rd = $("#scrad", box); if (rd) rd.onchange = () => store.commit("board", st => { const x = st.scenes.find(y => y.id === openId); if (x) x.deployRad = +rd.value; }); }
   $("#scload", box).onclick = () => { loadScene(openId); location.hash = "partida"; toast("Escena cargada en la mesa"); };
-  $("#scdup", box).onclick = () => { const c = JSON.parse(JSON.stringify(sc)); c.id = "esc-" + Math.random().toString(36).slice(2, 8); c.name += " (copia)"; store.commit("board", st => st.scenes.push(c)); openId = c.id; board = null; draw(); };
+  $("#scdup", box).onclick = () => { const c = JSON.parse(JSON.stringify(sc)); c.id = "esc-" + Math.random().toString(36).slice(2, 8); c.name += " (copia)"; c.at = Date.now(); store.commit("board", st => st.scenes.push(c)); openId = c.id; board = null; draw(); };
   const del = $("#scdel", box);
   del.onclick = () => { if (!del.dataset.sure) { del.dataset.sure = 1; del.textContent = "Pulsa otra vez"; return; } store.commit("board", st => { st.scenes = st.scenes.filter(y => y.id !== openId); }); openId = null; board = null; draw(); };
   bindTokenEditor(box, (id, fn) => M(x => { const k = x.tokens.find(z => z.id === id); if (k) fn(k); }));

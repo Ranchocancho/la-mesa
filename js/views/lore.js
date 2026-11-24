@@ -208,8 +208,18 @@ function entryPage(s, e, dm) {
       ${e.kind === "npc" && dm ? combatHTML(s, e) : ""}
       ${e.kind === "event" ? (dm ? `<label class="lpub"><span>Acciones posibles (una por línea)</span><textarea data-ef="actions" rows="4">${esc(e.actions || "")}</textarea></label>` : "") : ""}
       ${relHTML}
+      ${myNotesHTML(s, e, dm)}
       ${dm ? `<div class="row ldanger"><button class="btn small danger" data-del>Eliminar</button></div>` : ""}
     </div></div></div>`;
+}
+
+/* ---------- Notas privadas sobre una entrada (Hito 74): el jugador apunta lo que sabe; solo él y el máster las ven ---------- */
+const myChar = s => { const me = currentUser(s); return me && s.characters.find(c => c.owner === me.id); };
+function myNotesHTML(s, e, dm) {
+  if (dm) { const L = s.characters.filter(c => c.loreNotes && (c.loreNotes[e.id] || "").trim());
+    return L.length ? `<div class="lnotes dm"><h3 class="lsec">🔒 Lo que han apuntado los jugadores <small>solo lo ves tú</small></h3>${L.map(c => `<div class="lnote"><b>${esc(c.name.split(" ")[0])}</b><p>${esc(c.loreNotes[e.id])}</p></div>`).join("")}</div>` : ""; }
+  const c = myChar(s); if (!c) return "";
+  return `<label class="lnotes"><span>🔒 Mis notas <small>(${esc(c.name.split(" ")[0])}) · solo las ves tú y el máster</small></span><textarea data-mynote="${c.id}" rows="4" placeholder="Lo que sabes o sospechas: quién te lo contó, qué no cuadra…">${esc((c.loreNotes || {})[e.id] || "")}</textarea></label>`;
 }
 
 /* ---------- Preparar sesión: la carpeta de escenas ---------- */
@@ -261,6 +271,8 @@ function bindPage(s, t, dm) {
     go(id);
   });
   $$("[data-loadscene]", el).forEach(b => b.onclick = () => { loadScene(b.dataset.loadscene); toast("Escena cargada en la mesa. Ábrela en la Partida."); });
+  // Notas privadas del jugador sobre esta entrada (Hito 74)
+  { const mn = $("[data-mynote]", el), eid = t; if (mn && eid) { let tm = null; mn.oninput = () => { clearTimeout(tm); tm = setTimeout(() => store.commit("field", st => { const c = st.characters.find(x => x.id === mn.dataset.mynote); if (!c) return; c.loreNotes = { ...(c.loreNotes || {}) }; if (mn.value.trim()) c.loreNotes[eid] = mn.value; else delete c.loreNotes[eid]; }), 500); }; } }
   if (!dm || !t) return;
   // Lugar
   const p = placeOf(s, t);

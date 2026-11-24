@@ -29,7 +29,7 @@ const COLORS = ["#79a85a", "#c97a3d", "#7d8fe0", "#e0d6b0", "#b4583a", "#8a9a4a"
 
 let fb, auth, db;
 const unsubs = [];
-const cache = { campaign: null, places: new Map(), items: new Map(), secrets: new Map(), characters: new Map(), scenes: new Map(), tokens: new Map(), chronicle: new Map(), rolls: new Map(), lore: new Map(), whispers: new Map(), board: null, got: new Set() };
+const cache = { campaign: null, places: new Map(), items: new Map(), secrets: new Map(), characters: new Map(), scenes: new Map(), tokens: new Map(), chronicle: new Map(), rolls: new Map(), lore: new Map(), whispers: new Map(), notes: new Map(), board: null, got: new Set() };
 let last = new Map();       // lo último sincronizado, para enviar solo lo que cambia
 let beatTimer = null;
 
@@ -140,7 +140,7 @@ export async function createCampaign(name, withExample) {
 function listen(cid) {
   const dm = cloud.isEditor;
   const col = n => fb.collection(db, "campaigns", cid, n);
-  const need = dm ? ["campaign", "places", "items", "secrets", "characters", "board", "tokens", "scenes", "chronicle", "rolls", "lore", "whispers"] : ["campaign", "places", "items", "characters", "board", "tokens", "chronicle", "rolls", "lore", "whispers"];
+  const need = dm ? ["campaign", "places", "items", "secrets", "characters", "board", "tokens", "scenes", "chronicle", "rolls", "lore", "whispers", "notes"] : ["campaign", "places", "items", "characters", "board", "tokens", "chronicle", "rolls", "lore", "whispers", "notes"];
   cache.got.clear();
   const done = k => { cache.got.add(k); if (need.every(n => cache.got.has(n))) refresh(); };
   const fail = e => { console.error(e); cloud.error = "Se perdió la conexión con la campaña. Recarga la página."; ping(); };
@@ -155,6 +155,8 @@ function listen(cid) {
   unsubs.push(fb.onSnapshot(col("tokens"), s => { cache.tokens = new Map(s.docs.map(d => [d.id, d.data()])); done("tokens"); }, fail));
   // Susurros: el máster los recibe todos; cada jugador, solo los suyos (las reglas no le dejan leer otros)
   unsubs.push(fb.onSnapshot(dm ? col("whispers") : fb.query(col("whispers"), fb.where("to", "==", cloud.user.uid)), s => { cache.whispers = new Map(s.docs.map(d => [d.id, d.data()])); done("whispers"); }, fail));
+  // Notas privadas (Hito 74): el cuaderno y las notas de Lore de cada personaje. El máster las recibe todas; cada jugador, las suyas
+  unsubs.push(fb.onSnapshot(dm ? col("notes") : fb.query(col("notes"), fb.where("owner", "==", cloud.user.uid)), s => { cache.notes = new Map(s.docs.map(d => [d.id, d.data()])); done("notes"); }, e => { console.warn("notas privadas:", e && e.code); cache.notes = new Map(); done("notes"); }));
   if (dm) unsubs.push(fb.onSnapshot(col("scenes"), s => { cache.scenes = new Map(s.docs.map(d => [d.id, d.data()])); done("scenes"); }, fail));
   if (dm) unsubs.push(fb.onSnapshot(col("secrets"), s => { cache.secrets = new Map(s.docs.map(d => [d.id, d.data()])); done("secrets"); }, fail));
   unsubs.push(fb.onSnapshot(col("presence"), s => { const m = {}; s.docs.forEach(d => (m[d.id] = d.data().t)); presence.feed(m); }, () => {}));
@@ -165,7 +167,7 @@ function listen(cid) {
 function stopCampaign() {
   unsubs.splice(0).forEach(u => u());
   clearInterval(beatTimer); beatTimer = null;
-  cache.campaign = null; cache.places.clear(); cache.items.clear(); cache.secrets.clear(); cache.characters.clear(); cache.scenes.clear(); cache.tokens.clear(); cache.chronicle.clear(); cache.rolls.clear(); cache.lore.clear(); cache.whispers.clear(); cache.board = null; cache.got.clear();
+  cache.campaign = null; cache.places.clear(); cache.items.clear(); cache.secrets.clear(); cache.characters.clear(); cache.scenes.clear(); cache.tokens.clear(); cache.chronicle.clear(); cache.rolls.clear(); cache.lore.clear(); cache.whispers.clear(); cache.notes.clear(); cache.board = null; cache.got.clear();
   last = new Map(); cloud.cid = null; cloud.isEditor = false;
 }
 
@@ -190,8 +192,9 @@ function refresh() {
     version: 2, rev: ((prev && prev.rev) || 0) + 1,
     campaign: { name: c.name, rules: c.rules || "D&D 2024" },
     dms: c.dms || [], live: c.live || null,
-    users, characters: [...cache.characters.entries()].map(([id, x]) => ({ id, ...x })).sort((a, b) => (a.order || 0) - (b.order || 0)).map(x => strip(x, "order")),
-    world: { map: c.map ? c.map.key : null, mapW: c.map ? c.map.w : null, mapH: c.map ? c.map.h : null, places,
+    // el cuaderno va aparte (notes/{id}); si una ficha antigua aún lo lleva dentro, se usa hasta que el máster lo mueva
+    users, characters: [...cache.characters.entries()].map(([id, x]) => { const n = cache.notes.get(id); return { id, ...x, journal: n ? n.journal || [] : x.journal || [], loreNotes: n ? n.lore || {} : x.loreNotes || {} }; }).sort((a, b) => (a.order || 0) - (b.order || 0)).map(x => strip(x, "order")),
+    world: { map: c.map ? c.map.key : null, mapW: c.map ? c.map.w : null, mapH: c.map ? c.map.h : null, places, gen: c.wgen || null, party: c.party || null,
       regions: (c.regions || []).map(r => ({ ...r, secret: (cache.secrets.get(r.id) || {}).secret || "" })) },
     sessions: c.sessions || [], presentation: c.presentation || null, clock: c.clock || null, backdrop: c.backdrop || null, bestiary: c.bestiary || {},
     loot: c.loot || null, shopAdj: +c.shopAdj || 0, freeLog: c.freeLog || [], showOdds: c.showOdds !== false,
@@ -205,6 +208,10 @@ function refresh() {
     board: cache.board, tokens: [...cache.tokens.entries()].map(([id, x]) => ({ id, ...x }))
   };
   last = new Map([...docsOf(state, cloud.isEditor)].map(([k, v]) => [k, JSON.stringify(v)]));
+  // Mudanza (Hito 74): los cuadernos que aún están dentro de la ficha (y por tanto los ve todo el grupo) pasan a notes/
+  let moved = false;
+  if (cloud.isEditor) for (const [id, x] of cache.characters) if ((x.journal || x.loreNotes) && !cache.notes.has(id)) { last.delete("characters/" + id); last.delete("notes/" + id); moved = true; }
+  if (moved) setTimeout(() => push(store.get()), 500);
   const first = cloud.status !== "ready";
   cloud.status = "ready";
   store.replace(state, first ? "open" : "remote");
@@ -223,10 +230,12 @@ function docsOf(s, dm) {
     loot: s.loot || null, shopAdj: +s.shopAdj || 0, freeLog: s.freeLog || [], showOdds: s.showOdds !== false,
     freeTime: s.freeTime ? { ...s.freeTime, spots: (s.freeTime.spots || []).map(({ secret, ...x }) => x) } : null,
     map: s.world.map ? { key: s.world.map, w: s.world.mapW, h: s.world.mapH } : null,
+    wgen: s.world.gen || null, party: s.world.party || null, // mapa generado del mundo (Hito 72) y dónde está el grupo (Hito 74)
     regions: (s.world.regions || []).map(({ secret, ...r }) => r),
     members
   });
-  s.characters.forEach((ch, i) => { const { id, ...rest } = ch; out.set("characters/" + id, { ...rest, order: i }); });
+  s.characters.forEach((ch, i) => { const { id, journal, loreNotes, ...rest } = ch; out.set("characters/" + id, { ...rest, order: i });
+    out.set("notes/" + id, { owner: ch.owner || null, journal: journal || [], lore: loreNotes || {} }); }); // privadas: solo su jugador y el máster
   (s.scenes || []).forEach((sc, i) => { const { id, ...rest } = sc; out.set("scenes/" + id, { ...rest, order: i }); });
   if (s.board) out.set("board/live", s.board);
   (s.chronicle || []).forEach(e => { const { id, ...rest } = e; out.set("chronicle/" + id, rest); });
@@ -262,7 +271,7 @@ function push(state) {
   const all = docsOf(state, true);
   // El administrador y los másteres guardan todo; un jugador solo puede tocar su propia ficha.
   const lb = last.get("board/live"), lastTurn = lb ? (o => JSON.stringify([o.turn, o.round, o.seq]))(JSON.parse(lb)) : "";
-  const allowed = (k, v) => cloud.isEditor || ((k.startsWith("characters/") || k.startsWith("tokens/")) && v && v.owner === me) || (k.startsWith("chronicle/") && v && v.by === me) || (k.startsWith("rolls/") && v && v.who === me) || (k === "board/live" && lastTurn !== JSON.stringify([v.turn, v.round, v.seq]));
+  const allowed = (k, v) => cloud.isEditor || ((k.startsWith("characters/") || k.startsWith("tokens/") || k.startsWith("notes/")) && v && v.owner === me) || (k.startsWith("chronicle/") && v && v.by === me) || (k.startsWith("rolls/") && v && v.who === me) || (k === "board/live" && lastTurn !== JSON.stringify([v.turn, v.round, v.seq]));
   const ref = k => k === "C" ? fb.doc(db, "campaigns", cloud.cid) : fb.doc(db, "campaigns", cloud.cid, ...k.split("/"));
   // Firestore admite 500 escrituras por lote: los cambios grandes (restaurar una copia) se parten en varios
   const ops = [], keys = [];

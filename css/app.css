@@ -2645,3 +2645,26 @@ button.hbr:hover{box-shadow:0 0 0 1px var(--react,#c9a0ff)}
 .gtools button.on{border-color:var(--oro);background:#33281b;box-shadow:0 0 6px rgba(214,170,78,.4)}
 .gsel{display:flex;flex-direction:column;gap:6px;padding:8px 10px;border:1px solid rgba(255,215,106,.4);border-radius:10px;background:rgba(255,215,106,.05)}
 .gsel input[data-gtxt]{font-size:14px}
+/* Hito 74: notas privadas en el Lore */
+.lnotes{display:flex;flex-direction:column;gap:6px;margin-top:14px;padding:10px 12px;border:1px dashed rgba(125,143,224,.5);border-radius:10px;background:rgba(125,143,224,.06)}
+.lnotes>span{font-size:13px;color:#b9c4f0}.lnotes small{color:var(--tenue)}
+.lnotes .lnote{padding:6px 0;border-top:1px dotted var(--linea)}.lnotes .lnote p{margin:2px 0 0;white-space:pre-wrap}
+/* Hito 74: biblioteca de escenas ordenada */
+.sctools{display:flex;gap:4px;flex-wrap:wrap;margin:0 0 8px}.sctools input{flex:1 1 100%;font-size:13px}.sctools select{flex:1;font-size:12.5px}
+.sghead{display:flex;align-items:center;gap:6px;width:100%;background:none;border:0;color:var(--oro);font:600 12.5px var(--display,serif);text-transform:uppercase;letter-spacing:.05em;cursor:pointer;padding:6px 2px}
+.sghead small{color:var(--tenue);font-family:Georgia,serif;text-transform:none;margin-left:auto}.sghead i{font-style:normal;color:var(--tenue)}
+.scrow{display:flex;align-items:center;gap:2px}.scrow>.place{flex:1;min-width:0}
+.scrow.done>.place span{opacity:.6}
+.scmv{display:none;flex-direction:column}.scrow:hover .scmv{display:flex}
+.scmv button{background:none;border:0;color:var(--tenue);font-size:9px;line-height:1;padding:1px 3px;cursor:pointer}.scmv button:hover{color:var(--oro)}
+.genopts{font-size:13px}.genopts summary{cursor:pointer;color:var(--tenue)}.genopts .row{display:flex;gap:6px;align-items:flex-end;margin-top:6px}.genopts .field{flex:1;min-width:0}.genopts input[type=number]{width:100%}
+/* Hito 74: el grupo y su ruta en el mapa del mundo */
+.routesvg{position:absolute;left:0;top:0;pointer-events:none;overflow:visible}
+.routesvg .rline{fill:none;stroke:var(--rc);stroke-width:calc(3px * var(--ik,1));stroke-dasharray:calc(10px * var(--ik,1)) calc(7px * var(--ik,1));stroke-linecap:round;stroke-linejoin:round;opacity:.55}
+.routesvg .route.live .rline{opacity:.95;stroke-width:calc(3.5px * var(--ik,1))}
+.routesvg .rdot{fill:var(--rc);stroke:#f3e6c8;stroke-width:calc(1.5px * var(--ik,1));opacity:.85}
+.routesvg .rlab{font:italic calc(13px * var(--ik,1)) Alegreya,Georgia,serif;fill:var(--rc);text-anchor:middle;paint-order:stroke;stroke:#f3e6c8;stroke-width:calc(3px * var(--ik,1))}
+.pin.party .medal{background:radial-gradient(circle at 50% 35%,#e05a46,#8a1f12);border-color:#ffd76a;box-shadow:0 0 0 2px #2a120c,0 0 14px rgba(255,120,80,.7)}
+.pin.party .medal b{-webkit-mask:none;mask:none;background:none;color:#fff3d6;font-style:normal;font-size:20px;display:grid;place-items:center;width:100%;height:100%}
+.pin.party span{background:#8a1f12;color:#fff3d6;border-color:#ffd76a}
+.maptabs #routesel{flex:1 1 100%;font-size:12.5px;padding:4px}

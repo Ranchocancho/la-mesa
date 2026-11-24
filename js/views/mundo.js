@@ -7,6 +7,8 @@ import { MAP_ICONS, ICON_CATS, iconURL, PIN_SIZES, PIN_TINTS, pinDefaults } from
 import { $, $$, esc, toast, debounce, pickFile } from "../core/ui.js";
 import { regionsOf, regionById, seeRegion, bboxOf, regionAt, toLocal, toGlobal, centroid, placesIn, addRegion, editRegion, deleteRegion, REG_COLORS } from "../core/regiones.js";
 import { REGIONS } from "../data/mapas.js";
+import { partyPos, moveParty, partyToPlace, routesOf, undoStep } from "../core/ruta.js";
+import { liveSession } from "../core/sesiones.js";
 import { sampleSource, maskFrom, genURL, CLIMAS, FORMAS, bake, paintMask, Q, UQ, pairs } from "../core/generamapa.js";
 
 const KINDS = ["Región", "Ciudad", "Pueblo", "Distrito", "Localización", "Mazmorra", "Punto de interés"];
@@ -21,13 +23,16 @@ let mode = "global", regId = null, drawing = null, redrawId = null, mapKey = "";
 let genDraft = null, genSample = null, drawKind = "region";
 // Retoque a mano (Hito 73): herramienta, tamaño del pincel y elemento seleccionado ({ k: "m"|"f"|"r"|"c"|"t", i, v: vértice })
 let gTool = "sel", gBrush = 40, gSel = null;
+// Ruta del grupo (Hito 74): qué rutas se dibujan («live», «all», «none» o el id de una sesión)
+let routeView = (() => { try { return sessionStorage.getItem("lamesa:route") || "live"; } catch (e) { return "live"; } })();
 
 export function mount(root) {
+  try { routeView = sessionStorage.getItem("lamesa:route") || routeView; } catch (e) { /* nada */ }
   el = document.createElement("div");
   el.className = "world";
   el.innerHTML = `
     <div class="viewport" id="vp">
-      <div class="stage" id="stage"><img id="mapimg" alt="Mapa del mundo"><svg id="regsvg" class="regsvg" aria-hidden="true"></svg><svg id="genov" class="genov" aria-hidden="true"></svg><div id="pins"></div></div>
+      <div class="stage" id="stage"><img id="mapimg" alt="Mapa del mundo"><svg id="regsvg" class="regsvg" aria-hidden="true"></svg><svg id="genov" class="genov" aria-hidden="true"></svg><svg id="routesvg" class="routesvg" aria-hidden="true"></svg><div id="pins"></div></div>
       <div class="mapzoom"><button id="zin" aria-label="Acercar">+</button><button id="zout" aria-label="Alejar">−</button><button id="zfit" aria-label="Ver el mapa entero" title="Ver el mapa entero">⤢</button></div>
       <div class="hintbar" id="hint" hidden>Haz clic en el mapa para colocar el nuevo lugar · Esc para cancelar</div>
     </div>
@@ -200,13 +205,16 @@ function drawTools() {
     return;
   }
   if (genDraft) { t.innerHTML = `<span class="drawhint">🧭 Ajustando el mapa generado: lo ves en directo. Guárdalo abajo.</span>`; return; }
-  t.innerHTML = `<button class="btn small" id="addplace" aria-pressed="${adding}">+ Añadir lugar</button>
+  const lr = (liveSession(state) || {}).route || [];
+  t.innerHTML = `<button class="btn small" id="addplace" aria-pressed="${adding}">+ Añadir lugar</button>${!partyPos(state) ? `<button class="btn small" id="partyput" title="Pon la ficha del grupo en el mapa; luego arrástrala para moverla">⚑ Colocar al grupo</button>` : lr.length ? `<button class="btn small" id="partyundo" title="Quita el último paso de la ruta de esta sesión">↶ Último paso</button>` : ""}
     ${reg && reg.map ? "" : reg ? `<button class="btn small gold" id="genopen" title="Genera un mapa detallado de la región calcando la costa del mapa de debajo: costa, montañas, bosques, ríos y caminos. Se guarda como datos, no como imagen.">🧭 ${reg.gen ? "Ajustar el detalle" : "Detallar la región"}</button>`
       : `<button class="btn small" id="genopen" title="Genera un mapa completo (isla, continente, archipiélago). Se usa si no habéis subido un mapa.">🧭 ${state.world.gen ? "Ajustar el mapa generado" : "Generar un mapa"}</button>`}
     ${reg ? `<button class="btn small" id="upreg">${reg.map ? "Cambiar mapa de la región" : "Subir mapa de la región"}</button>${reg.map ? `<button class="btn small" id="noreg">Usar el mapa global</button>` : ""}`
       : `<button class="btn small" id="upmap">Subir vuestro mapa</button>${state.world.map ? `<button class="btn small" id="exmap">Volver al mapa de ejemplo</button>` : ""}`}`;
   $("#addplace", t).onclick = () => setAdding(!adding);
   { const go = $("#genopen", t); if (go) go.onclick = () => openGen(); }
+  { const pp = $("#partyput", t); if (pp) pp.onclick = () => { const r = curRegion(), c = r ? toGlobal(r, 0.5, 0.5) : { x: 0.5, y: 0.5 }; moveParty(c.x, c.y); toast("Ahí está el grupo: arrástralo adonde esté."); }; }
+  { const pu = $("#partyundo", t); if (pu) pu.onclick = () => undoStep(); }
   const up = $("#upmap", t);
   if (up) up.onclick = async () => {
     const f = await pickFile(); if (!f) return;
@@ -380,10 +388,13 @@ function drawOv() {
 function drawTabs() {
   const s = store.get(), dm = isDM(s), list = regionsOf(s).filter(r => seeRegion(s, r, dm)), reg = curRegion();
   const t = $("#maptabs", el);
-  t.innerHTML = `<button data-mode="global" aria-pressed="${mode === "global"}">🌍 Mapa global</button><button data-mode="regions" aria-pressed="${mode !== "global"}">🗺 Regiones${list.length ? ` <small>${list.length}</small>` : ""}</button>
+  const R = routesOf(s);
+  t.innerHTML = `<select id="routesel" title="Ruta del grupo en el mapa"><option value="live" ${routeView === "live" ? "selected" : ""}>🧭 Ruta de esta sesión</option><option value="all" ${routeView === "all" ? "selected" : ""}>🧭 Todas las rutas</option>${R.filter(r => !r.live).map(r => `<option value="${r.id}" ${routeView === r.id ? "selected" : ""}>🧭 ${esc(r.name)}</option>`).join("")}<option value="none" ${routeView === "none" ? "selected" : ""}>Sin rutas</option></select>
+    <button data-mode="global" aria-pressed="${mode === "global"}">🌍 Mapa global</button><button data-mode="regions" aria-pressed="${mode !== "global"}">🗺 Regiones${list.length ? ` <small>${list.length}</small>` : ""}</button>
     ${reg ? `<span class="tabreg" style="--rc:${esc(reg.color)}">▸ <b>${esc(reg.name)}</b></span>${list.length > 1 ? `<select id="regjump" aria-label="Ir a otra región">${list.map(r => `<option value="${r.id}" ${r.id === reg.id ? "selected" : ""}>${esc(r.name)}</option>`).join("")}</select>` : ""}` : ""}`;
   $$("[data-mode]", t).forEach(b => b.onclick = () => { if (drawing) return; genDraft = null; mode = b.dataset.mode; regId = null; sel = null; setAdding(false); loadMap(); redraw(); });
   const j = $("#regjump", t); if (j) j.onchange = () => { genDraft = null; enterRegion(j.value); };
+  const rs = $("#routesel", t); if (rs) rs.onchange = () => { routeView = rs.value; try { sessionStorage.setItem("lamesa:route", routeView); } catch (e) { /* nada */ } drawRoutes(store.get()); };
 }
 function enterRegion(id) { mode = "region"; regId = id; sel = null; setAdding(false); loadMap(); redraw(); }
 function redraw() { drawTabs(); drawTools(); drawPins(); drawRegions(); drawSide(); drawOv(); vp.classList.toggle("drawing", !!drawing); vp.classList.toggle("modereg", mode === "regions"); }
@@ -463,7 +474,38 @@ function drawPins() {
       };
     }
   });
+  drawParty(state);
   apply();
+}
+/* ---------- El grupo y su ruta (Hito 74) ---------- */
+const ROUTE_COLORS = ["#c0392b", "#8e5a2b", "#5a6a8e", "#6a8e5a", "#8e5a8e", "#5a8e8a"];
+function drawParty(state) {
+  const P = partyPos(state);
+  if (P) {
+    const [x0, y0] = g2i(P.x, P.y), x = P.p ? x0 + 30 / view.k : x0, y = P.p ? y0 - 6 / view.k : y0, names = state.characters.filter(c => c.owner).map(c => c.name.split(" ")[0]).join(", ");
+    pinsEl.insertAdjacentHTML("beforeend", `<button class="pin party" data-party style="left:${x}px;top:${y}px" title="El grupo${names ? ": " + esc(names) : ""}${isDM(state) ? " · arrástralo para moverlo (se apunta en la ruta de la sesión)" : ""}"><i class="medal"><b>⚑</b></i><span>El grupo</span></button>`);
+    const b = $("[data-party]", pinsEl);
+    if (isDM(state)) { let d = null;
+      b.onpointerdown = e => { e.stopPropagation(); d = { x: e.clientX, y: e.clientY, moved: false }; b.setPointerCapture(e.pointerId); };
+      b.onpointermove = e => { if (!d) return; if (!d.moved && Math.hypot(e.clientX - d.x, e.clientY - d.y) > 4) d.moved = true; if (d.moved) { const r = vp.getBoundingClientRect(); b.style.left = (e.clientX - r.left - view.x) / view.k + "px"; b.style.top = (e.clientY - r.top - view.y) / view.k + "px"; } };
+      b.onpointerup = e => { if (d && d.moved) { const [px, py] = evPoint(e), g = i2g(px, py), st = store.get();
+        // si se suelta sobre un lugar, el grupo está en ese lugar
+        const near = st.world.places.filter(p => can.seePlace(st, p)).map(p => ({ p, d: Math.hypot(g2i(p.x, p.y)[0] - px, g2i(p.x, p.y)[1] - py) * view.k })).sort((a, b2) => a.d - b2.d)[0];
+        if (near && near.d < 22) partyToPlace(st, near.p.id); else moveParty(Math.max(0, Math.min(1, g.x)), Math.max(0, Math.min(1, g.y))); } d = null; };
+      b.onclick = e => e.stopPropagation(); }
+    else b.onclick = e => e.stopPropagation();
+  }
+  drawRoutes(state);
+}
+function drawRoutes(state) {
+  const svg = $("#routesvg", el); if (!svg) return;
+  svg.setAttribute("viewBox", `0 0 ${imgW} ${imgH}`); svg.style.width = imgW + "px"; svg.style.height = imgH + "px";
+  const all = routesOf(state), L = routeView === "none" ? [] : routeView === "all" ? all : routeView === "live" ? all.filter(r => r.live) : all.filter(r => r.id === routeView);
+  svg.innerHTML = L.slice().reverse().map((r, k) => { const col = r.live ? "#c0392b" : ROUTE_COLORS[(all.indexOf(r) % (ROUTE_COLORS.length - 1)) + 1], pts = r.pts.map(p => g2i(p.x, p.y));
+    if (pts.length < 2) return "";
+    return `<g class="route ${r.live ? "live" : ""}" style="--rc:${col}"><title>${esc(r.name)}</title><polyline points="${pts.map(p => p.map(v => v.toFixed(1)).join(",")).join(" ")}" class="rline"/>
+      ${pts.map(([x, y], i) => `<circle cx="${x}" cy="${y}" r="${i === pts.length - 1 && r.live ? 5 : 3.2}" class="rdot"/>`).join("")}
+      <text x="${pts[0][0]}" y="${pts[0][1] - 9}" class="rlab">${esc(r.name)}</text></g>`; }).join("");
 }
 
 /* ---------- Panel lateral ---------- */
@@ -561,7 +603,7 @@ function drawEditor(state, place) {
     <label class="field">Tipo<select data-f="kind">${KINDS.map(k => `<option ${k === place.kind ? "selected" : ""}>${k}</option>`).join("")}</select></label>
     ${symbolPicker(place)}
     <label class="switch"><input type="checkbox" id="f-vis" ${place.visible ? "checked" : ""}> Visible para los jugadores</label>
-    <div class="row"><button class="btn gold" id="present">Mostrar este lugar a todos</button></div>
+    <div class="row"><button class="btn gold" id="present">Mostrar este lugar a todos</button><button class="btn" id="partyhere" title="Mueve la ficha del grupo aquí y lo apunta en la ruta de la sesión">⚑ El grupo está aquí</button></div>
     <div class="row"><button class="btn small" id="placemap">${place.map ? "Cambiar el mapa del lugar" : "+ Mapa del lugar (ciudad, mazmorra…)"}</button>${place.map ? `<button class="btn small danger" id="noplacemap">Quitar mapa</button>` : ""}</div>
     <label class="field">Descripción para los jugadores<textarea data-f="summary" rows="3">${esc(place.summary)}</textarea></label>
     <div class="secretbox"><label class="field"><span><span class="tag secret">SOLO MÁSTER</span> Notas secretas</span><textarea data-f="secret" rows="3">${esc(place.secret)}</textarea></label></div>
@@ -603,6 +645,7 @@ function drawEditor(state, place) {
   const npm = $("#noplacemap", side);
   if (npm) npm.onclick = () => store.commit("place", s => { const p = P(pid)(s); delete p.map; delete p.mapW; delete p.mapH; });
   $("#present", side).onclick = () => store.commit("present", s => { const p = P(pid)(s); p.visible = true; s.presentation = { type: "place", place: pid }; });
+  { const ph = $("#partyhere", side); if (ph) ph.onclick = () => { const st = store.get(); if (liveSession(st)) import("../core/contexto.js").then(m => m.setHere(pid)); else partyToPlace(st, pid); toast(liveSession(st) ? "El grupo está aquí (apuntado en la ruta de la sesión)." : "El grupo está aquí. Con una sesión abierta, sus pasos se apuntan en la ruta."); }; }
 
   $$("[data-item]", side).forEach(box => {
     const iid = box.dataset.item;

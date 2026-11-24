@@ -152,6 +152,13 @@ service cloud.firestore {
         allow read: if isEditor(c) || (isMember(c) && resource.data.to == request.auth.uid);
         allow write: if isEditor(c);
       }
+      // Notas privadas de cada personaje (su cuaderno y lo que apunta en el Lore): solo su jugador y los másteres.
+      match /notes/{n} {
+        allow read: if isEditor(c) || (isMember(c) && resource.data.owner == request.auth.uid);
+        allow create, update: if isEditor(c) || (isMember(c) && request.resource.data.owner == request.auth.uid
+          && (resource == null || resource.data.owner == request.auth.uid));
+        allow delete: if isEditor(c);
+      }
       match /presence/{u} {
         allow read: if isMember(c);
         allow write: if isMember(c) && u == request.auth.uid;
