@@ -7,6 +7,7 @@ import { MAP_ICONS, ICON_CATS, iconURL, PIN_SIZES, PIN_TINTS, pinDefaults } from
 import { $, $$, esc, toast, debounce, pickFile } from "../core/ui.js";
 import { regionsOf, regionById, seeRegion, bboxOf, regionAt, toLocal, toGlobal, centroid, placesIn, addRegion, editRegion, deleteRegion, REG_COLORS } from "../core/regiones.js";
 import { REGIONS } from "../data/mapas.js";
+import { sampleSource, maskFrom, genURL, CLIMAS, FORMAS, bake, paintMask, Q, UQ, pairs } from "../core/generamapa.js";
 
 const KINDS = ["Región", "Ciudad", "Pueblo", "Distrito", "Localización", "Mazmorra", "Punto de interés"];
 const PIN = (fill) => `<svg viewBox="0 0 30 38" aria-hidden="true"><path d="M15 1C7.3 1 1 7 1 14.6 1 25 15 37 15 37s14-12 14-22.4C29 7 22.7 1 15 1z" fill="${fill}" stroke="#2b1d10" stroke-width="2"/><circle cx="15" cy="14" r="5" fill="#2b1d10"/></svg>`;
@@ -16,13 +17,17 @@ let view = { x: 0, y: 0, k: 1 }, imgW = 1600, imgH = 1000;
 let sel = null, adding = false, fitted = false;
 // Vistas: "global" (el mapa entero), "regions" (el mapa troceado en regiones) y "region" (dentro de una región)
 let mode = "global", regId = null, drawing = null, redrawId = null, mapKey = "";
+// Generador (Hito 72): borrador que se está ajustando (se ve en el mapa antes de guardarlo) y para qué es
+let genDraft = null, genSample = null, drawKind = "region";
+// Retoque a mano (Hito 73): herramienta, tamaño del pincel y elemento seleccionado ({ k: "m"|"f"|"r"|"c"|"t", i, v: vértice })
+let gTool = "sel", gBrush = 40, gSel = null;
 
 export function mount(root) {
   el = document.createElement("div");
   el.className = "world";
   el.innerHTML = `
     <div class="viewport" id="vp">
-      <div class="stage" id="stage"><img id="mapimg" alt="Mapa del mundo"><svg id="regsvg" class="regsvg" aria-hidden="true"></svg><div id="pins"></div></div>
+      <div class="stage" id="stage"><img id="mapimg" alt="Mapa del mundo"><svg id="regsvg" class="regsvg" aria-hidden="true"></svg><svg id="genov" class="genov" aria-hidden="true"></svg><div id="pins"></div></div>
       <div class="mapzoom"><button id="zin" aria-label="Acercar">+</button><button id="zout" aria-label="Alejar">−</button><button id="zfit" aria-label="Ver el mapa entero" title="Ver el mapa entero">⤢</button></div>
       <div class="hintbar" id="hint" hidden>Haz clic en el mapa para colocar el nuevo lugar · Esc para cancelar</div>
     </div>
@@ -57,7 +62,23 @@ export function mount(root) {
 
 /* ---------- Mapa, zoom y desplazamiento ---------- */
 const curRegion = () => mode === "region" ? regionById(store.get(), regId) : null;
-const ownMap = () => { const r = curRegion(); return r && r.map ? r : null; };
+const ownMap = () => { const r = curRegion(); return r && (r.map || r.gen || (genDraft && genDraft.reg === r.id)) ? r : null; };
+/** Imagen del mapa base del mundo (subido o de ejemplo), con su tamaño. */
+async function baseMap() {
+  const st = store.get(); let url = st.world.map ? await getImage(st.world.map) : null;
+  if (url) return { url, w: st.world.mapW, h: st.world.mapH };
+  if (st.world.gen) { const w = 1600, h = 1000; return { url: genURL(st.world.gen, w, h, [], null), w, h }; }
+  const m = exampleMap(); return { url: m.url, w: m.w, h: m.h };
+}
+/** El mapa generado de una región: mismo encuadre que su recuadro sobre el mapa base, a más resolución. */
+function regionGenImage(r, gen) {
+  const st = store.get(), b = bboxOf(r), bw = st.world.map ? st.world.mapW : 1600, bh = st.world.map ? st.world.mapH : 1000;
+  const W = 1800, H = Math.max(400, Math.min(2400, Math.round(W * (b.h * bh) / (b.w * bw))));
+  // caminos solo hasta los lugares que cada uno ve: los de lugares ocultos no delatan nada a los jugadores
+  const pl = placesIn(st, r).filter(p => can.seePlace(st, p)).map(p => toLocal(r, p.x, p.y)).map(p => ({ x: +p.x.toFixed(3), y: +p.y.toFixed(3) }));
+  const poly = r.pts.map(p => toLocal(r, p.x, p.y)).map(p => ({ x: +p.x.toFixed(4), y: +p.y.toFixed(4) }));
+  return { url: genURL(gen, W, H, gen.autoRoads ? pl : [], poly), w: W, h: H };
+}
 // Coordenadas: los lugares guardan su posición global (0–1); en una región con mapa propio se traducen
 function g2i(x, y) { const r = ownMap(); if (r) { const l = toLocal(r, x, y); return [l.x * imgW, l.y * imgH]; } return [x * imgW, y * imgH]; }
 function i2g(px, py) { const r = ownMap(), x = px / imgW, y = py / imgH; return r ? toGlobal(r, x, y) : { x, y }; }
@@ -65,17 +86,21 @@ function evPoint(e) { const r = vp.getBoundingClientRect(); return [(e.clientX -
 
 async function loadMap() {
   const state = store.get(), own = ownMap();
-  const key = own ? "r:" + own.map : "g:" + (state.world.map || "") + ":" + mode + ":" + (regId || "");
+  const key = own ? "r:" + (own.map || own.id) : "g:" + (state.world.map || "") + ":" + mode + ":" + (regId || "");
   let url, w, h;
-  if (own) { url = await getImage(own.map); w = own.mapW; h = own.mapH; }
+  const draftReg = genDraft && genDraft.reg && own && genDraft.reg === own.id;
+  if (own && (draftReg || (!own.map && own.gen))) { const m = regionGenImage(own, draftReg ? genDraft.gen : own.gen); url = m.url; w = m.w; h = m.h; }
+  else if (own) { url = await getImage(own.map); w = own.mapW; h = own.mapH; }
+  if (!url && genDraft && genDraft.world && mode === "global") { w = 1600; h = 1000; url = genURL(genDraft.gen, w, h, genDraft.gen.autoRoads ? state.world.places.filter(p => !p.parent && can.seePlace(state, p)).map(p => ({ x: +p.x.toFixed(3), y: +p.y.toFixed(3) })) : [], null); }
   if (!url && state.world.map) { url = await getImage(state.world.map); w = state.world.mapW; h = state.world.mapH; }
+  if (!url && state.world.gen) { w = 1600; h = 1000; url = genURL(state.world.gen, w, h, state.world.gen.autoRoads ? state.world.places.filter(p => !p.parent && can.seePlace(state, p)).map(p => ({ x: +p.x.toFixed(3), y: +p.y.toFixed(3) })) : [], null); }
   if (!url) { const m = exampleMap(); url = m.url; w = m.w; h = m.h; }
   imgW = w; imgH = h;
   img.src = url; img.width = w; img.height = h;
   stage.style.width = w + "px"; stage.style.height = h + "px";
   if (key !== mapKey) { mapKey = key; fitted = false; }
   if (!fitted) fit();
-  drawPins(); drawRegions();
+  drawPins(); drawRegions(); drawOv();
 }
 function apply() {
   stage.style.transform = `translate(${view.x}px,${view.y}px) scale(${view.k})`;
@@ -86,7 +111,7 @@ function fit() {
   const r = vp.getBoundingClientRect();
   if (!r.width) return;
   const reg = curRegion();
-  if (reg && !reg.map) { // sin mapa propio: el mapa global, acercado a la región
+  if (reg && !ownMap()) { // sin mapa propio: el mapa global, acercado a la región
     const b = bboxOf(reg), bw = b.w * imgW, bh = b.h * imgH;
     view.k = Math.min(r.width / bw, r.height / bh) * 0.94;
     view.x = (r.width - bw * view.k) / 2 - b.x0 * imgW * view.k; view.y = (r.height - bh * view.k) / 2 - b.y0 * imgH * view.k;
@@ -104,16 +129,20 @@ function bindViewport() {
   let drag = null;
   vp.addEventListener("pointerdown", e => {
     if (e.target.closest(".pin,.maptools,.mapzoom,.maptabs")) return;
+    if (genEditing() && !drawing && e.button === 0 && genDown(e)) { vp.setPointerCapture(e.pointerId); return; }
     drag = { x: e.clientX, y: e.clientY, vx: view.x, vy: view.y, moved: false };
     vp.setPointerCapture(e.pointerId);
   });
   vp.addEventListener("pointermove", e => {
+    if (genEditing()) genMove(e);
+    if (gAct) return;
     if (!drag) return;
     const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
     if (!drag.moved && Math.hypot(dx, dy) > 4) { drag.moved = true; vp.classList.add("panning"); }
     if (drag.moved) { view.x = drag.vx + dx; view.y = drag.vy + dy; apply(); }
   });
   vp.addEventListener("pointerup", e => {
+    if (gAct) { genUp(e); return; }
     if (!drag) return;
     const click = !drag.moved; drag = null; vp.classList.remove("panning");
     if (!click) return;
@@ -158,11 +187,11 @@ function drawTools() {
   t.hidden = false;
   const reg = curRegion();
   if (drawing) {
-    t.innerHTML = `<span class="drawhint">✏️ ${redrawId ? "Redibuja el contorno" : "Dibuja la región"}: clic para cada punto · ${drawing.length} puntos</span>
-      <button class="btn small gold" id="drawok" ${drawing.length < 3 ? "disabled" : ""}>✓ Cerrar región</button><button class="btn small" id="drawundo" ${drawing.length ? "" : "disabled"}>↶ Punto</button><button class="btn small" id="drawx">Cancelar</button>`;
+    t.innerHTML = `<span class="drawhint">✏️ ${drawKind === "road" ? "Traza el camino" : drawKind === "river" ? "Traza el río (de la fuente al mar)" : redrawId ? "Redibuja el contorno" : "Dibuja la región"}: clic para cada punto · ${drawing.length} puntos</span>
+      <button class="btn small gold" id="drawok" ${drawing.length < (drawKind === "region" ? 3 : 2) ? "disabled" : ""}>${drawKind === "road" ? "✓ Terminar camino" : drawKind === "river" ? "✓ Terminar río" : "✓ Cerrar región"}</button><button class="btn small" id="drawundo" ${drawing.length ? "" : "disabled"}>↶ Punto</button><button class="btn small" id="drawx">Cancelar</button>`;
     $("#drawok", t).onclick = finishDrawing;
     $("#drawundo", t).onclick = () => { drawing.pop(); redraw(); };
-    $("#drawx", t).onclick = () => { drawing = null; redrawId = null; redraw(); };
+    $("#drawx", t).onclick = () => { drawing = null; redrawId = null; drawKind = "region"; redraw(); };
     return;
   }
   if (mode === "regions") {
@@ -170,10 +199,14 @@ function drawTools() {
     $("#drawreg", t).onclick = () => { drawing = []; sel = null; redraw(); };
     return;
   }
+  if (genDraft) { t.innerHTML = `<span class="drawhint">🧭 Ajustando el mapa generado: lo ves en directo. Guárdalo abajo.</span>`; return; }
   t.innerHTML = `<button class="btn small" id="addplace" aria-pressed="${adding}">+ Añadir lugar</button>
+    ${reg && reg.map ? "" : reg ? `<button class="btn small gold" id="genopen" title="Genera un mapa detallado de la región calcando la costa del mapa de debajo: costa, montañas, bosques, ríos y caminos. Se guarda como datos, no como imagen.">🧭 ${reg.gen ? "Ajustar el detalle" : "Detallar la región"}</button>`
+      : `<button class="btn small" id="genopen" title="Genera un mapa completo (isla, continente, archipiélago). Se usa si no habéis subido un mapa.">🧭 ${state.world.gen ? "Ajustar el mapa generado" : "Generar un mapa"}</button>`}
     ${reg ? `<button class="btn small" id="upreg">${reg.map ? "Cambiar mapa de la región" : "Subir mapa de la región"}</button>${reg.map ? `<button class="btn small" id="noreg">Usar el mapa global</button>` : ""}`
       : `<button class="btn small" id="upmap">Subir vuestro mapa</button>${state.world.map ? `<button class="btn small" id="exmap">Volver al mapa de ejemplo</button>` : ""}`}`;
   $("#addplace", t).onclick = () => setAdding(!adding);
+  { const go = $("#genopen", t); if (go) go.onclick = () => openGen(); }
   const up = $("#upmap", t);
   if (up) up.onclick = async () => {
     const f = await pickFile(); if (!f) return;
@@ -202,18 +235,169 @@ function drawTools() {
   if (ex) ex.onclick = () => store.commit("map", s => { s.world.map = null; });
 }
 
+/* ---------- Generador de mapas (Hito 72) ---------- */
+async function openGen() {
+  const st = store.get(), reg = curRegion();
+  if (reg) {
+    const prev = reg.gen ? JSON.parse(JSON.stringify(reg.gen)) : null;
+    genDraft = { reg: reg.id, gen: prev || { forma: "calco", seed: Math.floor(Math.random() * 1e6), sea: 0, mont: 50, bosq: 50, rios: 40, clima: "templado", autoRoads: true, roads: [] } };
+    toast("Leyendo la costa del mapa…");
+    try { const b = await baseMap(); genSample = await sampleSource(b.url, bboxOf(reg)); } catch (e) { genSample = null; }
+    if (genDraft.gen.forma === "calco") { if (genSample) genDraft.gen.mask = maskFrom(genSample, (genDraft.gen.sea || 0) / 100); else genDraft.gen.forma = "tierra"; }
+  } else genDraft = { world: true, gen: st.world.gen ? JSON.parse(JSON.stringify(st.world.gen)) : { forma: "isla", seed: Math.floor(Math.random() * 1e6), sea: 0, mont: 50, bosq: 50, rios: 40, clima: "templado", autoRoads: false, roads: [], title: st.world.name || "" } };
+  sel = null; setAdding(false); fitted = false; loadMap(); redraw();
+}
+const genRefresh = debounce(() => { if (!genDraft) return; const g = genDraft.gen; if (genDraft.reg && g.forma === "calco" && genSample) g.mask = maskFrom(genSample, (g.sea || 0) / 100); loadMap(); }, 220);
+function drawGenPanel(st) {
+  const G = genDraft.gen, reg = genDraft.reg ? regionById(st, genDraft.reg) : null;
+  const formas = Object.entries(FORMAS).filter(([k]) => reg ? true : k !== "calco" && k !== "tierra");
+  const rng = (k, label, lo, hi, hint) => `<label class="field genrng">${label} <small>${hint || ""}</small><input type="range" min="${lo}" max="${hi}" value="${G[k] ?? 0}" data-gen="${k}"></label>`;
+  side.innerHTML = `<div><h3>🧭 ${reg ? `Detalle de ${esc(reg.name)}` : "Mapa generado"}</h3><div class="kind">${reg ? "Calca la costa del mapa de debajo y la amplía con más detalle." : "Un mapa completo. Se usa si no habéis subido el vuestro."} No se guarda ninguna imagen: solo los ajustes.</div></div>
+    ${G.items ? retouchHTML(G) : `<label class="field">Forma<select data-gens="forma">${formas.map(([k, n]) => `<option value="${k}" ${G.forma === k ? "selected" : ""}>${n}</option>`).join("")}</select></label>
+    ${reg && G.forma === "calco" && !genSample ? `<p class="note">No se pudo leer el mapa de debajo: usa otra forma.</p>` : ""}
+    ${rng("sea", G.forma === "calco" ? "Agua ↔ tierra" : "Nivel del mar", -100, 100, G.forma === "calco" ? "si confunde mar y tierra, muévelo" : "")}
+    ${rng("mont", "Montañas", 0, 100)}${rng("bosq", "Bosques", 0, 100)}${rng("rios", "Ríos", 0, 100)}
+    <label class="field">Clima<select data-gens="clima">${Object.entries(CLIMAS).map(([k, c]) => `<option value="${k}" ${G.clima === k ? "selected" : ""}>${c.n}</option>`).join("")}</select></label>
+    ${reg ? "" : `<label class="field">Título<input data-gent="title" value="${esc(G.title || "")}" placeholder="Nombre del mundo"></label>`}
+    <label class="switch"><input type="checkbox" data-genc="autoRoads" ${G.autoRoads ? "checked" : ""}> Caminos entre los lugares</label>`}
+    ${G.items ? "" : `<div class="row"><button class="btn small" id="genseed">🎲 Otra versión</button><button class="btn small" id="genroad">✏️ Trazar un camino</button>${(G.roads || []).length ? `<button class="btn small" id="genroadx">Borrar caminos (${G.roads.length})</button>` : ""}</div>
+    <button class="btn gold small" id="genbake" title="Fija todo lo generado para moverlo, cambiarlo de tamaño o borrarlo uno a uno, y pintar tierra o mar">✋ Retocar a mano</button>`}
+    <p class="note">Los castillos, posadas, ciudades… se ponen con «+ Añadir lugar» cuando guardes: van encima como siempre${reg ? " y los caminos automáticos los unen" : ""}.</p>
+    <div class="row"><button class="btn gold" id="gensave">Guardar</button><button class="btn" id="genno">Cancelar</button>${(reg ? reg.gen : st.world.gen) ? `<button class="btn danger small" id="gendel">Quitar el mapa generado</button>` : ""}</div>`;
+  $$("[data-gen]", side).forEach(i => i.oninput = () => { G[i.dataset.gen] = +i.value; genRefresh(); });
+  $$("[data-gens]", side).forEach(i => i.onchange = () => { G[i.dataset.gens] = i.value; if (i.dataset.gens === "forma" && G.forma !== "calco") delete G.mask; genRefresh(); drawSide(); });
+  $$("[data-gent]", side).forEach(i => i.oninput = () => { G[i.dataset.gent] = i.value; genRefresh(); });
+  $$("[data-genc]", side).forEach(i => i.onchange = () => { G[i.dataset.genc] = i.checked; genRefresh(); });
+  { const b = $("#genseed", side); if (b) b.onclick = () => { G.seed = Math.floor(Math.random() * 1e6); genRefresh(); }; }
+  { const b = $("#genroad", side); if (b) b.onclick = () => { drawKind = "road"; drawing = []; redraw(); }; }
+  { const b = $("#genbake", side); if (b) b.onclick = () => { genDraft.gen = bake(G, imgW, imgH, genPlaces()); gTool = "sel"; gSel = null; loadMap(); redraw(); }; }
+  bindRetouch(G);
+  const rx = $("#genroadx", side); if (rx) rx.onclick = () => { G.roads = []; genRefresh(); drawSide(); };
+  $("#gensave", side).onclick = () => { const d = genDraft; genDraft = null; genSample = null; gSel = null; drawOv();
+    if (d.reg) editRegion(d.reg, r => { r.gen = d.gen; }); else store.commit("map", s2 => { s2.world.gen = d.gen; });
+    toast(d.reg ? "Detalle guardado. Coloca castillos, posadas y demás con «+ Añadir lugar»." : "Mapa guardado."); loadMap(); redraw(); };
+  $("#genno", side).onclick = () => { genDraft = null; genSample = null; drawing = null; drawKind = "region"; gSel = null; drawOv(); fitted = false; loadMap(); redraw(); };
+  const gd = $("#gendel", side); if (gd) gd.onclick = () => { const d = genDraft; genDraft = null; genSample = null;
+    if (d.reg) editRegion(d.reg, r => { delete r.gen; }); else store.commit("map", s2 => { delete s2.world.gen; }); fitted = false; loadMap(); redraw(); };
+}
+
+/* ---------- Retoque a mano del mapa generado (Hito 73) ---------- */
+const genEditing = () => !!(genDraft && genDraft.gen.items && isDM(store.get()));
+function genPlaces() { const st = store.get(), r = ownMap(); return r ? placesIn(st, r).filter(p => can.seePlace(st, p)).map(p => toLocal(r, p.x, p.y)) : st.world.places.filter(p => !p.parent && can.seePlace(st, p)); }
+const TOOLS = [["sel", "✋", "Mover y cambiar de tamaño (arrastra; luego ajusta abajo)"], ["m", "⛰", "Montaña"], ["h", "◠", "Colina"], ["f", "🌲", "Bosque"], ["r", "〰", "Río (traza puntos)"], ["c", "🛣", "Camino (traza puntos)"], ["t", "🔤", "Rótulo"], ["land", "🟫", "Pintar tierra"], ["sea", "🌊", "Pintar mar"], ["del", "🧽", "Borrar lo que toques"]];
+function retouchHTML(G) {
+  const it = G.items, S = gSel && selItem(G);
+  return `<div class="gtools">${TOOLS.map(([k, i, n]) => `<button class="${gTool === k ? "on" : ""}" data-gtool="${k}" title="${n}">${i}</button>`).join("")}</div>
+    <small class="tenue">${(TOOLS.find(t => t[0] === gTool) || [])[2] || ""}${["f", "land", "sea", "del"].includes(gTool) ? " · arrastra para pintar" : ""}</small>
+    ${["f", "land", "sea", "del", "m", "h"].includes(gTool) ? `<label class="field genrng">Tamaño del pincel <input type="range" min="8" max="140" value="${gBrush}" data-gbrush></label>` : ""}
+    ${S ? `<div class="gsel"><b>${{ m: "⛰ Montaña", h: "◠ Colina", f: "🌲 Bosque", r: "〰 Río", c: "🛣 Camino", t: "🔤 Rótulo" }[S.kind]}</b>
+      ${S.kind === "t" ? `<input data-gtxt value="${esc(it.t[gSel.i][3])}" placeholder="Texto">` : ""}
+      ${["m", "h", "f", "t"].includes(S.kind) ? `<label class="field genrng">Tamaño <input type="range" min="${S.kind === "f" ? 8 : S.kind === "t" ? 10 : 4}" max="${S.kind === "f" ? 160 : S.kind === "t" ? 90 : 70}" value="${Math.round(S.size)}" data-gsize></label>` : `<small class="tenue">Arrastra un punto para moverlo, o el trazo para moverlo entero.</small>`}
+      <div class="row">${["m", "h"].includes(S.kind) ? `<button class="btn small" data-gflip>${S.kind === "m" ? "Hacer colina" : "Hacer montaña"}</button>` : ""}<button class="btn small danger" data-gdel>Borrar</button></div></div>` : ""}
+    <p class="note">${it.m.length} montañas y colinas · ${it.f.length} manchas de bosque · ${it.r.length} ríos · ${it.c.length} caminos${(it.t || []).length ? ` · ${it.t.length} rótulos` : ""}. Los lugares (castillos, posadas…) se mueven como siempre, arrastrándolos.</p>
+    <button class="btn small" id="genunbake" title="Descarta los retoques y vuelve a los deslizadores">↺ Volver a generar</button>`;
+}
+function selItem(G) {
+  const it = G.items, s = gSel; if (!s) return null;
+  if (s.k === "m") { const m = it.m[s.i]; if (!m) return null; return { kind: m[3] ? "m" : "h", size: UQ(m[2]) * imgW }; }
+  if (s.k === "f") { const f = it.f[s.i]; return f ? { kind: "f", size: UQ(f[2]) * imgW } : null; }
+  if (s.k === "t") { const t = it.t[s.i]; return t ? { kind: "t", size: UQ(t[2]) * imgW } : null; }
+  return (it[s.k] || [])[s.i] ? { kind: s.k } : null;
+}
+function bindRetouch(G) {
+  if (!G.items) return;
+  $$("[data-gtool]", side).forEach(b => b.onclick = () => { gTool = b.dataset.gtool; gSel = null; if (gTool === "r" || gTool === "c") { drawKind = gTool === "r" ? "river" : "road"; drawing = []; } redraw(); drawOv(); });
+  const br = $("[data-gbrush]", side); if (br) br.oninput = () => { gBrush = +br.value; };
+  const sz = $("[data-gsize]", side); if (sz) sz.oninput = () => { const v = Q(+sz.value / imgW), s = gSel; if (s.k === "m") G.items.m[s.i][2] = v; else if (s.k === "f") G.items.f[s.i][2] = v; else if (s.k === "t") G.items.t[s.i][2] = v; drawOv(); genRefresh(); };
+  const tx = $("[data-gtxt]", side); if (tx) tx.oninput = () => { G.items.t[gSel.i][3] = tx.value; genRefresh(); };
+  const fl = $("[data-gflip]", side); if (fl) fl.onclick = () => { const m = G.items.m[gSel.i]; m[3] = m[3] ? 0 : 1; genRefresh(); drawSide(); };
+  const dl = $("[data-gdel]", side); if (dl) dl.onclick = () => { G.items[gSel.k].splice(gSel.i, 1); gSel = null; genRefresh(); drawSide(); drawOv(); };
+  const ub = $("#genunbake", side); if (ub) ub.onclick = () => { if (!ub.dataset.sure) { ub.dataset.sure = 1; ub.textContent = "Pulsa otra vez: se pierden los retoques"; return; } delete G.items; if (G.forma !== "calco") delete G.mask; gSel = null; genRefresh(); drawSide(); drawOv(); };
+}
+/** Qué hay bajo el puntero (en píxeles del mapa). */
+function hitItem(G, px, py) {
+  const it = G.items, tol = 10 / view.k; let best = null;
+  const take = (k, i, d, v) => { if (!best || d < best.d) best = { k, i, d, v }; };
+  (it.t || []).forEach((t, i) => { const d = Math.hypot(UQ(t[0]) * imgW - px, UQ(t[1]) * imgH - py); if (d < UQ(t[2]) * imgW * 1.5 + tol) take("t", i, d * 0.5); });
+  it.m.forEach((m, i) => { const x = UQ(m[0]) * imgW, y = UQ(m[1]) * imgH, s = UQ(m[2]) * imgW, d = Math.hypot(x - px, (y - s * 0.5) - py); if (d < s + tol) take("m", i, d); });
+  ["r", "c"].forEach(k => (it[k] || []).forEach((a, i) => { const P = pairs(a).map(([x, y]) => [UQ(x) * imgW, UQ(y) * imgH]);
+    P.forEach(([x, y], v) => { const d = Math.hypot(x - px, y - py); if (d < tol * 1.2) take(k, i, d * 0.3, v); });
+    for (let j = 1; j < P.length; j++) { const d = segDist(px, py, P[j - 1], P[j]); if (d < tol) take(k, i, d + 2); } }));
+  if (!best) it.f.forEach((f, i) => { const d = Math.hypot(UQ(f[0]) * imgW - px, UQ(f[1]) * imgH - py); if (d < UQ(f[2]) * imgW) take("f", i, d + 20); });
+  return best;
+}
+const segDist = (px, py, [ax, ay], [bx, by]) => { const dx = bx - ax, dy = by - ay, t = Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / (dx * dx + dy * dy || 1))); return Math.hypot(px - ax - t * dx, py - ay - t * dy); };
+let gAct = null; // gesto en curso
+function genDown(e) {
+  const G = genDraft.gen, [px, py] = evPoint(e), nx = px / imgW, ny = py / imgH;
+  if (px < 0 || py < 0 || px > imgW || py > imgH) return false;
+  if (gTool === "sel") {
+    const h = hitItem(G, px, py); if (!h) { gSel = null; drawOv(); drawSide(); return false; } // sin nada debajo: se arrastra el mapa
+    gSel = { k: h.k, i: h.i }; gAct = { k: "move", h, x0: px, y0: py, orig: JSON.parse(JSON.stringify(G.items[h.k][h.i])) }; drawOv(); drawSide(); return true;
+  }
+  if (gTool === "t") { G.items.t = G.items.t || []; G.items.t.push([Q(nx), Q(ny), Q(22 / imgW), "Rótulo"]); gSel = { k: "t", i: G.items.t.length - 1 }; gTool = "sel"; genRefresh(); redraw(); drawOv(); setTimeout(() => { const t = $("[data-gtxt]", side); if (t) { t.focus(); t.select(); } }, 50); return true; }
+  gAct = { k: "paint", last: null }; paintAt(px, py); return true;
+}
+function paintAt(px, py) {
+  const G = genDraft.gen, it = G.items, nx = px / imgW, ny = py / imgH, R = gBrush;
+  if (gAct.last && Math.hypot(px - gAct.last[0], py - gAct.last[1]) < (["m", "h"].includes(gTool) ? R * 0.45 : R * 0.35)) return;
+  gAct.last = [px, py];
+  if (gTool === "m" || gTool === "h") { const sz = gTool === "m" ? Math.max(8, R * 0.4) : Math.max(5, R * 0.22); it.m.push([Q(nx), Q(ny), Q(sz / imgW), gTool === "m" ? 1 : 0]); it.m.sort((a, b) => a[1] - b[1]); }
+  else if (gTool === "f") it.f.push([Q(nx), Q(ny), Q(R * 0.6 / imgW)]);
+  else if (gTool === "land" || gTool === "sea") paintMask(G, nx, ny, R / 2 / imgW, gTool === "land");
+  else if (gTool === "del") { const near = (x, y) => Math.hypot(UQ(x) * imgW - px, UQ(y) * imgH - py) < R / 2;
+    it.m = it.m.filter(m => !near(m[0], m[1])); it.f = it.f.filter(f => !near(f[0], f[1])); it.t = (it.t || []).filter(t => !near(t[0], t[1]));
+    ["r", "c"].forEach(k => { it[k] = it[k].filter(a => !pairs(a).some(([x, y]) => near(x, y))); }); }
+  genPaintRefresh();
+}
+const genPaintRefresh = debounce(() => loadMap(), 260);
+function genMove(e) {
+  const [px, py] = evPoint(e);
+  const cur = $("#genov", el); if (cur && ["m", "h", "f", "land", "sea", "del"].includes(gTool)) { const c = cur.querySelector(".gbrush"); if (c) { c.setAttribute("cx", px); c.setAttribute("cy", py); c.setAttribute("r", gBrush / 2); } }
+  if (!gAct) return;
+  if (gAct.k === "paint") return paintAt(px, py);
+  const G = genDraft.gen, h = gAct.h, dx = Q((px - gAct.x0) / imgW), dy = Q((py - gAct.y0) / imgH), o = gAct.orig;
+  if (h.k === "r" || h.k === "c") { const a = o.slice(); if (h.v != null) { a[h.v * 2] += dx; a[h.v * 2 + 1] += dy; } else for (let j = 0; j < a.length; j += 2) { a[j] += dx; a[j + 1] += dy; } G.items[h.k][h.i] = a; }
+  else { const a = o.slice(); a[0] += dx; a[1] += dy; G.items[h.k][h.i] = a; }
+  gAct.moved = true; drawOv();
+}
+function genUp() { const a = gAct; gAct = null; if (a.k === "move" && a.moved && a.h.k === "m") genDraft.gen.items.m.sort((p, q) => p[1] - q[1]), gSel = null; loadMap(); drawSide(); drawOv(); }
+/** Capa de ayuda: el pincel y el elemento seleccionado. */
+function drawOv() {
+  const svg = $("#genov", el); if (!svg) return;
+  if (!genEditing()) { svg.innerHTML = ""; return; }
+  svg.setAttribute("viewBox", `0 0 ${imgW} ${imgH}`); svg.style.width = imgW + "px"; svg.style.height = imgH + "px";
+  const G = genDraft.gen, it = G.items, s = gSel; let mark = "";
+  if (s && it[s.k] && it[s.k][s.i]) {
+    const a = it[s.k][s.i];
+    if (s.k === "r" || s.k === "c") { const P = pairs(a).map(([x, y]) => [UQ(x) * imgW, UQ(y) * imgH]); mark = `<polyline points="${P.map(p => p.join(",")).join(" ")}" class="gsl"/>${P.map(([x, y]) => `<circle cx="${x}" cy="${y}" r="${6 / view.k}" class="gpt"/>`).join("")}`; }
+    else { const x = UQ(a[0]) * imgW, y = UQ(a[1]) * imgH, r = s.k === "f" ? UQ(a[2]) * imgW : UQ(a[2]) * imgW * (s.k === "t" ? 2 : 1.1); mark = `<circle cx="${x}" cy="${s.k === "m" ? y - r * 0.45 : y}" r="${r}" class="gsl"/>`; }
+  }
+  svg.innerHTML = `${mark}${["m", "h", "f", "land", "sea", "del"].includes(gTool) ? `<circle class="gbrush ${gTool}" cx="-99" cy="-99" r="${gBrush / 2}"/>` : ""}`;
+}
+
 /* ---------- Pestañas: Global · Regiones · (dentro de una región) ---------- */
 function drawTabs() {
   const s = store.get(), dm = isDM(s), list = regionsOf(s).filter(r => seeRegion(s, r, dm)), reg = curRegion();
   const t = $("#maptabs", el);
   t.innerHTML = `<button data-mode="global" aria-pressed="${mode === "global"}">🌍 Mapa global</button><button data-mode="regions" aria-pressed="${mode !== "global"}">🗺 Regiones${list.length ? ` <small>${list.length}</small>` : ""}</button>
     ${reg ? `<span class="tabreg" style="--rc:${esc(reg.color)}">▸ <b>${esc(reg.name)}</b></span>${list.length > 1 ? `<select id="regjump" aria-label="Ir a otra región">${list.map(r => `<option value="${r.id}" ${r.id === reg.id ? "selected" : ""}>${esc(r.name)}</option>`).join("")}</select>` : ""}` : ""}`;
-  $$("[data-mode]", t).forEach(b => b.onclick = () => { if (drawing) return; mode = b.dataset.mode; regId = null; sel = null; setAdding(false); loadMap(); redraw(); });
-  const j = $("#regjump", t); if (j) j.onchange = () => enterRegion(j.value);
+  $$("[data-mode]", t).forEach(b => b.onclick = () => { if (drawing) return; genDraft = null; mode = b.dataset.mode; regId = null; sel = null; setAdding(false); loadMap(); redraw(); });
+  const j = $("#regjump", t); if (j) j.onchange = () => { genDraft = null; enterRegion(j.value); };
 }
 function enterRegion(id) { mode = "region"; regId = id; sel = null; setAdding(false); loadMap(); redraw(); }
-function redraw() { drawTabs(); drawTools(); drawPins(); drawRegions(); drawSide(); vp.classList.toggle("drawing", !!drawing); vp.classList.toggle("modereg", mode === "regions"); }
+function redraw() { drawTabs(); drawTools(); drawPins(); drawRegions(); drawSide(); drawOv(); vp.classList.toggle("drawing", !!drawing); vp.classList.toggle("modereg", mode === "regions"); }
 function finishDrawing() {
+  if (drawKind === "road" || drawKind === "river") { // camino o río a mano en el mapa generado
+    if (!drawing || drawing.length < 2) return toast("Hacen falta al menos 2 puntos.");
+    const r = ownMap(), pts = drawing.map(p => r ? toLocal(r, p.x, p.y) : p).map(p => ({ x: +p.x.toFixed(4), y: +p.y.toFixed(4) })), kind = drawKind;
+    drawing = null; drawKind = "region";
+    if (genDraft) { const G = genDraft.gen;
+      if (G.items) { const k = kind === "river" ? "r" : "c"; G.items[k] = [...(G.items[k] || []), pts.flatMap(p => [Q(p.x), Q(p.y)])]; gSel = { k, i: G.items[k].length - 1 }; gTool = "sel"; }
+      else G.roads = [...(G.roads || []), pts];
+      loadMap(); redraw(); }
+    return;
+  }
   if (!drawing || drawing.length < 3) return toast("Una región necesita al menos 3 puntos.");
   const pts = drawing; drawing = null;
   if (redrawId) { const id = redrawId; redrawId = null; editRegion(id, r => { r.pts = pts; }); enterRegion(id); }
@@ -285,6 +469,7 @@ function drawPins() {
 /* ---------- Panel lateral ---------- */
 function drawSide() {
   const state = store.get();
+  if (genDraft && isDM(state)) return drawGenPanel(state);
   const place = state.world.places.find(p => p.id === sel);
   if (!place || !can.seePlace(state, place)) return mode === "regions" ? drawRegionList(state) : mode === "region" && curRegion() ? drawRegionPanel(state, curRegion()) : drawList(state);
   return isDM(state) ? drawEditor(state, place) : drawReader(state, place);

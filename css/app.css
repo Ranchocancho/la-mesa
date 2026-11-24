@@ -2630,3 +2630,18 @@ button.hbr:hover{box-shadow:0 0 0 1px var(--react,#c9a0ff)}
 .wside .maptools .btn{flex:1 1 auto}
 .wside .sidebody{padding:14px 18px 18px;display:flex;flex-direction:column;gap:14px}
 .cst.old{opacity:.6;font-style:italic;border-style:dashed}
+/* Hito 72: generador de mapas */
+.genrng{display:flex;flex-direction:column;gap:2px}.genrng small{color:var(--tenue);font-size:11.5px}
+.genrng input[type=range]{width:100%;accent-color:var(--oro)}
+/* Hito 73: retoque a mano del mapa generado */
+.genov{position:absolute;left:0;top:0;pointer-events:none;overflow:visible}
+.genov .gsl{fill:rgba(255,215,106,.12);stroke:#ffd76a;stroke-width:calc(2px * var(--ik,1));stroke-dasharray:6 4}
+.genov polyline.gsl{fill:none}
+.genov .gpt{fill:#ffd76a;stroke:#3a2a1a;stroke-width:calc(1.5px * var(--ik,1))}
+.genov .gbrush{fill:rgba(255,255,255,.08);stroke:rgba(255,255,255,.8);stroke-width:calc(1.5px * var(--ik,1));stroke-dasharray:4 3}
+.genov .gbrush.sea{stroke:#8fd8ff}.genov .gbrush.land{stroke:#e6c26a}.genov .gbrush.del{stroke:#ff8a7a}
+.gtools{display:grid;grid-template-columns:repeat(5,1fr);gap:4px}
+.gtools button{font-size:18px;padding:6px 0;border-radius:8px;border:1px solid var(--linea);background:rgba(0,0,0,.25);cursor:pointer}
+.gtools button.on{border-color:var(--oro);background:#33281b;box-shadow:0 0 6px rgba(214,170,78,.4)}
+.gsel{display:flex;flex-direction:column;gap:6px;padding:8px 10px;border:1px solid rgba(255,215,106,.4);border-radius:10px;background:rgba(255,215,106,.05)}
+.gsel input[data-gtxt]{font-size:14px}

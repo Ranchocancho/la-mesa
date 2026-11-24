@@ -865,3 +865,23 @@ A partir de la auditoría de diseño comparada con Baldur's Gate 3:
 ## Hito 71 · Herramientas del mapa del mundo en la columna derecha
 - En la página Mapa, las pestañas (🌍 Mapa global / 🗺 Regiones) y las herramientas (+ Añadir lugar, Subir mapa, ✏️ Dibujar región…) pasan arriba de la columna derecha, antes de la lista de regiones y lugares. Se quedan fijas al desplazar la lista y ya no tapan el mapa.
 - Crónica: las sesiones jugadas antes del registro automático lo indican («sin registro de botín, enemigos ni lugares») en vez de parecer vacías.
+
+## Hito 72 · Generador de mapas (detalle de regiones y mapas completos)
+- **Detallar una región** (Mapa › Regiones › una región sin mapa propio › «🧭 Detallar la región»): lee el trozo del mapa de debajo (el vuestro o el de ejemplo) dentro del recuadro de la región, separa mar y tierra por el color y dibuja un mapa ampliado y con más detalle. Lleva costa recortada, montañas y colinas, bosques, ríos que bajan al mar y caminos entre los lugares. Fuera del contorno de la región sale velado.
+  - Ajustes: forma (calcar la costa, todo tierra para el interior, isla, continente, archipiélago), un control agua ↔ tierra por si confunde el mar, montañas, bosques, ríos, clima (templado, árido, frío o tropical), caminos automáticos entre los lugares, caminos a mano («✏️ Trazar un camino») y «🎲 Otra versión».
+  - Todo se ve en directo antes de guardar. Castillos, posadas, ciudades y demás se ponen como siempre con «+ Añadir lugar», y los caminos automáticos los unen.
+- **Mapa completo** (Mapa global › «🧭 Generar un mapa»): isla, continente o archipiélago, con título. Se usa cuando no hay mapa subido, por ejemplo para empezar otra campaña.
+- **No se guarda ninguna imagen**: solo la semilla, los ajustes, la silueta de tierra comprimida y los caminos (alrededor de 1 KB). El mapa se dibuja en cada navegador.
+- Los caminos automáticos solo llegan a los lugares que cada uno ve: los de un lugar oculto no delatan nada a los jugadores.
+
+## Hito 73 · Retocar a mano el mapa generado
+- En el generador, **«✋ Retocar a mano»** fija lo generado: la tierra pasa a una máscara que se puede pintar y cada montaña, colina, mancha de bosque, río y camino pasa a ser un elemento propio. Desde ahí, herramientas en la columna derecha:
+  - ✋ **Mover y cambiar de tamaño**: toca un elemento para seleccionarlo y arrástralo; abajo cambias su tamaño, conviertes una montaña en colina (o al revés) o lo borras. En ríos y caminos se arrastra un punto suelto o el trazo entero. Si no hay nada debajo, se mueve el mapa.
+  - ⛰ Montañas, ◠ colinas y 🌲 bosques con pincel (clic o arrastrar; el tamaño del pincel manda).
+  - 〰 Ríos y 🛣 caminos nuevos, trazando puntos.
+  - 🔤 **Rótulos** con el texto y el tamaño que quieras.
+  - 🟫 **Pintar tierra** y 🌊 **pintar mar**, para cambiar la costa, abrir una bahía o sacar una isla.
+  - 🧽 **Borrar** lo que toque el pincel.
+- Los lugares (castillos, posadas, ciudades…) se mueven como siempre, arrastrando su marcador.
+- «↺ Volver a generar» descarta los retoques y vuelve a los deslizadores.
+- Sigue sin guardarse ninguna imagen: un mapa retocado ocupa unos 10 KB de datos.
