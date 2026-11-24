@@ -1011,3 +1011,26 @@ Segunda revisión de archivos de otra IA: se adopta lo útil, adaptado a esta me
 - **Microclimas:** las partículas ambientales se vuelven cálidas (y suben más) junto a lava, brasas o fuego, y frías junto a hielo o nieve.
 - **Zócalo** al pie de los muros altos.
 - **Memoria:** al rehacer la mesa (otra escena, muros bajos/altos, cambios) se libera lo que ocupaba el escenario anterior en la tarjeta gráfica; antes se acumulaba en sesiones largas.
+
+## Hito 90 · Diez escenas de ejemplo y objetos nuevos
+
+**Objetos nuevos** (con figura 3D, icono 2D y, si toca, luz y cobertura): mesa de hechicería, círculo ritual (brilla), pilar con antorcha (alumbra como una antorcha), caldero burbujeante, orbe arcano, trono, escritorio con pergaminos, telescopio, ataúd, cadenas y grilletes, estatua rota, estalagmitas, piedras para cruzar un río (cuentan como puente), farol de calle (alumbra como una lámpara), letrero colgante y montón de basura. El SRD no define braseros: ahora alumbran como una antorcha (regla de campaña).
+
+**Diez escenas de ejemplo** (4 PJ de nivel 5; criaturas del SRD con sus acciones):
+1. **La cripta de Morvath el Nigromante:** se baja por escalones a una nave en ruinas con pilares y antorchas, nichos con zombis, sombras entre los escombros, un ábside elevado con la mesa de hechicería y el círculo ritual, un glifo en las gradas y una cámara secreta con el tesoro.
+2. **La cueva del río negro:** galerías naturales, arañas en el techo, un río que se cruza por un vado de piedras o un puente podrido, setas y cristales que alumbran, un cofre que es un mimeto y la guarida del troll con su botín.
+3. **La torre del hechicero** (rehecha, cuatro plantas enlazadas): vestíbulo con gárgolas, biblioteca con un espectro, laboratorio con cienos escapados y el observatorio con el hechicero, su familiar y la cámara del tesoro.
+4. **Pelea en la taberna de la Jarra Rota** (mejorada): cocina con caldero, cuentas del posadero y la puerta trasera **enlazada con el callejón**.
+5. **Emboscada en el callejón de la Jarra Rota:** de noche y con lluvia, ballesteros en un tejadillo, matones, espías en las sombras, ratas en la basura y faroles.
+6. **El cementerio de la colina** (mejorado): lápidas y cruces, tumbas abiertas, niebla, cuervos y el mausoleo en lo alto de la colina.
+7. **Emboscada en el bosque** (mejorada): puente de tablones, vados de piedras, juncos, hojarasca, un roble milenario y el campamento goblin.
+8. **La forja bajo el volcán:** un río de lava con un puente enano y otro de cadenas, centinelas azer en la Gran Forja, magmins, mephits y una cría de dragón rojo sobre su tesoro.
+9. **El muelle de los contrabandistas:** un barco atracado, embarcaderos, el almacén de la capitana y sahuagin y un merrow bajo el agua.
+10. **La cabaña de la saga del pantano:** barro, juncos y manglares, cocodrilos, una isla con la cabaña, el caldero y la jaula, arenas movedizas y la saga con su ogro.
+
+Para tenerlas en un mundo que ya existe: **Escenas → 🔄 Renovar escenas de ejemplo**.
+
+## Hito 91 · Las figuras andan y lo oculto se descubre
+
+- **Andar de verdad (3D):** al arrastrar una figura ya no vuela pegada al ratón: se levanta un poco en su sitio y se ve el camino; al soltarla, **anda casilla a casilla** por donde se puede pasar (rodea muros, objetos que bloquean y puertas cerradas, sin cortar esquinas), con el balanceo, el polvo y el asiento de los hitos anteriores. Lo mismo cuando la mueve otro jugador o el máster desde otro navegador.
+- **Lo oculto se descubre (SRD 5.2.1, Esconderse e Invisible):** una criatura oculta deja de estarlo en cuanto **ataca o lanza un conjuro** (también si hace daño), y, **en combate**, si **se mueve a una casilla que el grupo ve** (según la luz, los muros y la visión en la oscuridad). Queda anotado en Tiradas. Las emboscadas siguen funcionando: quien espera quieto en la maleza sigue oculto hasta que actúa o se deja ver; el máster puede volver a ocultar a quien quiera.
