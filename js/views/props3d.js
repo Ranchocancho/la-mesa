@@ -235,3 +235,116 @@ Object.assign(PROC, {
     return g;
   }
 });
+
+/* ---------- Hito 83: más detalle en las piezas hechas por código (zócalos, molduras, biseles, variantes) ---------- */
+const stoneV = () => mat(0x7d776e + Math.floor((R() - 0.5) * 6) * 0x010101);
+const moss = () => mat(0x4a6a32, { roughness: 1 });
+/** Zócalo con moldura: un bloque, una cornisa y un bisel arriba. */
+function plinth(w, h, d, m = stoneV()) {
+  const g = new THREE.Group();
+  g.add(M(box(w + 0.2, 0.18, d + 0.2), darkStone(), 0, 0.09));
+  g.add(M(box(w, h, d), m, 0, 0.18 + h / 2));
+  g.add(M(box(w + 0.14, 0.12, d + 0.14), darkStone(), 0, 0.18 + h + 0.06));
+  return g;
+}
+Object.assign(PROC, {
+  estatua() {
+    const g = plinth(1.5, 0.7, 1.5), m = mat(0x8e887e), y0 = 1.06;
+    g.add(M(cyl(0.38, 0.62, 1.1, 10), m, 0, y0 + 0.55));                       // faldón
+    g.add(M(cyl(0.48, 0.38, 0.9, 10), m, 0, y0 + 1.55));                       // torso
+    [[-1, 0.5], [1, -0.9]].forEach(([s, a]) => { const sh = M(new THREE.SphereGeometry(0.2, 8, 6), m, s * 0.5, y0 + 1.95, 0); g.add(sh); const arm = M(cyl(0.11, 0.13, 1, 7), m, s * 0.6, y0 + 1.5, 0.05); arm.rotation.z = s * 0.25; arm.rotation.x = a * 0.3; g.add(arm); });
+    g.add(M(cyl(0.12, 0.14, 0.2, 8), m, 0, y0 + 2.1)); g.add(M(new THREE.SphereGeometry(0.3, 10, 8), m, 0, y0 + 2.4));
+    const sw = M(box(0.12, 1.8, 0.06), mat(0x9a968e), 0.62, y0 + 1.1, 0.25); g.add(sw); g.add(M(box(0.45, 0.08, 0.1), mat(0x9a968e), 0.62, y0 + 1.95, 0.25));
+    if (R() < 0.5) g.add(M(box(1.2, 0.04, 0.5), moss(), -0.3, 0.2, 0.62));
+    return g;
+  },
+  altar() {
+    const g = new THREE.Group();
+    g.add(M(box(3.4, 0.25, 2.1), darkStone(), 0, 0.12)); g.add(M(box(3.0, 0.2, 1.8), stoneV(), 0, 0.35));          // gradas
+    g.add(M(box(2.6, 0.9, 1.3), stoneV(), 0, 0.9)); [-1.15, 1.15].forEach(x => g.add(M(box(0.3, 0.95, 1.4), darkStone(), x, 0.92)));
+    g.add(M(box(3.0, 0.2, 1.7), mat(0x6a6058), 0, 1.45)); g.add(M(box(2.8, 0.06, 1.5), mat(0x58504a), 0, 1.58));
+    g.add(M(box(1.2, 0.03, 1.55), mat(0x7a1e24, { roughness: 1 }), 0, 1.62)); g.add(M(box(1.2, 0.55, 0.03), mat(0x7a1e24, { roughness: 1 }), 0, 1.35, 0.86));
+    g.add(M(box(0.5, 0.04, 0.06), mat(0xd0a040, { metalness: 0.7, roughness: 0.3 }), 0, 1.4, 0.88));
+    [-1.1, 1.1].forEach(x => { g.add(M(cyl(0.1, 0.12, 0.25, 8), mat(0xd0a040, { metalness: 0.7, roughness: 0.3 }), x, 1.72)); g.add(M(cyl(0.05, 0.05, 0.3, 6), mat(0xf0e8d0), x, 1.98)); });
+    return g;
+  },
+  sarcofago() {
+    const g = new THREE.Group(), m = stoneV();
+    g.add(M(box(1.8, 0.2, 3.5), darkStone(), 0, 0.1));
+    g.add(M(box(1.5, 0.9, 3.2), m, 0, 0.65)); [[-0.76, 0], [0.76, 0]].forEach(([x]) => { for (let i = -1; i <= 1; i++) g.add(M(box(0.04, 0.5, 0.7), darkStone(), x, 0.65, i * 1)); });
+    const lid = new THREE.Group(); lid.position.y = 1.1;
+    lid.add(M(box(1.65, 0.16, 3.35), mat(0x8a847a), 0, 0.08)); lid.add(M(box(1.3, 0.14, 3.0), mat(0x928c82), 0, 0.23));
+    // figura yacente en relieve
+    const f = mat(0x9a948a); lid.add(M(new THREE.SphereGeometry(0.24, 8, 6), f, 0, 0.38, -1.15)); lid.add(M(box(0.6, 0.18, 1.5), f, 0, 0.37, -0.15)); lid.add(M(box(0.4, 0.14, 0.7), f, 0, 0.35, 0.85));
+    lid.add(M(box(0.1, 0.08, 1.2), mat(0xa8a49c), 0, 0.5, -0.2));
+    lid.rotation.y = (R() - 0.5) * 0.08; g.add(lid);
+    return g;
+  },
+  fuente() {
+    const g = new THREE.Group(), water = mat(0x3a7aa0, { roughness: 0.08, transparent: true, opacity: 0.85, emissive: 0x0a2030 });
+    const ring = M(cyl(1.55, 1.65, 0.7, 20, 1), stoneV(), 0, 0.35); g.add(ring);
+    g.add(M(new THREE.TorusGeometry(1.55, 0.12, 6, 24), mat(0x8a847a), 0, 0.72)).children; g.children[1].rotation.x = Math.PI / 2;
+    g.add(M(cyl(1.42, 1.42, 0.05, 20), water, 0, 0.62));
+    g.add(M(cyl(0.22, 0.32, 1.5, 10), stoneV(), 0, 1.2)); g.add(M(cyl(0.75, 0.3, 0.3, 14), stoneV(), 0, 1.95)); g.add(M(cyl(0.68, 0.68, 0.04, 14), water, 0, 2.08));
+    g.add(M(cyl(0.12, 0.18, 0.5, 8), stoneV(), 0, 2.3)); g.add(M(new THREE.SphereGeometry(0.18, 8, 6), stoneV(), 0, 2.6));
+    const jet = M(cyl(0.04, 0.09, 0.55, 6), mat(0xbfe6ff, { transparent: true, opacity: 0.6, emissive: 0x2a6a9a, roughness: 0.05 }), 0, 2.95); jet.userData.spin = true; g.add(jet);
+    return g;
+  },
+  mausoleo() {
+    const g = new THREE.Group(), m = stoneV();
+    g.add(M(box(3.8, 0.3, 3.8), darkStone(), 0, 0.15)); g.add(M(box(3.5, 0.2, 3.9), darkStone(), 0, 0.4));          // escalinata
+    g.add(M(box(3.2, 2.4, 3.2), m, 0, 1.7));
+    [[-1.45, 1.62], [1.45, 1.62], [-1.45, -1.62], [1.45, -1.62]].forEach(([x, z]) => g.add(M(cyl(0.2, 0.24, 2.5, 10), mat(0x9a948a), x, 1.75, z)));  // columnas
+    g.add(M(box(3.5, 0.3, 3.5), mat(0x6a645a), 0, 3.05));                                                                   // cornisa
+    const r = M(new THREE.ConeGeometry(2.4, 1.1, 4), darkStone(), 0, 3.75); r.rotation.y = Math.PI / 4; g.add(r);
+    g.add(M(box(1.1, 1.8, 0.1), mat(0x1a1612), 0, 1.4, 1.62)); g.add(M(box(1.3, 0.18, 0.14), mat(0x6a645a), 0, 2.38, 1.63));  // puerta y dintel
+    g.add(M(box(0.8, 0.25, 0.04), mat(0x5a544a), 0, 2.7, 1.62));                                                           // lápida del nombre
+    g.add(M(box(0.12, 0.6, 0.12), stoneV(), 0, 4.5)); g.add(M(box(0.45, 0.12, 0.12), stoneV(), 0, 4.6));                    // cruz
+    if (R() < 0.6) g.add(M(box(1.4, 0.05, 1), moss(), -0.9, 3.25, 0.6));
+    return g;
+  },
+  cabana() {
+    const g = new THREE.Group(), dw = darkWood(), w = wood();
+    [[-1.3, -1.3], [1.3, -1.3], [-1.3, 1.3], [1.3, 1.3]].forEach(([x, z]) => g.add(M(cyl(0.12, 0.14, 1.3, 6), dw, x, 0.65, z)));   // pilotes
+    g.add(M(box(3.3, 0.15, 3.3), dw, 0, 1.25));                                                                                       // plataforma
+    for (let i = 0; i < 7; i++) g.add(M(box(3.0, 0.32, 0.28), i % 2 ? w : mat(0x5e4228), 0, 1.5 + i * 0.3, -1.4));                 // troncos
+    [[-1.4, 0], [1.4, 0]].forEach(([x]) => { for (let i = 0; i < 7; i++) g.add(M(box(0.28, 0.32, 2.9), i % 2 ? w : mat(0x5e4228), x, 1.5 + i * 0.3, 0)); });
+    for (let i = 0; i < 7; i++) { [-1, 1].forEach(s => g.add(M(box(0.9, 0.32, 0.28), i % 2 ? w : mat(0x5e4228), s * 0.95, 1.5 + i * 0.3, 1.4))); }
+    g.add(M(box(1.0, 1.6, 0.06), mat(0x1a120a), 0, 2.1, 1.42));                                                                       // puerta
+    const roof = mat(0x8a7a4a, { roughness: 1 });
+    [-1, 1].forEach(s => { const p = M(box(3.6, 0.12, 2.3), roof, 0, 4.0, s * 0.85); p.rotation.x = s * 0.62; g.add(p); });
+    g.add(M(cyl(0.08, 0.08, 3.7, 6), dw, 0, 4.55, 0)).children; g.children[g.children.length - 1].rotation.z = Math.PI / 2;
+    const ch = M(box(0.4, 1.1, 0.4), stoneV(), 1.1, 4.3, -0.9); g.add(ch);
+    return g;
+  },
+  cristales() {
+    const g = new THREE.Group(), m = mat(0x7ad8ff, { emissive: 0x1a6a9a, emissiveIntensity: 0.9, metalness: 0.1, roughness: 0.08, transparent: true, opacity: 0.86 });
+    const inner = mat(0xd8f6ff, { emissive: 0x6ad0ff, emissiveIntensity: 1.4 });
+    g.add(M(new THREE.DodecahedronGeometry(0.9, 0), mat(0x5a564e), 0, 0.2)); g.children[0].scale.y = 0.4;                                 // roca madre
+    const n = 5 + Math.floor(R() * 3);
+    for (let i = 0; i < n; i++) {
+      const h = 0.7 + R() * 1.3, a = i / n * Math.PI * 2 + R() * 0.5, d = i === 0 ? 0 : 0.35 + R() * 0.3;
+      const cr = new THREE.Group(); cr.position.set(Math.cos(a) * d, 0.3, Math.sin(a) * d);
+      const body = M(new THREE.CylinderGeometry(0.16 + R() * 0.08, 0.2 + R() * 0.08, h, 6), m, 0, h / 2); cr.add(body);
+      cr.add(M(new THREE.ConeGeometry(0.2 + R() * 0.06, 0.35, 6), m, 0, h + 0.17));
+      cr.add(M(new THREE.CylinderGeometry(0.05, 0.06, h * 0.8, 6), inner, 0, h * 0.45));                                                  // núcleo que brilla
+      cr.rotation.set((R() - 0.5) * 0.7 * (d ? 1 : 0.2), R() * 6, (R() - 0.5) * 0.7 * (d ? 1 : 0.2)); g.add(cr);
+    }
+    g.userData.glow = { color: 0x6ad0ff, power: 0.5, y: 1 };
+    return g;
+  },
+  setas() {
+    const g = new THREE.Group(), stem = mat(0xe8e0cc), gills = mat(0xd8c8b0);
+    const caps = [0x8a3ab0, 0x6a2a9a, 0xa04ac0];
+    const n = 4 + Math.floor(R() * 3);
+    for (let i = 0; i < n; i++) {
+      const s = i === 0 ? 1 : 0.35 + R() * 0.45, a = R() * 6.28, d = i === 0 ? 0 : 0.6 + R() * 0.7, x = Math.cos(a) * d, z = Math.sin(a) * d, h = 1.4 * s;
+      const st = M(new THREE.CylinderGeometry(0.1 * s * 2, 0.16 * s * 2, h, 8), stem, x, h / 2, z); st.rotation.z = (R() - 0.5) * 0.25; g.add(st);
+      const cap = M(new THREE.SphereGeometry(0.85 * s, 14, 7, 0, Math.PI * 2, 0, Math.PI / 2), mat(caps[i % 3], { emissive: 0x2a0a40, emissiveIntensity: 0.9 }), x, h, z); cap.scale.y = 0.75; g.add(cap);
+      g.add(M(new THREE.CircleGeometry(0.82 * s, 14), gills, x, h + 0.01, z)).children; g.children[g.children.length - 1].rotation.x = Math.PI / 2;
+      for (let k = 0; k < 4; k++) { const b = k / 4 * 6.28 + R(); g.add(M(new THREE.SphereGeometry(0.07 * s + 0.03, 5, 4), mat(0xf0e0ff, { emissive: 0x8a5aff, emissiveIntensity: 1.2 }), x + Math.cos(b) * 0.5 * s, h + 0.35 * s, z + Math.sin(b) * 0.5 * s)); }
+    }
+    g.userData.glow = { color: 0xb070ff, power: 0.4, y: 1.2 };
+    return g;
+  }
+});

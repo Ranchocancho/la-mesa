@@ -473,6 +473,7 @@ export function createBoard3D(host, opts) {
       }
     }
     // Desniveles: paredes de roca entre casillas de distinta altura (riscos, tarimas, fosos)
+    const cliffEdges = []; // Hito 83: para rematar los desniveles (borde de piedra arriba y sombra abajo)
     if (hasElev(g)) {
       const pos = [], uv = [], h = CELL / 2, low = (c, r) => (c < 0 || r < 0 || c >= g.cols || r >= g.rows) ? Math.min(0, minE) : elevAt(g, c, r);
       let minE = 0; for (const v of Object.values(g.elev)) minE = Math.min(minE, +v || 0);
@@ -487,6 +488,7 @@ export function createBoard3D(host, opts) {
           // arista compartida, vista desde la casilla vecina (la más baja)
           const A = dc === 0 ? [x - h, z + dr * h] : [x + dc * h, z - h], B = dc === 0 ? [x + h, z + dr * h] : [x + dc * h, z + h];
           const [P, Q] = (dr === -1 || dc === 1) ? [A, B] : [B, A];
+          cliffEdges.push({ c, r, dc, dr, top: y1, low: y0, out, nc, nr });
           const L = CELL / 4;
           pos.push(P[0], y0, P[1], Q[0], y0, Q[1], Q[0], y1, Q[1], P[0], y0, P[1], Q[0], y1, Q[1], P[0], y1, P[1]);
           const u0 = (P[0] + P[1]) / L, u1 = (Q[0] + Q[1]) / L, v0 = y0 / L, v1 = y1 / L;
@@ -497,10 +499,6 @@ export function createBoard3D(host, opts) {
         const cg = new THREE.BufferGeometry(); cg.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3)); cg.setAttribute("uv", new THREE.Float32BufferAttribute(uv, 2)); cg.computeVertexNormals();
         const base = terrainMat("muroroca"), cm = new THREE.MeshStandardMaterial({ map: base.map, bumpMap: base.bumpMap || null, bumpScale: 0.6, color: 0xcbb9a0, emissive: 0x241c14, roughness: 1, metalness: 0, side: THREE.DoubleSide });
         const cliff = new THREE.Mesh(cg, cm); cliff.castShadow = cliff.receiveShadow = true; grp.add(cliff);
-        // Remate: una arista clara en lo alto de cada desnivel, para leerlo de un vistazo
-        const rim = []; for (let i = 0; i < pos.length; i += 18) { rim.push(pos[i + 15], pos[i + 16] + 0.03, pos[i + 17], pos[i + 6], pos[i + 7] + 0.03, pos[i + 8]); }
-        const rg = new THREE.BufferGeometry(); rg.setAttribute("position", new THREE.Float32BufferAttribute(rim, 3));
-        grp.add(new THREE.LineSegments(rg, new THREE.LineBasicMaterial({ color: 0xf3dca6, transparent: true, opacity: 0.55 })));
       }
     }
     // Muros: bloque de piedra y caras de muro de KayKit hacia las casillas transitables
@@ -539,6 +537,40 @@ export function createBoard3D(host, opts) {
       const sc = new THREE.Vector3(1, wh, 1);
       faces.forEach(([x, z, rot, nc, nr, fy], i) => { fm.setMatrixAt(i, m4.compose(v.set(x, fy, z), q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), rot), sc)); shroudable.push({ im: fm, i, c: nc, r: nr, m: m4.clone() }); });
       fm.castShadow = fm.receiveShadow = true; grp.add(fm);
+    }
+    // Hito 83: remates. Un borde de piedra clara en lo alto de cada desnivel y de cada muro que da a suelo
+    // (las salas y las tarimas se leen desde cualquier ángulo) y una sombra suave al pie (asienta muros y riscos).
+    {
+      const lips = [], aos = [], hh = CELL / 2;
+      cliffEdges.forEach(e => {
+        lips.push({ x: cx(e.c) + e.dc * (hh - 0.12), z: cz(e.r) + e.dr * (hh - 0.12), y: e.top + 0.05, dc: e.dc, dr: e.dr, c: e.c, r: e.r });
+        if (!e.out) aos.push({ x: cx(e.c) + e.dc * (hh + 0.45), z: cz(e.r) + e.dr * (hh + 0.45), y: e.low + 0.04, dc: e.dc, dr: e.dr, c: e.nc, r: e.nr });
+      });
+      for (const [kind, list] of Object.entries(byType)) {
+        if (kind === "seto") continue;
+        const hgt = 4 * wh;
+        list.forEach(([c, r]) => [[0, -1], [1, 0], [0, 1], [-1, 0]].forEach(([dc, dr]) => {
+          const nc = c + dc, nr = r + dr;
+          if (nc < 0 || nr < 0 || nc >= g.cols || nr >= g.rows || isWallIn(g, nc, nr)) return;
+          const base = elevAt(g, c, r) * YS, fl = elevAt(g, nc, nr) * YS;
+          lips.push({ x: cx(c) + dc * (hh - 0.12), z: cz(r) + dr * (hh - 0.12), y: base + hgt + 0.05, dc, dr, c: nc, r: nr });
+          aos.push({ x: cx(c) + dc * (hh + 0.45), z: cz(r) + dr * (hh + 0.45), y: fl + 0.04, dc, dr, c: nc, r: nr });
+        }));
+      }
+      const Y = new THREE.Vector3(0, 1, 0);
+      if (lips.length) {
+        const lm = new THREE.InstancedMesh(new THREE.BoxGeometry(CELL + 0.02, 0.12, 0.26), new THREE.MeshStandardMaterial({ color: 0xcfc2a8, roughness: 0.85, emissive: 0x2a2218 }), lips.length);
+        lips.forEach((L, i) => { lm.setMatrixAt(i, m4.compose(v.set(L.x, L.y, L.z), q.setFromAxisAngle(Y, L.dc ? Math.PI / 2 : 0), one)); shroudable.push({ im: lm, i, c: L.c, r: L.r, m: m4.clone() }); });
+        lm.castShadow = false; lm.receiveShadow = true; lm.raycast = () => {}; grp.add(lm);
+      }
+      if (aos.length) {
+        const gc = document.createElement("canvas"); gc.width = 4; gc.height = 64; const gx = gc.getContext("2d"), gr = gx.createLinearGradient(0, 0, 0, 64);
+        gr.addColorStop(0, "#fff"); gr.addColorStop(0.35, "#777"); gr.addColorStop(1, "#000"); gx.fillStyle = gr; gx.fillRect(0, 0, 4, 64);
+        const pg = new THREE.PlaneGeometry(CELL, 0.9); pg.rotateX(-Math.PI / 2);
+        const am = new THREE.InstancedMesh(pg, new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.42, alphaMap: new THREE.CanvasTexture(gc), depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 }), aos.length);
+        aos.forEach((A, i) => { am.setMatrixAt(i, m4.compose(v.set(A.x, A.y, A.z), q.setFromAxisAngle(Y, Math.atan2(A.dc, A.dr)), one)); });
+        am.raycast = () => {}; am.renderOrder = 1; grp.add(am);
+      }
     }
     // Escenografía
     for (const p of g.props || []) { try {

@@ -957,3 +957,8 @@ A partir de la auditoría de diseño comparada con Baldur's Gate 3:
 - **Trampas con estado** inequívoco: **oculta** (solo el máster: anillo violeta discontinuo y 👁), **descubierta** (anillo ámbar que late y ⚠) y **disparada** (anillo gris, la pieza apagada y ✖).
 - **Cobertura:** cada objeto que da cobertura lleva un escudo pequeño, medio relleno (cobertura media, +2 a la CA y a las salvaciones de Destreza) o de tres cuartos (+5). En 2D, al pasar el ratón lo explica.
 - Arreglo: las animaciones del escenario (agua, lava, piezas que giran) se acumulaban cada vez que cambiaba la mesa; ahora se tiran con el escenario viejo.
+
+## Hito 83 · Desniveles, muros y piezas con más detalle
+
+- **Desniveles y muros rematados:** en lo alto de cada tarima, risco o foso, y de cada muro que da a suelo, un borde de piedra clara (sustituye a la línea fina, que casi no se veía); al pie, una sombra suave que asienta muros y riscos en el suelo. Las salas y los desniveles se leen desde cualquier ángulo, con muros bajos o altos. Lo que está bajo la niebla de guerra sigue oculto.
+- **Piezas hechas por código con más detalle**, para que no desentonen junto a los modelos KayKit: estatua (zócalo con moldura, brazos, espada, a veces musgo), altar (gradas, paño, candelabros), sarcófago (figura yacente en la tapa), fuente (dos tazas, borde y chorro), mausoleo (escalinata, columnas, cornisa, dintel y cruz), cabaña (troncos, pilotes, tejado a dos aguas y chimenea), cristales (roca madre y núcleo que brilla) y setas (corros de tamaños distintos con esporas que brillan). Cada copia sale un poco distinta.
