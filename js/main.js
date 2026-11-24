@@ -1,6 +1,7 @@
 // Arranque: modo (nube o demostración), cabecera, navegación y aviso de lo que muestra el máster.
 import { store, useLocal } from "./core/store.js";
 import { pendingCount } from "./core/propuestas.js";
+import { VERSION } from "./version.js";
 import { session, currentUser, realUser, isDM, isEditor, viewingAs, playingSelf, runsTable, ROLE } from "./core/session.js";
 import { visibleLive, sessionName, presentationFor, presentationTitle } from "./core/sesiones.js";
 import { presence } from "./core/presence.js";
@@ -57,7 +58,7 @@ function topbar(state) {
   const pf0 = presentationFor(state), onBoard = pf0 && pf0.type === "tactical" && state.board ? new Set((state.tokens || []).filter(t => t.kind === "pc" && t.owner).map(t => t.owner)) : null;
   const players = state.users.filter(u => u.role === "player" && (!onBoard || onBoard.has(u.id) || u.id === session.viewAs()));
   return `<header class="top">
-    <div class="brand"><b>La Mesa</b><span>${esc(state.campaign.name)} · ${live ? `${esc(sessionName(live))} en curso · ${esc(clockShort(clockOf(state)))}` : "sin partida"}${cloudMode ? "" : " · demostración"}</span></div>
+    <div class="brand"><b>La Mesa</b><span>${esc(state.campaign.name)} · ${live ? `${esc(sessionName(live))} en curso · ${esc(clockShort(clockOf(state)))}` : "sin partida"}${cloudMode ? "" : " · demostración"} · <small class="ver" title="Versión del código cargada en este navegador">v${VERSION}</small></span></div>
     ${me ? `<nav class="nav" aria-label="Secciones">${ROUTES.filter(x => !x.dmOnly || isDM(state)).map(x => `<a href="#${x.id}" ${x.id === r ? 'aria-current="page"' : ""} ${x.dmOnly ? 'class="dmnav" title="Solo el máster"' : ""}>${x.label}${x.id === "partida" && live ? ` <i class="livedot" title="Partida en curso"></i>` : ""}${x.id === "personajes" && isDM(state) && pendingCount(state) ? ` <i class="pendot" title="Cambios de fichas por revisar">${pendingCount(state)}</i>` : ""}${x.soon ? ` <span class="soon">· hito ${x.soon}</span>` : ""}</a>`).join("")}</nav>
     ${syncHTML(state)}
     ${isDM(state) ? `<button class="btn small" id="histbtn" title="Historial de cambios: quién cambió qué, y deshacer">🕘</button>` : ""}
@@ -176,6 +177,25 @@ import("./core/viajes.js").then(m => {
   m.watchTravel();
 });
 import("./core/cronica.js").then(m => m.watchChronicle());
+// Hito 91: ¿tiene este navegador los archivos de la última versión subida? (GitHub Pages guarda en caché unos minutos)
+async function checkVersion() {
+  try {
+    const r = await fetch("version.json?t=" + Date.now(), { cache: "no-store" }); if (!r.ok) return;
+    const { v } = await r.json();
+    if (+v > VERSION && !document.querySelector(".verbar")) {
+      const b = document.createElement("div"); b.className = "verbar";
+      b.innerHTML = `Hay una versión nueva de La Mesa (v${v}); este navegador sigue con la v${VERSION}. <button class="btn small gold">Recargar sin caché</button>`;
+      b.querySelector("button").onclick = async () => {
+        // vuelve a pedir al servidor todos los módulos ya cargados, sin caché, y recarga
+        const urls = performance.getEntriesByType("resource").map(e => e.name).filter(u => u.startsWith(location.origin) && /\.(js|css|json)(\?|$)/.test(u));
+        await Promise.all(urls.map(u => fetch(u, { cache: "reload" }).catch(() => null)));
+        location.reload();
+      };
+      document.body.appendChild(b);
+    }
+  } catch (e) { /* sin red: nada */ }
+}
+checkVersion(); setInterval(checkVersion, 5 * 60 * 1000);
 import("./core/ocultos.js").then(m => m.watchHidden());
 import("./core/historial.js").then(m => m.watchHistory());
 import("./core/reacciones.js").then(m => m.watchReactions());

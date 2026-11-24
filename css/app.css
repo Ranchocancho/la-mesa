@@ -2790,3 +2790,6 @@ button.hbr:hover{box-shadow:0 0 0 1px var(--react,#c9a0ff)}
 .boardsvg .trapbadge text{font-size:9px;text-anchor:middle;fill:#1a1410;font-weight:800}
 .boardsvg .covbadge path{fill:rgba(20,16,12,.85);stroke:#d8cfc0;stroke-width:1}.boardsvg .covbadge .covfill{fill:#d8cfc0;stroke:none}
 @media (prefers-reduced-motion:reduce){.boardsvg .hz,.boardsvg .trap-descubierta .trapring{animation:none}}
+/* Hito 91: aviso de versión nueva y número de versión */
+.brand .ver{opacity:.55;font-size:10px;letter-spacing:.05em}
+.verbar{position:fixed;left:50%;bottom:14px;transform:translateX(-50%);z-index:200;background:#2a1f10;border:1px solid #d6aa4e;color:#f4ecd8;padding:8px 12px;border-radius:10px;box-shadow:0 8px 30px #000a;display:flex;gap:10px;align-items:center;font-size:13px}

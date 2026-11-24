@@ -87,9 +87,9 @@ function draw() {
       <p class="lead">Prepara los combates y situaciones tácticas de cada lugar, o deja escenas genéricas en la biblioteca (una pelea de taberna, una emboscada en el camino…) para cargarlas al momento si la partida se tuerce.</p>
       <p class="note">Elige una escena a la izquierda para editarla. Durante la partida se cargan desde el panel del máster, en la pestaña Partida.</p>
       <div class="panel" style="margin-top:16px"><h2 class="sec">Escenas de ejemplo</h2>
-        <p style="margin:0 0 10px">La torre del hechicero (3 plantas, trampas ocultas y un cofre), pelea con enanos en la taberna de la Jarra Rota, el cementerio de la colina con no muertos y una emboscada goblin en el bosque. Todas con criaturas del SRD y sus acciones reales.</p>
+        <p style="margin:0 0 10px">Diez escenas listas para jugar: la cripta del nigromante, la cueva del río negro con su troll, la torre del hechicero (4 plantas), la taberna de la Jarra Rota y su callejón (enlazados), el cementerio de la colina, la emboscada en el bosque, la forja bajo el volcán, el muelle de los contrabandistas y la cabaña de la saga del pantano. Todas con criaturas del SRD y sus acciones reales.</p>
         <button class="btn gold small" id="renew">🔄 Renovar escenas de ejemplo</button>
-        <p class="note" style="margin:8px 0 0">Quita las cuatro antiguas (taberna, camino, cripta y puente, con sus «enemigos» genéricos) si siguen sin tocar, añade las nuevas y actualiza las de ejemplo a su versión equilibrada. Tus escenas no se tocan.</p></div></div></div>`}</section>
+        <p class="note" style="margin:8px 0 0">Añade las que te falten y actualiza las de ejemplo a su última versión (si no las has cambiado). Tus escenas no se tocan.</p></div></div></div>`}</section>
     <aside class="scenes-props" ${openId ? "" : "hidden"}></aside>`;
   bindList();
   $$("[data-open]", el).forEach(b => b.onclick = () => { openId = b.dataset.open; sel = null; placing = false; board = null; draw(); });

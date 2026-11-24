@@ -375,6 +375,7 @@ export function createBoard3D(host, opts) {
     if (shroud && atmo.shroud.length) { shroud.push(...atmo.shroud); fogSig = ""; }
   }
   host.prepend(renderer.domElement);
+  renderer.domElement.__b3d = () => ({ toks, camera, THREE }); // para las pruebas automáticas
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(42, 1, 0.5, 600);
   const controls = new OrbitControls(camera, renderer.domElement);
