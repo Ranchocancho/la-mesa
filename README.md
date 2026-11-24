@@ -912,3 +912,27 @@ A partir de la auditoría de diseño comparada con Baldur's Gate 3:
   - Al soltarlo sobre un lugar (que se ilumina al pasar por encima), **entra**: la bandera se prende en el círculo del lugar, que lleva un anillo rojo, y su nombre muestra «⚑».
   - La barra del máster dice dónde está («El grupo está en Puerto Salobre» o «de camino»), con «↶ Deshacer movimiento», que lo devuelve adonde estaba y quita el paso de la ruta (también sin sesión abierta), y «🚪 Salir de…», que lo deja a las puertas.
   - En la mesa se lee «El grupo · en Puerto Salobre».
+
+## Hito 77 · Roleplay compacto, distancia y días de viaje, Mando sin huecos
+- **Panel de Roleplay del máster mucho más corto** (de unos 2000 px a unos 850):
+  - La sesión en curso ocupa una línea de botones (🎲 Tirada · 🎁 Objeto · 🕰 Libre · ⏹ Cerrar) con «📍 ¿Dónde estáis?» debajo. El panel de tiempo libre solo aparece mientras hay tiempo libre.
+  - Ahora va primero «Mostrar al grupo»: Anteriormente, Mapa, Cronología y las regiones en pastillas, y los lugares en dos columnas. Al tocar un lugar salen sus contenidos para mostrarlos. «✕» quita lo que se muestra.
+  - Dirección: el reloj en una línea y las escenas preparadas más apretadas.
+  - Escena táctica: un desplegable con todas las escenas (por lugar) y «Cargar».
+  - Los textos de ayuda pasan a las descripciones emergentes, y cada panel se pliega desde su título.
+- **Las rutas de todas las sesiones en rojo**: la de hoy, más marcada.
+- **Distancia y días de viaje**: cada ruta lleva sus km y días en su etiqueta. Los días salen del «Ritmo de viaje» del SRD 5.2.1 (por día: lento 27 km, normal 36 km, rápido 45 km), contando en línea recta entre paradas. La barra del grupo muestra lo de hoy y el total, la escala del mapa (📏 km de ancho; 600 si no se dice) y el ritmo. En la Crónica, cada sesión lleva su «🧭 km · días» y los totales incluyen la distancia.
+- **Mando sin huecos**: el estado del grupo a lo ancho y el resto en columnas que se rellenan de arriba abajo.
+
+## Hito 78 · Invitados por correo, jugar como jugador e historial para deshacer
+
+- **Invitados** (Inicio → Invitados, solo el dueño del mundo): una lista de correos, cada uno con su papel (**Jugador** o **Máster**). Con el enlace solo entran las cuentas de Google de esa lista; quien no está invitado ve «No estás invitado a este mundo». Lo comprueba Firestore (`invites/{correo}`), no solo la app. Quien ya era miembro sigue dentro. El dueño puede cambiar el papel de cada miembro y **sacarlo del mundo** (✕, dos pulsaciones): deja de ser miembro y se borra su invitación. **Hay que volver a publicar `firestore.rules`.**
+- **🎲 Jugar como jugador / 👑 Volver a máster** (barra superior, administrador y másteres): ves y juegas exactamente como un jugador, con tu propio personaje (asígnatelo en Inicio → Personajes; ahora la lista incluye al administrador y a los másteres). Tu permiso de máster sigue ahí: tu navegador sigue aplicando lo automático (efectos, reacciones, duraciones, crónica…). Escenas y Mando se ocultan hasta que vuelves.
+- **🕘 Historial de cambios** (barra superior, máster): quién cambió qué y a qué hora, tuyo y de los jugadores, con buscador. «↶ Volver a antes de esto» deja como estaban solo las cosas que tocó ese cambio (una ficha, una figura, un lugar, una invitación…); si después alguien volvió a tocar lo mismo, avisa antes. Deshacer queda también en el historial, así que se puede deshacer lo deshecho. Guarda los últimos 80 cambios desde que abres la página (lo que se arrastra o se escribe seguido cuenta como uno). No recupera imágenes borradas y se olvida al recargar.
+- Demostración: la segunda pestaña parte del mismo mundo que la primera.
+
+## Hito 79 · Quién golpea a quién
+
+- **En la figura** (3D y 2D): al recibir daño retrocede alejándose de quien golpea, tiembla más y destella en rojo; si falla el ataque, se aparta de lado (esquiva); al curarse, destello verde. En los críticos tiembla un poco la cámara. El número de daño sale del color de su tipo (los físicos, rojo).
+- **En la tira de iniciativa**: el retrato del golpeado tiembla, su barra baja en dos tiempos (queda un trozo claro de lo perdido que se vacía) y aparece 6 s una etiqueta «⚔ Mirra −8» (o «✚ Osric +4» al curar); el retrato de quien golpea o cura brilla a la vez. Al pasar el ratón: «Último golpe: Mirra, 8 cortante (ronda 2)» hasta que acaba la ronda.
+- Sale de las tiradas compartidas: todos ven lo mismo. Si el máster cambia los PG a mano dice «Máster»; si quien golpea está oculto para ti, «?».

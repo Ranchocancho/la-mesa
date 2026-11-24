@@ -1,11 +1,11 @@
 // Arranque: modo (nube o demostración), cabecera, navegación y aviso de lo que muestra el máster.
 import { store, useLocal } from "./core/store.js";
 import { pendingCount } from "./core/propuestas.js";
-import { session, currentUser, realUser, isDM, isEditor, viewingAs, ROLE } from "./core/session.js";
+import { session, currentUser, realUser, isDM, isEditor, viewingAs, playingSelf, runsTable, ROLE } from "./core/session.js";
 import { visibleLive, sessionName, presentationFor, presentationTitle } from "./core/sesiones.js";
 import { presence } from "./core/presence.js";
 import { dmOnline } from "./core/avisos.js";
-import { $, esc, avatar } from "./core/ui.js";
+import { $, esc, avatar, toast } from "./core/ui.js";
 import * as inicio from "./views/inicio.js";
 import * as partida from "./views/partida.js";
 import * as mundo from "./views/mundo.js";
@@ -44,7 +44,8 @@ function ready() {
 function route() {
   const h = (location.hash || "").slice(1).split("/")[0];
   if (!currentUser(store.get())) return "inicio";
-  return ROUTES.some(r => r.id === h) ? h : "inicio";
+  const def = ROUTES.find(r => r.id === h);
+  return def && (!def.dmOnly || isDM(store.get())) ? h : "inicio";
 }
 
 function topbar(state) {
@@ -59,11 +60,14 @@ function topbar(state) {
     <div class="brand"><b>La Mesa</b><span>${esc(state.campaign.name)} · ${live ? `${esc(sessionName(live))} en curso · ${esc(clockShort(clockOf(state)))}` : "sin partida"}${cloudMode ? "" : " · demostración"}</span></div>
     ${me ? `<nav class="nav" aria-label="Secciones">${ROUTES.filter(x => !x.dmOnly || isDM(state)).map(x => `<a href="#${x.id}" ${x.id === r ? 'aria-current="page"' : ""} ${x.dmOnly ? 'class="dmnav" title="Solo el máster"' : ""}>${x.label}${x.id === "partida" && live ? ` <i class="livedot" title="Partida en curso"></i>` : ""}${x.id === "personajes" && isDM(state) && pendingCount(state) ? ` <i class="pendot" title="Cambios de fichas por revisar">${pendingCount(state)}</i>` : ""}${x.soon ? ` <span class="soon">· hito ${x.soon}</span>` : ""}</a>`).join("")}</nav>
     ${syncHTML(state)}
-    ${isEditor(state) && players.length ? `<label class="viewas">Ver como<select id="viewas" class="btn small"><option value="">${esc(ROLE[real.role])}</option>${players.map(p => `<option value="${p.id}" ${va && va.id === p.id ? "selected" : ""}>${esc(p.name)}</option>`).join("")}</select></label>` : ""}
+    ${isDM(state) ? `<button class="btn small" id="histbtn" title="Historial de cambios: quién cambió qué, y deshacer">🕘</button>` : ""}
+    ${isEditor(state) ? `<button class="btn small playself" id="playself" title="${playingSelf(state) ? "Vuelves a ver y controlar todo como máster" : "Ves y juegas exactamente como un jugador, con tu personaje; tu permiso de máster sigue ahí"}">${playingSelf(state) ? "👑 Volver a máster" : "🎲 Jugar como jugador"}</button>` : ""}
+    ${isEditor(state) && !playingSelf(state) && players.length ? `<label class="viewas">Ver como<select id="viewas" class="btn small"><option value="">${esc(ROLE[real.role])}</option>${players.map(p => `<option value="${p.id}" ${va && va.id === p.id ? "selected" : ""}>${esc(p.name)}</option>`).join("")}</select></label>` : ""}
     <div class="me">${avatar(real)}<div>${esc(real.name)}<small>${esc(ROLE[real.role] || "Jugador")}</small></div>
       ${cloudMode ? `<button class="btn small" id="campaigns">Mundos</button>` : `<button class="btn small" id="switchme">Cambiar</button>`}</div>` : ""}
   </header>
-  ${va ? `<div class="viewbar">Estás viendo la app como <b>${esc(va.name)}</b>: ves exactamente lo que ve este jugador. <button class="btn small" id="unview">Volver a mi vista</button></div>` : ""}`;
+  ${va && va.self ? `<div class="viewbar selfplay">${(c => c ? `Juegas como jugador con <b>${esc(c.name)}</b>` : `Juegas como jugador <b>sin personaje</b> (asígnate uno en Inicio → Personajes)`)(state.characters.find(c => c.owner === va.id))}. Sigues siendo ${esc((ROLE[real.role] || "máster").toLowerCase())}: puedes volver cuando haga falta arreglar algo. <button class="btn small" id="unplay">👑 Volver a máster</button></div>`
+    : va ? `<div class="viewbar">Estás viendo la app como <b>${esc(va.name)}</b>: ves exactamente lo que ve este jugador. <button class="btn small" id="unview">Volver a mi vista</button></div>` : ""}`;
 }
 
 function render() {
@@ -90,10 +94,17 @@ function render() {
   if (vs) vs.onchange = () => setView(vs.value);
   const uv = $("#unview");
   if (uv) uv.onclick = () => setView(null);
+  const hb = $("#histbtn");
+  if (hb) hb.onclick = () => import("./views/historial.js").then(m => m.openHistory());
+  if (!isDM(state)) import("./views/historial.js").then(m => m.closeHistory());
+  const ps = $("#playself"), up = $("#unplay");
+  const play = on => { session.setPlaySelf(on); current = null; render(); toast(on ? "🎲 Ahora juegas como jugador" : "👑 Vuelves a ser máster"); };
+  if (ps) ps.onclick = () => play(!playingSelf(store.get()));
+  if (up) up.onclick = () => play(false);
   notice();
 }
 
-function setView(id) { session.setViewAs(id); current = null; render(); }
+function setView(id) { session.setViewAs(id); if (!id) session.setPlaySelf(false); current = null; render(); }
 
 // Aviso flotante cuando el máster muestra algo y tú estás en otra sección.
 let dismissed = null;
@@ -129,7 +140,7 @@ presence.subscribe(() => {
 // Inicio del turno de una criatura (recarga, Regeneración, legendarias): si el turno lo pasó un jugador, lo aplica el máster
 let creatureSeq = null;
 store.subscribe(state => {
-  const b = state.board; if (!b || b.combat !== "live" || !isDM(state) || b.seq === creatureSeq) return;
+  const b = state.board; if (!b || b.combat !== "live" || !runsTable(state) || b.seq === creatureSeq) return;
   const t = state.tokens.find(x => x.id === b.turn); if (!t || t.kind === "pc") return;
   creatureSeq = b.seq;
   if (t.ts !== b.seq) queueMicrotask(() => import("./core/criaturas.js").then(m => store.commit("token", st => { const k = st.tokens.find(x => x.id === t.id); if (k) m.onTurnStart(st, k); })));
@@ -165,6 +176,7 @@ import("./core/viajes.js").then(m => {
   m.watchTravel();
 });
 import("./core/cronica.js").then(m => m.watchChronicle());
+import("./core/historial.js").then(m => m.watchHistory());
 import("./core/reacciones.js").then(m => m.watchReactions());
 import("./core/combate.js").then(m => { m.watchAutoResolve(); m.watchAutoDamage(); });
 import("./core/duraciones.js").then(m => m.watchDurations());

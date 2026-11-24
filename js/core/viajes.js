@@ -5,7 +5,7 @@
 // En combate no pregunta: solo el máster lleva al grupo (desde el objeto: «Llevar al grupo»).
 // Como cambiar la mesa solo lo puede hacer el máster en la nube, el jugador deja una petición («travel») que aplica su navegador.
 import { store, uid } from "./store.js";
-import { isDM, currentUser } from "./session.js";
+import { isDM, currentUser, runsTable } from "./session.js";
 import { floorsOf, floorIdx, swapFloor } from "./plantas.js";
 import { travelTo } from "./mesa.js";
 import { isWallT } from "../data/mapas.js";
@@ -66,7 +66,7 @@ function scan() {
   const s = store.get(), g = s.board, me = currentUser(s); if (!g || !me) { last.clear(); return; }
   const dm = isDM(s), where = `${g.scene || ""}|${floorIdx(g)}`;
   // máster: aplica las peticiones de los jugadores
-  if (dm) for (const r of (s.rolls || []).filter(r => r.kind === "travel" && !r.applied && Date.now() - (r.at || 0) < 10 * 60000)) {
+  if (runsTable(s)) for (const r of (s.rolls || []).filter(r => r.kind === "travel" && !r.applied && Date.now() - (r.at || 0) < 10 * 60000)) {
     const ok = (r.scene || null) === (g.scene || null) && r.floor === floorIdx(g) && !combatOn(g);
     store.commit("roll", st => { const x = (st.rolls || []).find(y => y.id === r.id); if (x) { x.applied = true; if (!ok) x.label += " (ya no aplica)"; } });
     if (ok) goLink(r.prop);

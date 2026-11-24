@@ -25,6 +25,7 @@ import { playEffect, EFECTOS } from "./efectos3d.js";
 import { sound, AMBIENTES } from "../core/sonido.js";
 import { floatText, strike, motes } from "./golpes3d.js";
 import { RES_TEXT, RES_COLOR, cells as cellDist } from "../core/golpes.js";
+import { impactOf } from "../core/impactos.js";
 
 const CELL = 4, BASE = "assets/kaykit/";
 const YS = 1.7; // unidades de la escena por metro de altura (3 m de risco ≈ algo más que un muro)
@@ -590,6 +591,7 @@ export function createBoard3D(host, opts) {
   }
   async function dressToken(rec, t) {
     if (rec.mini) { rec.root.remove(rec.mini); rec.mini = null; rec.mixer = null; rec.actions = {}; }
+    rec.fmats = null; rec.nudge = null; rec.flash = null;
     const key = rec.miniKey, size = +t.size || 1;
     let mini;
     if (key !== "peana") {
@@ -678,13 +680,22 @@ export function createBoard3D(host, opts) {
       const others = t.kind === "pc" ? foes : pcs;
       if (others.length) { let mx = 0, mz = 0; others.forEach(o => { mx += cx(o.c); mz += cz(o.r); }); rec.face = Math.atan2(mx / others.length - tx, mz / others.length - tz); }
       const hp = opts.hpOf(t), down = !!hp && hp.cur <= 0;
+      const im = hp && rec.lastHp != null && hp.cur !== rec.lastHp ? impactOf(store.get(), t.id, rec.lastHp, hp.cur) : null;
+      if (im && !im.heal && fxReady) {
+        // Hito 79: retrocede alejándose de quien golpea y destella en rojo (también si cae)
+        const A = im.by && toks.get(im.by);
+        let dx = 0, dz = 1;
+        if (A && A.root && A !== rec) { dx = rec.root.position.x - A.root.position.x; dz = rec.root.position.z - A.root.position.z; const l = Math.hypot(dx, dz) || 1; dx /= l; dz /= l; }
+        else { const a = Math.random() * Math.PI * 2; dx = Math.cos(a); dz = Math.sin(a); }
+        nudge(rec, dx, dz, im.crit ? 1.25 : 0.85, "recoil"); flashRed(rec, im.crit ? 1 : 0.8);
+      } else if (im && im.heal && fxReady) flashRed(rec, 0.6, 0x5cff7a);
       if (hp && rec.lastHp != null && hp.cur < rec.lastHp && !down) {
-        rec.hitT = 1; if (fxReady) sound.play("hit");
+        rec.hitT = 1.25; if (fxReady) sound.play("hit");
         if (rec.mixer) { play(rec, "Hit_A", true); setTimeout(() => { if (!rec.down) play(rec, "Idle"); }, 700); }
       }
       if (hp && rec.lastHp != null && hp.cur !== rec.lastHp && fxReady) {
         const dHp = hp.cur - rec.lastHp, top = rec.root.position.clone(); top.y = 2.6 * (+t.size || 1); top.x += 1.1;
-        setTimeout(() => { if (!disposed) fxList.push(floatText(scene, top, (dHp > 0 ? "+" : "−") + Math.abs(dHp), dHp > 0 ? "#7dff9a" : "#ff5a48", Math.abs(dHp) >= 15, 1.35)); }, 450);
+        setTimeout(() => { if (!disposed) fxList.push(floatText(scene, top, (dHp > 0 ? "+" : "−") + Math.abs(dHp), im ? im.color : dHp > 0 ? "#7dff9a" : "#ff5a48", Math.abs(dHp) >= 15, 1.35)); }, 450);
       }
       if (hp && rec.lastHp != null && hp.cur !== rec.lastHp) {
         rec.fxT = 1; rec.fxHeal = hp.cur > rec.lastHp;
@@ -773,6 +784,32 @@ export function createBoard3D(host, opts) {
     refreshReach();
   }
 
+  // ---------- Hito 79: retroceso, esquiva y destello sobre la figura; temblor de cámara en críticos ----------
+  let camShake = 0;
+  const camOff = new THREE.Vector3();
+  function nudge(rec, dx, dz, amp, kind) { rec.nudge = { dx, dz, amp, t: 0, dur: kind === "dodge" ? 0.55 : 0.45 }; }
+  function flashRed(rec, k, color = 0xff2a1a) {
+    if (!rec.mini) return;
+    if (!rec.fmats) { rec.fmats = []; rec.mini.traverse(o => { const ms = o.material ? (Array.isArray(o.material) ? o.material : [o.material]) : []; ms.forEach(m => { if (m && m.emissive && !rec.fmats.some(x => x.m === m)) rec.fmats.push({ m, c: m.emissive.clone() }); }); }); }
+    rec.flash = { t: 0, dur: 0.35, k, col: new THREE.Color(color) };
+  }
+  function stepHitFx(rec, dt) {
+    if (rec.nudge && rec.mini) {
+      const n = rec.nudge; n.t += dt; const u = Math.min(1, n.t / n.dur), off = Math.sin(u * Math.PI) * n.amp * (1 - u * 0.3);
+      // de mundo a local de la figura (la raíz está girada)
+      const th = rec.root.rotation.y, lx = n.dx * Math.cos(th) - n.dz * Math.sin(th), lz = n.dx * Math.sin(th) + n.dz * Math.cos(th);
+      if (!rec.mini.userData.p0) rec.mini.userData.p0 = rec.mini.position.clone();
+      const p0 = rec.mini.userData.p0;
+      rec.mini.position.set(p0.x + lx * off, p0.y + (n.dur > 0.5 ? 0 : Math.sin(u * Math.PI) * 0.15), p0.z + lz * off);
+      if (u >= 1) { rec.mini.position.copy(p0); rec.nudge = null; }
+    }
+    if (rec.flash && rec.fmats) {
+      const f = rec.flash; f.t += dt; const u = Math.min(1, f.t / f.dur), k = f.k * (1 - u);
+      rec.fmats.forEach(({ m, c }) => m.emissive.copy(c).lerp(f.col, k));
+      if (u >= 1) { rec.fmats.forEach(({ m, c }) => m.emissive.copy(c)); rec.flash = null; }
+    }
+  }
+
   // ---------- Golpes: lo que pasa en cada ataque, visto por todos ----------
   function playEvents(evs) {
     for (const e of evs) setTimeout(() => {
@@ -787,8 +824,13 @@ export function createBoard3D(host, opts) {
         if (A.mixer) { play(A, e.magic ? "Spellcast_Shoot" : "1H_Melee_Attack_Chop", true); setTimeout(() => { if (!A.down) play(A, "Idle"); }, 800); } else A.hitT = Math.max(A.hitT || 0, 0.35);
         sound.play(melee && !e.magic ? "whoosh" : e.magic ? "magic" : "twang");
         fxList.push(strike(scene, A.root.position.clone(), B.root.position.clone(), { melee, magic: e.magic, color: e.color, res: e.res,
-          onHit: () => { B.hitT = Math.max(B.hitT || 0, e.res === "crit" ? 1 : 0.7); sound.play(e.res === "crit" ? "crit" : "hit"); } }));
-        if (e.res === "miss") setTimeout(() => { if (!disposed) sound.play("miss"); }, melee && !e.magic ? 170 : 400);
+          onHit: () => { B.hitT = Math.max(B.hitT || 0, e.res === "crit" ? 1.3 : 0.9); sound.play(e.res === "crit" ? "crit" : "hit"); if (e.res === "crit") camShake = 0.4; } }));
+        if (e.res === "miss") setTimeout(() => {
+          if (disposed) return; sound.play("miss");
+          // esquiva: se aparta de lado, perpendicular al ataque
+          let dx = B.root.position.x - A.root.position.x, dz = B.root.position.z - A.root.position.z; const l = Math.hypot(dx, dz) || 1;
+          const sd = Math.random() < 0.5 ? 1 : -1; nudge(B, -dz / l * sd, dx / l * sd, 0.9, "dodge");
+        }, melee && !e.magic ? 170 : 400);
         setTimeout(() => { if (!disposed) say(); }, melee && !e.magic ? 180 : 420);
       } else { if (e.type === "save") sound.play(e.res === "save" ? "block" : "hit"); say(); }
     }, e.delay || 0);
@@ -1111,6 +1153,7 @@ export function createBoard3D(host, opts) {
     for (const rec of toks.values()) {
       if (!rec.root) continue;
       if (rec.mixer) rec.mixer.update(dt);
+      if (rec.nudge || rec.flash) stepHitFx(rec, dt);
       if (rec.moving && (!drag || drag.id !== rec.root.userData.tok)) {
         const p = rec.root.position, d = rec.target.clone().sub(p);
         const len = d.length();
@@ -1136,13 +1179,15 @@ export function createBoard3D(host, opts) {
         const want = rec.down ? -1.5 : rec.prone ? -1.1 : rec.moving ? -0.2 : 0;
         rec.tilt += (want - rec.tilt) * Math.min(1, dt * (rec.down ? 5 : 8));
         rec.hitT = Math.max(0, rec.hitT - dt * 1.6);
-        pv.rotation.x = rec.tilt; pv.rotation.z = Math.sin(time * 26) * 0.22 * rec.hitT;
+        pv.rotation.x = rec.tilt; pv.rotation.z = Math.sin(time * 30) * 0.3 * Math.min(1, rec.hitT);
       } else if (rec.mini) {
         if (rec.hitT > 0) rec.hitT = Math.max(0, rec.hitT - dt * 1.6);
         const want = rec.prone && !rec.down ? -1.35 : 0; rec.mini.rotation.x += (want - rec.mini.rotation.x) * Math.min(1, dt * 6);
       }
     }
+    if (camShake > 0) { camShake = Math.max(0, camShake - dt); const k = camShake / 0.4 * 0.35; camOff.set((Math.random() - 0.5) * k, (Math.random() - 0.5) * k, (Math.random() - 0.5) * k); camera.position.add(camOff); }
     renderer.render(scene, camera);
+    if (camOff.lengthSq()) { camera.position.sub(camOff); camOff.set(0, 0, 0); }
   });
   function dispose() {
     if (disposed) return; disposed = true;

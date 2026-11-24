@@ -45,10 +45,12 @@ export function draw(el, compact, force) {
   el.innerHTML = `${compact ? "" : `<header class="mhead"><h1>🎛 Centro de mando</h1><p>${live ? `<b>${esc(sessionName(live))}</b> en curso` : "Sin sesión abierta"} · lo que llevas tú: estado del grupo, experiencia, botín, notas y reglas a mano.</p></header>`}
     <div class="mgrid">
       ${sec("grupo", "🛡", "Estado del grupo", live ? "PX de esta sesión incluidos" : "", groupHTML(s, compact), true)}
+      <div class="mcols">
       ${sec("xp", "⭐", "Experiencia y subidas de nivel", pendingCount(s) ? `${pendingCount(s)} nota${pendingCount(s) > 1 ? "s" : ""} sin conceder` : "", xpHTML(s))}
       ${sec("botin", "💰", "Botín", "", lootPanel(s))}
       ${sec("futuro", "🔮", "Próximas sesiones", "", futureHTML(s))}
       ${sec("reglas", "📌", "Reglas a mano", "SRD 5.2.1", rulesHTML(s))}
+      </div>
     </div>`;
   bind(el, compact);
 }

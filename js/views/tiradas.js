@@ -173,7 +173,7 @@ function who(s, id) { const t = s.tokens.find(x => x.id === id); return t ? firs
 function actor(s, r) {
   const t = r.tok && s.tokens.find(x => x.id === r.tok), c = t && t.kind === "pc" ? s.characters.find(x => x.id === t.char) : null;
   const u = s.users.find(x => x.id === r.who);
-  const name = t ? first(nameOf(s, t)) : u && u.role !== "player" ? "Máster" : r.whoName ? first(r.whoName) : (u ? first(u.name) : "Alguien");
+  const name = t ? first(nameOf(s, t)) : u && u.role !== "player" && !r.asPlayer ? "Máster" : r.whoName ? first(r.whoName) : (u ? first(u.name) : "Alguien");
   const color = (c && c.color) || (t && t.kind !== "pc" ? (t.kind === "npc" ? "#7d8fe0" : "#c4513f") : (u && u.role !== "player" ? "#9a7be0" : (u && u.color) || "#d6aa4e"));
   return { name: name || "Máster", color, foe: !!t && t.kind !== "pc" };
 }

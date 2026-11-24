@@ -6,7 +6,7 @@
 //   al abrirse); las monedas se reparten a partes iguales; cada objeto lo pide un jugador y el máster lo aprueba.
 // - Dar algo a un compañero: propuesta en la ficha de quien da; al aprobarla, el máster lo pasa a la otra ficha.
 import { store, uid } from "./store.js";
-import { isDM, currentUser } from "./session.js";
+import { isDM, currentUser, runsTable } from "./session.js";
 import { toast } from "./ui.js";
 import { WEAPONS, ARMORS } from "../data/equipo.js";
 import { GEAR } from "../data/tienda.js";
@@ -148,7 +148,7 @@ export function watchChests() {
     const s = store.get(), ids = ((s.loot || {}).items || []).map(x => x.id);
     if (seen === null) seen = new Set(ids);
     else { const nw = ((s.loot || {}).items || []).filter(x => !seen.has(x.id)); ids.forEach(i => seen.add(i)); if (nw.length && !isDM(s)) toast(`💰 Nuevo en el botín del grupo: ${nw.map(x => x.name).join(", ")}. Míralo en Personajes → Grupo.`); }
-    if (!isDM(s) || busy) return;
+    if (!runsTable(s) || busy) return;
     const r = (s.rolls || []).find(x => x.kind === "open" && x.status === "pending"); if (!r) return;
     busy = true;
     queueMicrotask(() => {

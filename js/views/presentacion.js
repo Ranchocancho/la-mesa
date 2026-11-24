@@ -8,7 +8,7 @@ import { esc } from "../core/ui.js";
 import { bboxOf } from "../core/regiones.js";
 import { isDM } from "../core/session.js";
 import { timeline, tellTimeline } from "../core/lore.js";
-import { routesOf, partyPos } from "../core/ruta.js";
+import { routesOf, partyPos, tripText } from "../core/ruta.js";
 import { genURL } from "../core/generamapa.js";
 
 /* ---------- La ruta del grupo sobre el mapa mostrado (Hito 75) ----------
@@ -16,7 +16,7 @@ import { genURL } from "../core/generamapa.js";
 function routeOverlay(state, W, H, toPx) {
   const R = routesOf(state), P = partyPos(state), dm = isDM(state);
   const lines = R.slice().reverse().map(r => { const pts = r.pts.map(p => toPx(p.x, p.y)); if (pts.length < 2) return "";
-    return `<g class="route ${r.live ? "live" : ""}"><title>${esc(r.name)}</title><polyline points="${pts.map(p => p.map(v => v.toFixed(1)).join(",")).join(" ")}" class="rline"/>${pts.map(([x, y]) => `<circle cx="${x}" cy="${y}" r="${r.live ? 0.006 * W : 0.004 * W}" class="rdot"/>`).join("")}</g>`; }).join("");
+    return `<g class="route ${r.live ? "live" : ""}"><title>${esc(r.name)}${tripText(state, r.pts) ? " · " + tripText(state, r.pts) : ""}</title><polyline points="${pts.map(p => p.map(v => v.toFixed(1)).join(",")).join(" ")}" class="rline"/>${pts.map(([x, y]) => `<circle cx="${x}" cy="${y}" r="${r.live ? 0.006 * W : 0.004 * W}" class="rdot"/>`).join("")}</g>`; }).join("");
   const places = (state.world.places || []).filter(p => !p.parent && !p.detail && (dm || p.visible)).map(p => { const [x, y] = toPx(p.x, p.y); return x < 0 || y < 0 || x > W || y > H ? "" : `<g class="splace"><circle cx="${x}" cy="${y}" r="${0.005 * W}"/><text x="${x}" y="${y - 0.012 * W}" style="font-size:${(0.016 * W).toFixed(1)}px">${esc(p.name)}</text></g>`; }).join("");
   let party = ""; if (P) { const [x, y] = toPx(P.x, P.y); party = `<g class="sparty"><circle cx="${x}" cy="${y}" r="${0.009 * W}"/><text x="${x}" y="${y + 0.004 * W}" style="font-size:${(0.011 * W).toFixed(1)}px">⚑</text><text class="lab" x="${x}" y="${y + 0.026 * W}" style="font-size:${(0.013 * W).toFixed(1)}px">${P.p && (state.world.places.find(q => q.id === P.p) || {}).name ? "El grupo · en " + esc(state.world.places.find(q => q.id === P.p).name) : "El grupo"}</text></g>`; }
   return `<svg class="stageroute" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-label="Ruta del grupo">${lines}${places}${party}</svg>`;

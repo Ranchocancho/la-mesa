@@ -7,7 +7,7 @@ import { MAP_ICONS, ICON_CATS, iconURL, PIN_SIZES, PIN_TINTS, pinDefaults } from
 import { $, $$, esc, toast, debounce, pickFile } from "../core/ui.js";
 import { regionsOf, regionById, seeRegion, bboxOf, regionAt, toLocal, toGlobal, centroid, placesIn, addRegion, editRegion, deleteRegion, REG_COLORS } from "../core/regiones.js";
 import { REGIONS } from "../data/mapas.js";
-import { partyPos, moveParty, partyToPlace, routesOf, undoStep, canUndoParty } from "../core/ruta.js";
+import { partyPos, moveParty, partyToPlace, routesOf, undoStep, canUndoParty, tripText, kmOf, scaleKm, paceOf, PACES, setScale } from "../core/ruta.js";
 import { liveSession } from "../core/sesiones.js";
 import { sampleSource, maskFrom, genURL, CLIMAS, FORMAS, bake, paintMask, Q, UQ, pairs } from "../core/generamapa.js";
 
@@ -523,20 +523,26 @@ function drawPartyBar(state) {
   bar.innerHTML = `<span>⚑ ${P ? (pl ? `El grupo está <b>en ${esc(pl.name)}</b>` : "El grupo está <b>de camino</b>") : "El grupo no está en el mapa"}</span>
     ${P && canUndoParty() ? `<button class="btn small" data-pundo title="Vuelve adonde estaba y quita el paso de la ruta">↶ Deshacer movimiento</button>` : ""}
     ${P && pl ? `<button class="btn small" data-pout title="Sale del lugar y se queda a sus puertas">🚪 Salir de ${esc(pl.name)}</button>` : ""}
+    ${(() => { const R = routesOf(state), live = R.find(r => r.live), tot = R.reduce((a, r) => a + kmOf(state, r.pts), 0); const t = live && tripText(state, live.pts);
+      return `<span class="ptrip" title="Distancia en línea recta entre paradas y días de viaje a ritmo ${PACES[paceOf(state)][0].toLowerCase()} (SRD). Escala: el mapa mide ${scaleKm(state)} km de ancho.">🧭 ${t ? `Hoy: <b>${t}</b>` : "Hoy: sin viaje"}${tot >= 1 ? ` · Total: ${Math.round(tot).toLocaleString("es-ES")} km` : ""}</span>
+        <label class="pscale" title="Cuántos kilómetros mide de ancho el mapa del mundo">📏<input type="number" min="1" step="10" data-pscale value="${scaleKm(state)}"> km</label>
+        <select data-ppace title="Ritmo de viaje (SRD): lento 27 km/día, normal 36, rápido 45">${Object.entries(PACES).map(([k, [n, v]]) => `<option value="${k}" ${paceOf(state) === k ? "selected" : ""}>${n} · ${v} km/día</option>`).join("")}</select>`; })()}
     <button class="btn small ${placesLocked ? "" : "gold"}" data-plock title="${placesLocked ? "Los lugares están fijos: no se mueven sin querer. Pulsa para poder moverlos." : "Ahora puedes arrastrar los lugares. Pulsa para fijarlos."}">${placesLocked ? "🔒 Lugares fijos" : "🔓 Moviendo lugares"}</button>`;
   const u = $("[data-pundo]", bar); if (u) u.onclick = () => { undoStep(); toast("Movimiento deshecho."); };
   const o = $("[data-pout]", bar); if (o) o.onclick = () => { const [x, y] = g2i(P.x, P.y), g = i2g(x + 34 / view.k, y + 20 / view.k); moveParty(g.x, g.y); };
   $("[data-plock]", bar).onclick = () => { placesLocked = !placesLocked; drawPins(); };
+  const sc = $("[data-pscale]", bar); sc.onchange = () => setScale(+sc.value, null);
+  const pc = $("[data-ppace]", bar); pc.onchange = () => setScale(null, pc.value);
 }
 function drawRoutes(state) {
   const svg = $("#routesvg", el); if (!svg) return;
   svg.setAttribute("viewBox", `0 0 ${imgW} ${imgH}`); svg.style.width = imgW + "px"; svg.style.height = imgH + "px";
   const all = routesOf(state), L = routeView === "none" ? [] : routeView === "all" ? all : routeView === "live" ? all.filter(r => r.live) : all.filter(r => r.id === routeView);
-  svg.innerHTML = L.slice().reverse().map((r, k) => { const col = r.live ? "#c0392b" : ROUTE_COLORS[(all.indexOf(r) % (ROUTE_COLORS.length - 1)) + 1], pts = r.pts.map(p => g2i(p.x, p.y));
+  svg.innerHTML = L.slice().reverse().map((r, k) => { const col = "#c0392b", pts = r.pts.map(p => g2i(p.x, p.y)), trip = tripText(state, r.pts); // todas en rojo: la de hoy, más marcada
     if (pts.length < 2) return "";
-    return `<g class="route ${r.live ? "live" : ""}" style="--rc:${col}"><title>${esc(r.name)}</title><polyline points="${pts.map(p => p.map(v => v.toFixed(1)).join(",")).join(" ")}" class="rline"/>
+    return `<g class="route ${r.live ? "live" : ""}" style="--rc:${col}"><title>${esc(r.name)}${tripText(state, r.pts) ? " · " + tripText(state, r.pts) : ""}</title><polyline points="${pts.map(p => p.map(v => v.toFixed(1)).join(",")).join(" ")}" class="rline"/>
       ${pts.map(([x, y], i) => `<circle cx="${x}" cy="${y}" r="${i === pts.length - 1 && r.live ? 5 : 3.2}" class="rdot"/>`).join("")}
-      <text x="${pts[0][0]}" y="${pts[0][1] - 9}" class="rlab">${esc(r.name)}</text></g>`; }).join("");
+      <text x="${pts[Math.floor(pts.length / 2)][0]}" y="${pts[Math.floor(pts.length / 2)][1] - 9}" class="rlab">${esc(r.name)}${trip ? " · " + trip : ""}</text></g>`; }).join("");
 }
 
 /* ---------- Panel lateral ---------- */

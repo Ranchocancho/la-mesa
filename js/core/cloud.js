@@ -16,6 +16,7 @@
 //   campaigns/{cid}/images/{key}   imágenes troceadas en documentos de menos de 1 MB
 //   campaigns/{cid}/presence/{uid} última señal de cada participante
 //   campaigns/{cid}/whispers/{id}  lo que el máster cuenta a un solo jugador (lo leen él y los másteres)
+//   campaigns/{cid}/invites/{correo} quién puede unirse y con qué papel (lo gestiona el dueño; Hito 78)
 import { firebaseConfig } from "./firebase-config.js";
 import { store, useCloud } from "./store.js";
 import { session } from "./session.js";
@@ -29,7 +30,7 @@ const COLORS = ["#79a85a", "#c97a3d", "#7d8fe0", "#e0d6b0", "#b4583a", "#8a9a4a"
 
 let fb, auth, db;
 const unsubs = [];
-const cache = { campaign: null, places: new Map(), items: new Map(), secrets: new Map(), characters: new Map(), scenes: new Map(), tokens: new Map(), chronicle: new Map(), rolls: new Map(), lore: new Map(), whispers: new Map(), notes: new Map(), board: null, got: new Set() };
+const cache = { campaign: null, places: new Map(), items: new Map(), secrets: new Map(), characters: new Map(), scenes: new Map(), tokens: new Map(), chronicle: new Map(), rolls: new Map(), lore: new Map(), whispers: new Map(), notes: new Map(), invites: new Map(), board: null, got: new Set() };
 let last = new Map();       // lo último sincronizado, para enviar solo lo que cambia
 let beatTimer = null;
 
@@ -99,7 +100,10 @@ export async function openCampaign(cid) {
   if (!snap.exists()) { cloud.error = "Ese mundo no existe o el enlace está mal copiado."; return toLobby(); }
   const data = snap.data();
   if (!(data.memberIds || []).includes(cloud.user.uid)) {
-    cloud.status = "joining"; cloud.joinable = { cid, name: data.name }; ping(); return;
+    // Solo entra quien tiene invitación (Hito 78): cada uno puede leer la de su correo
+    let role = null;
+    try { const inv = await fb.getDoc(fb.doc(db, "campaigns", cid, "invites", myEmail())); role = inv.exists() ? inv.data().role : null; } catch (e) { role = null; }
+    cloud.status = "joining"; cloud.joinable = { cid, name: data.name, role, email: myEmail() }; ping(); return;
   }
   cloud.cid = cid;
   cloud.isEditor = data.owner === cloud.user.uid || (data.dms || []).includes(cloud.user.uid);
@@ -109,23 +113,38 @@ export async function openCampaign(cid) {
 }
 
 export async function joinCampaign() {
-  const j = cloud.joinable; if (!j) return;
+  const j = cloud.joinable; if (!j || !j.role) return;
   const u = cloud.user;
-  const me = { role: "player", name: u.displayName || "Jugador", initials: initials(u.displayName), color: COLORS[Math.floor(Math.random() * COLORS.length)], photo: u.photoURL || null };
+  const role = j.role === "dm" ? "dm" : "player";
+  const me = { role, name: u.displayName || "Jugador", initials: initials(u.displayName), color: COLORS[Math.floor(Math.random() * COLORS.length)], photo: u.photoURL || null, email: myEmail() };
+  const ch = { memberIds: fb.arrayUnion(u.uid), ["members." + u.uid]: me };
+  if (role === "dm") ch.dms = fb.arrayUnion(u.uid);
   try {
-    await fb.updateDoc(fb.doc(db, "campaigns", j.cid), { memberIds: fb.arrayUnion(u.uid), ["members." + u.uid]: me });
+    await fb.updateDoc(fb.doc(db, "campaigns", j.cid), ch);
     await openCampaign(j.cid);
   } catch (e) { cloud.error = "No se pudo entrar en el mundo."; ping(); }
+}
+
+const myEmail = () => ((cloud.user && cloud.user.email) || "").trim().toLowerCase();
+
+/** El dueño saca a alguien del mundo: deja de ser miembro (y máster) y se borra su invitación, para que no pueda volver a entrar. */
+export async function removeMember(uid) {
+  const s = store.get(), u = s.users.find(x => x.id === uid); if (!u || !cloud.cid) return;
+  const email = (u.email || "").toLowerCase();
+  // primero en el estado local, para que ningún envío del mundo lo vuelva a meter
+  store.commit("place", st => { st.users = st.users.filter(x => x.id !== uid); st.dms = (st.dms || []).filter(x => x !== uid); if (email) st.invites = (st.invites || []).filter(i => i.email !== email); });
+  try { await fb.updateDoc(fb.doc(db, "campaigns", cloud.cid), { memberIds: fb.arrayRemove(uid), ["members." + uid]: fb.deleteField(), dms: fb.arrayRemove(uid) }); }
+  catch (e) { console.error(e); cloud.error = "No se pudo sacar a esa persona del mundo."; ping(); }
 }
 
 export async function createCampaign(name, withExample) {
   const u = cloud.user;
   const ref = fb.doc(fb.collection(db, "campaigns"));
   const s = seed();
-  const me = { role: "admin", name: u.displayName || "Administrador", initials: initials(u.displayName), color: "#d6aa4e", photo: u.photoURL || null };
+  const me = { role: "admin", name: u.displayName || "Administrador", initials: initials(u.displayName), color: "#d6aa4e", photo: u.photoURL || null, email: myEmail() };
   s.campaign.name = name || "Nuevo mundo";
   s.users = [{ id: u.uid, ...me }];
-  s.dms = []; s.live = null; s.presentation = null;
+  s.dms = []; s.invites = []; s.live = null; s.presentation = null;
   s.characters = withExample ? s.characters.map(c => ({ ...c, owner: null })) : [];
   if (!withExample) { s.world.places = []; s.sessions = []; s.lore = []; s.clock = null; s.scenes = s.scenes.filter(x => !x.place); } // la biblioteca de escenas genéricas se queda
   const docs = docsOf(s, true);
@@ -140,7 +159,7 @@ export async function createCampaign(name, withExample) {
 function listen(cid) {
   const dm = cloud.isEditor;
   const col = n => fb.collection(db, "campaigns", cid, n);
-  const need = dm ? ["campaign", "places", "items", "secrets", "characters", "board", "tokens", "scenes", "chronicle", "rolls", "lore", "whispers", "notes"] : ["campaign", "places", "items", "characters", "board", "tokens", "chronicle", "rolls", "lore", "whispers", "notes"];
+  const need = dm ? ["campaign", "places", "items", "secrets", "characters", "board", "tokens", "scenes", "chronicle", "rolls", "lore", "whispers", "notes", "invites"] : ["campaign", "places", "items", "characters", "board", "tokens", "chronicle", "rolls", "lore", "whispers", "notes"];
   cache.got.clear();
   const done = k => { cache.got.add(k); if (need.every(n => cache.got.has(n))) refresh(); };
   const fail = e => { console.error(e); cloud.error = "Se perdió la conexión con la campaña. Recarga la página."; ping(); };
@@ -158,6 +177,8 @@ function listen(cid) {
   // Notas privadas (Hito 74): el cuaderno y las notas de Lore de cada personaje. El máster las recibe todas; cada jugador, las suyas
   unsubs.push(fb.onSnapshot(dm ? col("notes") : fb.query(col("notes"), fb.where("owner", "==", cloud.user.uid)), s => { cache.notes = new Map(s.docs.map(d => [d.id, d.data()])); done("notes"); }, e => { console.warn("notas privadas:", e && e.code); cache.notes = new Map(); done("notes"); }));
   if (dm) unsubs.push(fb.onSnapshot(col("scenes"), s => { cache.scenes = new Map(s.docs.map(d => [d.id, d.data()])); done("scenes"); }, fail));
+  // Invitaciones (Hito 78): solo el dueño y los másteres. Si las reglas aún no están publicadas, el mundo abre igual.
+  if (dm) unsubs.push(fb.onSnapshot(col("invites"), s => { cache.invites = new Map(s.docs.map(d => [d.id, d.data()])); done("invites"); }, e => { console.warn("invitaciones:", e && e.code); cache.invites = new Map(); done("invites"); }));
   if (dm) unsubs.push(fb.onSnapshot(col("secrets"), s => { cache.secrets = new Map(s.docs.map(d => [d.id, d.data()])); done("secrets"); }, fail));
   unsubs.push(fb.onSnapshot(col("presence"), s => { const m = {}; s.docs.forEach(d => (m[d.id] = d.data().t)); presence.feed(m); }, () => {}));
   const beat = () => fb.setDoc(fb.doc(db, "campaigns", cid, "presence", cloud.user.uid), { t: Date.now() }).catch(() => {});
@@ -167,7 +188,7 @@ function listen(cid) {
 function stopCampaign() {
   unsubs.splice(0).forEach(u => u());
   clearInterval(beatTimer); beatTimer = null;
-  cache.campaign = null; cache.places.clear(); cache.items.clear(); cache.secrets.clear(); cache.characters.clear(); cache.scenes.clear(); cache.tokens.clear(); cache.chronicle.clear(); cache.rolls.clear(); cache.lore.clear(); cache.whispers.clear(); cache.notes.clear(); cache.board = null; cache.got.clear();
+  cache.campaign = null; cache.places.clear(); cache.items.clear(); cache.secrets.clear(); cache.characters.clear(); cache.scenes.clear(); cache.tokens.clear(); cache.chronicle.clear(); cache.rolls.clear(); cache.lore.clear(); cache.whispers.clear(); cache.notes.clear(); cache.invites.clear(); cache.board = null; cache.got.clear();
   last = new Map(); cloud.cid = null; cloud.isEditor = false;
 }
 
@@ -192,6 +213,7 @@ function refresh() {
     version: 2, rev: ((prev && prev.rev) || 0) + 1,
     campaign: { name: c.name, rules: c.rules || "D&D 2024" },
     dms: c.dms || [], live: c.live || null,
+    invites: [...cache.invites.entries()].map(([email, x]) => ({ email, role: x.role === "dm" ? "dm" : "player", at: x.at || 0 })).sort((a, b) => a.email.localeCompare(b.email)),
     // el cuaderno va aparte (notes/{id}); si una ficha antigua aún lo lleva dentro, se usa hasta que el máster lo mueva
     users, characters: [...cache.characters.entries()].map(([id, x]) => { const n = cache.notes.get(id); return { id, ...x, journal: n ? n.journal || [] : x.journal || [], loreNotes: n ? n.lore || {} : x.loreNotes || {} }; }).sort((a, b) => (a.order || 0) - (b.order || 0)).map(x => strip(x, "order")),
     world: { map: c.map ? c.map.key : null, mapW: c.map ? c.map.w : null, mapH: c.map ? c.map.h : null, places, gen: c.wgen || null, party: c.party || null,
@@ -237,6 +259,7 @@ function docsOf(s, dm) {
   s.characters.forEach((ch, i) => { const { id, journal, loreNotes, ...rest } = ch; out.set("characters/" + id, { ...rest, order: i });
     out.set("notes/" + id, { owner: ch.owner || null, journal: journal || [], lore: loreNotes || {} }); }); // privadas: solo su jugador y el máster
   (s.scenes || []).forEach((sc, i) => { const { id, ...rest } = sc; out.set("scenes/" + id, { ...rest, order: i }); });
+  (s.invites || []).forEach(i => out.set("invites/" + i.email, { role: i.role, at: i.at || 0 }));
   if (s.board) out.set("board/live", s.board);
   (s.chronicle || []).forEach(e => { const { id, ...rest } = e; out.set("chronicle/" + id, rest); });
   (s.rolls || []).forEach(e => { const { id, ...rest } = e; out.set("rolls/" + id, rest); });
@@ -271,7 +294,8 @@ function push(state) {
   const all = docsOf(state, true);
   // El administrador y los másteres guardan todo; un jugador solo puede tocar su propia ficha.
   const lb = last.get("board/live"), lastTurn = lb ? (o => JSON.stringify([o.turn, o.round, o.seq]))(JSON.parse(lb)) : "";
-  const allowed = (k, v) => cloud.isEditor || ((k.startsWith("characters/") || k.startsWith("tokens/") || k.startsWith("notes/")) && v && v.owner === me) || (k.startsWith("chronicle/") && v && v.by === me) || (k.startsWith("rolls/") && v && v.who === me) || (k === "board/live" && lastTurn !== JSON.stringify([v.turn, v.round, v.seq]));
+  const owner = cache.campaign && cache.campaign.owner === me;
+  const allowed = (k, v) => k.startsWith("invites/") ? owner : cloud.isEditor || ((k.startsWith("characters/") || k.startsWith("tokens/") || k.startsWith("notes/")) && v && v.owner === me) || (k.startsWith("chronicle/") && v && v.by === me) || (k.startsWith("rolls/") && v && v.who === me) || (k === "board/live" && lastTurn !== JSON.stringify([v.turn, v.round, v.seq]));
   const ref = k => k === "C" ? fb.doc(db, "campaigns", cloud.cid) : fb.doc(db, "campaigns", cloud.cid, ...k.split("/"));
   // Firestore admite 500 escrituras por lote: los cambios grandes (restaurar una copia) se parten en varios
   const ops = [], keys = [];
@@ -293,9 +317,12 @@ function push(state) {
     }); });
     return;
   }
-  for (let i = 0; i < ops.length; i += 450) {
+  // Las invitaciones van aparte: si las reglas nuevas aún no están publicadas, que no arrastren el resto del lote
+  const inv = ops.filter((_, i) => keys[i].startsWith("invites/")), rest = ops.filter((_, i) => !keys[i].startsWith("invites/"));
+  inv.forEach(op => { const b = fb.writeBatch(db); op(b); b.commit().catch(e => { console.error(e); cloud.error = "No se pudo guardar la invitación. ¿Están publicadas las reglas nuevas de Firestore?"; ping(); }); });
+  for (let i = 0; i < rest.length; i += 450) {
     const batch = fb.writeBatch(db);
-    ops.slice(i, i + 450).forEach(op => op(batch));
+    rest.slice(i, i + 450).forEach(op => op(batch));
     batch.commit().catch(e => { console.error(e); cloud.error = "No se pudo guardar el último cambio. Comprueba la conexión."; ping(); });
   }
 }

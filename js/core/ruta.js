@@ -41,3 +41,27 @@ export function routesOf(s) {
   pastSessions(s).forEach(x => { if ((x.route || []).length) out.push({ id: x.id, name: sessionName(x), pts: x.route, live: false }); });
   return out;
 }
+
+/* ---------- Distancia y días de viaje (Hito 77) ----------
+   Escala: el máster dice cuántos km mide de ancho el mapa del mundo (world.scaleKm; si no, 600 km).
+   Días: «Ritmo de viaje» del SRD 5.2.1 (por día: lento 27 km, normal 36 km, rápido 45 km). Es una estimación por la línea recta
+   entre paradas; el terreno, los caminos y las monturas los ajusta el máster como siempre. */
+export const PACES = { lento: ["Lento", 27], normal: ["Normal", 36], rapido: ["Rápido", 45] };
+export const DEFAULT_KM = 600;
+export const scaleKm = s => +(s.world && s.world.scaleKm) || DEFAULT_KM;
+export const paceOf = s => (s.world && PACES[s.world.pace]) ? s.world.pace : "normal";
+function mapAspect(s) { const w = s.world || {}; if (w.map && w.mapW && w.mapH) return w.mapH / w.mapW; return 1000 / 1600; }
+/** Kilómetros de una lista de puntos (0–1 del mapa global). */
+export function kmOf(s, pts) {
+  const W = scaleKm(s), H = W * mapAspect(s); let d = 0;
+  for (let i = 1; i < (pts || []).length; i++) d += Math.hypot((pts[i].x - pts[i - 1].x) * W, (pts[i].y - pts[i - 1].y) * H);
+  return d;
+}
+export const daysOf = (s, km, pace) => km / PACES[pace || paceOf(s)][1];
+const fmt = (n, d = 0) => n.toLocaleString("es-ES", { maximumFractionDigits: d, minimumFractionDigits: 0 });
+/** «84 km · 2,3 días» */
+export function tripText(s, pts, pace) {
+  const km = kmOf(s, pts); if (km < 0.5) return "";
+  const dd = daysOf(s, km, pace); return `${fmt(km)} km · ${dd < 1 ? `${fmt(dd * 8, 1)} h de marcha` : `${fmt(dd, 1)} día${dd >= 1.05 ? "s" : ""}`}`;
+}
+export const setScale = (km, pace) => store.commit("map", s => { if (km != null) s.world.scaleKm = Math.max(1, +km || DEFAULT_KM); if (pace) s.world.pace = pace; });

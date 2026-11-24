@@ -1,6 +1,6 @@
 // Combate: ataques contra un objetivo, daño y la decisión del máster (confirmar, cambiar o anular).
 import { store } from "./store.js";
-import { isDM, currentUser } from "./session.js";
+import { isDM, currentUser, runsTable } from "./session.js";
 import { publish } from "./dados.js";
 import { charOf } from "./mesa.js";
 import { damage as hurt } from "./salud.js";
@@ -189,7 +189,7 @@ export function answerOA(oaId, go) {
 export function watchAutoResolve() {
   const done = new Set();
   const run = () => {
-    const s = store.get(); if (!isDM(s)) return;
+    const s = store.get(); if (!runsTable(s)) return;
     const now = Date.now();
     for (const r of s.rolls || []) {
       if (done.has(r.id) || r.status === "void" || now - (r.at || 0) > 600000) continue;

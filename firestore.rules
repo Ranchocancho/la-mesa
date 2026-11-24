@@ -7,7 +7,8 @@ rules_version = '2';
 // - Solo el dueño nombra o quita másteres.
 // - Los jugadores solo reciben los lugares visibles y el contenido revelado.
 // - Las notas secretas solo las leen el dueño y los másteres.
-// - Cualquiera con el enlace y una cuenta de Google puede unirse como jugador.
+// - Solo pueden unirse las cuentas de Google cuyo correo haya invitado el dueño (Hito 78),
+//   como jugador o como máster, según diga la invitación. Quien ya era miembro sigue dentro.
 service cloud.firestore {
   match /databases/{database}/documents {
 
@@ -51,15 +52,25 @@ service cloud.firestore {
         && inspirationOk(a, b);
     }
 
-    // Un jugador se añade a sí mismo, sin tocar nada más.
-    function joiningSelf() {
+    // Un invitado se añade a sí mismo, sin tocar nada más, con el papel de su invitación (Hito 78).
+    function myEmail() { return request.auth.token.email.lower(); }
+    function inviteFor(c) { return /databases/$(database)/documents/campaigns/$(c)/invites/$(myEmail()); }
+    function joiningSelf(c) {
       let before = resource.data;
       let after = request.resource.data;
-      return after.diff(before).affectedKeys().hasOnly(['memberIds', 'members'])
-        && after.memberIds.toSet().difference(before.memberIds.toSet()) == [request.auth.uid].toSet()
+      let uid = request.auth.uid;
+      let dmsB = before.get('dms', []);
+      let dmsA = after.get('dms', []);
+      return request.auth.token.email_verified == true
+        && exists(inviteFor(c))
+        && after.diff(before).affectedKeys().hasOnly(['memberIds', 'members', 'dms'])
+        && after.memberIds.toSet().difference(before.memberIds.toSet()) == [uid].toSet()
         && before.memberIds.toSet().difference(after.memberIds.toSet()).size() == 0
-        && after.members.diff(before.members).affectedKeys().hasOnly([request.auth.uid])
-        && after.members[request.auth.uid].role == 'player';
+        && after.members.diff(before.members).affectedKeys().hasOnly([uid])
+        && ((get(inviteFor(c)).data.role == 'player' && after.members[uid].role == 'player' && dmsA == dmsB)
+          || (get(inviteFor(c)).data.role == 'dm' && after.members[uid].role == 'dm'
+              && dmsA.toSet().difference(dmsB.toSet()) == [uid].toSet()
+              && dmsB.toSet().difference(dmsA.toSet()).size() == 0));
     }
 
     match /campaigns/{c} {
@@ -73,9 +84,15 @@ service cloud.firestore {
           && request.resource.data.owner == resource.data.owner
           && (resource.data.owner == request.auth.uid
               || request.resource.data.get('dms', []) == resource.data.get('dms', [])))
-        || joiningSelf());
+        || joiningSelf(c));
       allow delete: if signedIn() && resource.data.owner == request.auth.uid;
 
+      // Invitaciones: un documento por correo (en minúsculas) con el papel, "player" o "dm".
+      // Solo el dueño las gestiona; los másteres las ven; cada invitado puede leer la suya para saber con qué papel entra.
+      match /invites/{e} {
+        allow read: if isEditor(c) || (signedIn() && request.auth.token.email.lower() == e);
+        allow write: if signedIn() && world(c).owner == request.auth.uid;
+      }
       match /places/{p} {
         allow read: if isEditor(c) || (isMember(c) && resource.data.visible == true);
         allow write: if isEditor(c);

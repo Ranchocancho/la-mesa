@@ -8,7 +8,7 @@
 // («rxuse» o «rxpass»), porque en la nube un jugador no puede cambiar tiradas ajenas. Lo que cambia el
 // resultado (que el ataque falle, la mitad del daño) lo aplica el máster al ver la respuesta.
 import { store } from "./store.js";
-import { isDM, currentUser } from "./session.js";
+import { isDM, currentUser, runsTable } from "./session.js";
 import { charOf } from "./mesa.js";
 import { eco, spend, gap, hasCond } from "./turnos.js";
 import { freeSlots, useSlot, cast } from "./hechizos.js";
@@ -89,7 +89,7 @@ function ask(st, f) {
 
 /* ---------- El máster crea los avisos al ver un impacto o un daño ---------- */
 function scan() {
-  const s = store.get(); if (!isDM(s) || !s.board) return;
+  const s = store.get(); if (!runsTable(s) || !s.board) return;
   const now = Date.now(), fresh = r => now - (r.at || 0) < 15000;
   const todo = [];
   for (const r of s.rolls || []) {
@@ -138,7 +138,7 @@ export function deferCast(casterId, spellName, slot, targetIds, P) {
   return { deferred: true, grp };
 }
 function resolveCounters() {
-  const s = store.get(); if (!isDM(s)) return;
+  const s = store.get(); if (!runsTable(s)) return;
   const groups = new Map();
   for (const r of s.rolls || []) if (r.kind === "react" && r.grp && !r.done) { if (!groups.has(r.grp)) groups.set(r.grp, []); groups.get(r.grp).push(r); }
   for (const [grp, L] of groups) {
@@ -160,7 +160,7 @@ function resolveCounters() {
 export function answerRx(rxId, use) {
   const s = store.get(), r = (s.rolls || []).find(x => x.id === rxId); if (!rxOpen(s, r)) return;
   const t = s.tokens.find(x => x.id === r.tok), c = t && charOf(s, t), me = currentUser(s);
-  if (!isDM(s) && !(t && me && t.owner === me.id)) return;
+  if (!runsTable(s) && !(t && me && t.owner === me.id)) return;
   const base = { at: Date.now(), who: me ? me.id : null, whoName: me ? me.name : "", expr: "", dice: [], total: null, status: "ok", secret: false, link: r.id, tok: r.tok, target: r.target, seq: r.seq };
   if (!use) { store.commit("roll", st => st.rolls.push({ ...base, id: uid("rxp"), kind: "rxpass", label: `${nm(s, r.tok)} no usa ${RX[r.rx].n}` })); return; }
   const slot = RX[r.rx].spell ? slotFor(c, r.rx) : 0;
@@ -196,12 +196,12 @@ export function applyRx(st, A) {
 const autoDone = new Set();
 function autoAnswer() {
   const s = store.get(), me = currentUser(s); if (!me || !s.board) return;
-  const dm = isDM(s), now = Date.now();
+  const dm = runsTable(s), now = Date.now();
   for (const r of s.rolls || []) {
     if ((r.kind !== "react" && r.kind !== "oa") || r.status !== "pending" || autoDone.has(r.id)) continue;
     if (now - (r.at || 0) > 60000) continue;
     const t = s.tokens.find(x => x.id === r.tok); if (!t) continue;
-    const mine = t.kind === "pc" ? t.owner === me.id : dm;
+    const mine = t.kind === "pc" ? t.owner === me.id : isDM(s);
     if (!mine && !(dm && now - (r.at || 0) > 2500)) continue;
     const p = prefForTok(s, t, r.kind === "oa" ? "oa" : r.rx); if (p === "ask") continue;
     autoDone.add(r.id);

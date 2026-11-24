@@ -176,7 +176,7 @@ function twoCols(dm, pub, secret, attr, ph) {
 
 /* ---------- Una entrada: personaje, facción, evento, imagen, nota o escena preparada ---------- */
 function entryPage(s, e, dm) {
-  const pl = e.place ? placeOf(s, e.place) : null, rel = related(s, e.id), players = s.users.filter(u => u.role === "player");
+  const pl = e.place ? placeOf(s, e.place) : null, rel = related(s, e.id), players = s.users.filter(u => u.role === "player" || s.characters.some(c => c.owner === u.id));
   const shown = s.presentation && s.presentation.id === e.id;
   const relHTML = `<h3 class="lsec">🔗 Relacionado</h3><div class="lchips">${rel.filter(r => { const x = entry(s, r); return !x || canSee(s, x); }).map(r => { const n = refName(s, r); return `<span class="lchip"><a href="#lore/${n.kind === "scene" ? "" : r}">${n.icon} ${esc(n.name)}</a>${dm ? `<button data-unlink="${r}" aria-label="Quitar relación">✕</button>` : ""}${dm && e.kind === "chapter" && n.kind !== "place" && n.kind !== "scene" ? `<button data-showref="${r}" title="Mostrar a todos">👁</button>` : ""}${dm && n.kind === "scene" ? `<button data-loadscene="${r}" title="Cargar en la mesa">⚔️</button>` : ""}</span>`; }).join("") || `<span class="empty">Nada enlazado.</span>`}
       ${dm ? `<select data-link><option value="">+ Relacionar con…</option>${s.world.places.map(p => `<option value="${p.id}">📍 ${esc(p.name)}</option>`).join("")}${loreOf(s).filter(x => x.id !== e.id && !rel.includes(x.id)).map(x => `<option value="${x.id}">${LORE[x.kind].icon} ${esc(x.name)}</option>`).join("")}${e.kind === "chapter" ? (s.scenes || []).map(x => `<option value="${x.id}">⚔️ ${esc(x.name)}</option>`).join("") : ""}</select>` : ""}</div>`;

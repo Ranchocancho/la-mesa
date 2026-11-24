@@ -18,6 +18,7 @@ import { generateDungeon, generateRegion, addRelief } from "../core/generador.js
 import { sound } from "../core/sonido.js";
 import { pathTo, moveHint } from "../core/movimiento.js";
 import { RES_TEXT, RES_COLOR } from "../core/golpes.js";
+import { impactOf } from "../core/impactos.js";
 export { TERRAIN, PROPS };
 
 const T = 44, S = T / 2; // lado de la casilla en el plano 2D
@@ -53,7 +54,13 @@ export function createBoard(host, opts) {
     <div class="dragtip" hidden></div>`;
   const svg = host.querySelector("svg"), world = svg.querySelector(".world"), defs = svg.querySelector("defs"), tip = host.querySelector(".dragtip");
   const fxl = svg.querySelector(".fxl"), rulerG = svg.querySelector(".ruler");
-  let measuring = false; const lastHp = new Map(), shakeUntil = new Map(); let hpPrimed = false;
+  let measuring = false; const lastHp = new Map(), shakeUntil = new Map(), hitFx = new Map(); let hpPrimed = false;
+  // Hito 79: golpe (retrocede alejándose del atacante y destella en rojo), esquiva (se aparta de lado) y curación (destello verde)
+  function kick(id, cls, rx = 0, ry = 0, ms = 650) {
+    hitFx.set(id, { cls, rx, ry, until: Date.now() + ms });
+    const g = world && world.querySelector(`[data-tok="${id}"]`);
+    if (g) { g.classList.remove("hit", "dodge", "healfx"); g.style.setProperty("--rx", rx.toFixed(1) + "px"); g.style.setProperty("--ry", ry.toFixed(1) + "px"); void g.getBBox(); g.classList.add(cls); }
+  }
   let vb = null, drag = null, selected = opts.selected || null, selProp = null, hover = null, TG = null;
   // Estado del editor (se recuerda mientras dura la sesión)
   const E = createBoard.E = createBoard.E || { tool: "move", brush: "piedra", wall: "muro", floor: "piedra", prop: "mesa", pcat: "mueble", tcat: "interior", size: 1 };
@@ -201,8 +208,15 @@ export function createBoard(host, opts) {
     host.dataset.amb = grid.ambient || "interior";
     // Daño y curación: el número sale flotando sobre la ficha (todos lo ven)
     tokens.forEach(k => { const hp = opts.hpOf(k); if (!hp) return; const was = lastHp.get(k.id); lastHp.set(k.id, hp.cur);
-      if (hpPrimed && was != null && was !== hp.cur && (opts.dm || !k.hidden)) { const [x, y] = center(k.c, k.r), d = hp.cur - was; setTimeout(() => floatTxt(x + S * 0.55, y + 6, (d > 0 ? "+" : "−") + Math.abs(d), d > 0 ? "#7dff9a" : "#ff5a48", Math.abs(d) >= 15), 450);
-        if (d < 0) shakeUntil.set(k.id, Date.now() + 450); } });
+      if (hpPrimed && was != null && was !== hp.cur && (opts.dm || !k.hidden)) { const [x, y] = center(k.c, k.r), d = hp.cur - was, im = impactOf(store.get(), k.id, was, hp.cur);
+        setTimeout(() => floatTxt(x + S * 0.55, y + 6, (d > 0 ? "+" : "−") + Math.abs(d), im.color, Math.abs(d) >= 15), 450);
+        if (d < 0) {
+          const A = im.by && tokens.find(t => t.id === im.by); let dx = 0, dy = -1;
+          if (A && A.id !== k.id) { const [ax, ay] = center(A.c, A.r); dx = x - ax; dy = y - ay; const l = Math.hypot(dx, dy) || 1; dx /= l; dy /= l; }
+          const amp = S * (im.crit ? 0.5 : 0.35);
+          hitFx.set(k.id, { cls: "hit", rx: dx * amp, ry: dy * amp, until: Date.now() + 650 });
+        } else hitFx.set(k.id, { cls: "healfx", rx: 0, ry: 0, until: Date.now() + 700 });
+      } });
     hpPrimed = true;
     const toks = tokens.filter(k => (opts.dm || !k.hidden) && (!fog || k.kind === "pc" || tokenSeen(k, fog.vis))).map(k => {
       const dk = { name: k.name, color: k.color, ...(opts.decorate ? opts.decorate(k) : {}) };
@@ -212,7 +226,7 @@ export function createBoard(host, opts) {
       const ring = k.kind === "pc" ? "#d6aa4e" : k.kind === "npc" ? "#7d8fe0" : "#b33a2e";
       const raw = hp ? Math.max(0, Math.min(1, hp.cur / Math.max(1, hp.max))) : 1;
       const pct = opts.dm || k.kind === "pc" ? raw : raw > 0.75 ? 1 : raw > 0.5 ? 0.7 : raw > 0.25 ? 0.45 : raw > 0 ? 0.18 : 0; // a los enemigos se les ve "a ojo"
-      return `<g class="tok ${down ? "down" : ""} ${k.hidden ? "hid" : ""} ${selected === k.id ? "sel" : ""} ${opts.canMove(k) ? "mov" : ""} ${(shakeUntil.get(k.id) || 0) > Date.now() ? "shake" : ""}" data-tok="${k.id}" transform="translate(${x},${y})">
+      return `<g class="tok ${down ? "down" : ""} ${k.hidden ? "hid" : ""} ${selected === k.id ? "sel" : ""} ${opts.canMove(k) ? "mov" : ""} ${(shakeUntil.get(k.id) || 0) > Date.now() ? "shake" : ""} ${(f => f && f.until > Date.now() ? f.cls : "")(hitFx.get(k.id))}" data-tok="${k.id}" transform="translate(${x},${y})"${(f => f && f.until > Date.now() ? ` style="--rx:${f.rx.toFixed(1)}px;--ry:${f.ry.toFixed(1)}px"` : "")(hitFx.get(k.id))}>
         <clipPath id="cp-${k.id}"><circle r="${rad - 2}"/></clipPath>
         <circle r="${rad + 3}" class="halo"/>
 
@@ -370,7 +384,9 @@ export function createBoard(host, opts) {
       if (e.type !== "atk" || !A) { if (e.type === "save") sound.play(e.res === "save" ? "block" : "hit"); return say(); }
       const [x0, y0] = center(A.c, A.r), melee = dist(A, B) <= 1 + Math.max(A.size || 1, B.size || 1), miss = e.res === "miss";
       sound.play(melee && !e.magic ? "whoosh" : e.magic ? "magic" : "twang"); // el golpe se oye al salir…
-      const land = () => { sound.play(miss ? "miss" : e.res === "crit" ? "crit" : "hit"); if (miss) return say(); /* …y al llegar */ sparks2(x1, y1, e.res === "crit" ? "#ffd65a" : e.color === "#f4ecd8" ? "#ffb15a" : e.color, e.res === "crit" ? 20 : 12); shakeUntil.set(B.id, Date.now() + 450); const g = world.querySelector(`[data-tok="${B.id}"]`); if (g) { g.classList.remove("shake"); void g.getBBox(); g.classList.add("shake"); } setTimeout(say, 60); };
+      const land = () => { sound.play(miss ? "miss" : e.res === "crit" ? "crit" : "hit");
+        if (miss) { const nx = -(y1 - y0), ny = x1 - x0, l = Math.hypot(nx, ny) || 1, sd = Math.random() < 0.5 ? 1 : -1; kick(B.id, "dodge", nx / l * S * 0.4 * sd, ny / l * S * 0.4 * sd, 600); return say(); }
+        if (e.res === "crit") { host.classList.remove("critshake"); void host.offsetWidth; host.classList.add("critshake"); setTimeout(() => host.classList.remove("critshake"), 450); } /* …y al llegar */ sparks2(x1, y1, e.res === "crit" ? "#ffd65a" : e.color === "#f4ecd8" ? "#ffb15a" : e.color, e.res === "crit" ? 20 : 12); shakeUntil.set(B.id, Date.now() + 450); const g = world.querySelector(`[data-tok="${B.id}"]`); if (g) { g.classList.remove("shake"); void g.getBBox(); g.classList.add("shake"); } setTimeout(say, 60); };
       if (melee && !e.magic) {
         const ang = Math.atan2(y1 - y0, x1 - x0), r = rb + 10, ux = Math.cos(ang), uy = Math.sin(ang), px = -uy, py = ux;
         const sx = x1 + px * r - ux * 4, sy = y1 + py * r - uy * 4, ex = x1 - px * r - ux * 4, ey = y1 - py * r - uy * 4, qx = x1 - ux * r * 1.1, qy = y1 - uy * r * 1.1;

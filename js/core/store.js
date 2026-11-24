@@ -24,6 +24,8 @@ function emit(label, remote) { listeners.forEach(fn => fn(state, label, remote))
 export function useLocal() {
   backend = "local";
   state = loadLocal();
+  // se guarda enseguida: así otra pestaña abierta después parte del mismo mundo (mismos ids), no de otro recién sembrado
+  try { if (!localStorage.getItem(KEY)) saveLocal(); } catch (e) { /* sin almacenamiento */ }
   try {
     channel = new BroadcastChannel("lamesa");
     channel.onmessage = e => {

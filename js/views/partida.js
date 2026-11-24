@@ -9,6 +9,7 @@ import { presence } from "../core/presence.js";
 import { loreOf, entry, related, refName, showEntry, clockOf, clockText, advanceClock, setBackdrop } from "../core/lore.js";
 import { renderStage } from "./presentacion.js";
 import { freeDMBlock, bindFreeDM, freeStageHTML, bindFreeStage } from "./tiempolibre.js";
+import { freeOf } from "../core/tiempolibre.js";
 import { mountTactical } from "./mesa.js";
 import { renderRolls } from "./tiradas.js";
 import { renderSheet } from "./ficha.js";
@@ -32,6 +33,9 @@ let npcTurnSeen = null;
 let el, closing = false, tac = null, tacEdit = false, panelHidden = false, lastKey = null;
 // Panel del máster: dos modos (Táctica de combate | Roleplay); pestañas Iniciativa | Tiradas en táctica y en la columna del jugador
 let floorsOpen = false, offAim = null;
+const folded = new Set(); // paneles plegados del modo Roleplay (Hito 77)
+/** Cabecera plegable de un panel: el título y, a la derecha, lo que haga falta. */
+const foldHead = (k, title, extra = "") => `<h2 class="sec fhead"><button class="fbtn" data-fold="${k}" aria-expanded="${!folded.has(k)}"><i>${folded.has(k) ? "▸" : "▾"}</i> ${title}</button>${extra}</h2>`;
 let dmMode = "rol", dmTab = "npc", plTab = "pj", wasTac = null, rollsSeen = 0;
 
 export function mount(root) {
@@ -163,7 +167,9 @@ function draw() {
   wasTac = tacOn;
   if (dm && !panelHidden && !typing(rol)) {
     const open = [...$$("details[open]", rol)].map(d => d.dataset.k);
-    rol.innerHTML = sessionBlock(state) + hereBlock(state) + (liveSession(state) ? freeDMBlock(state) : "") + directionBlock(state) + tacticalBlock(state) + showBlock(state);
+    // Hito 77: más compacto y en el orden de uso: sesión y dónde estáis, qué mostrar, dirección, escena táctica
+    rol.innerHTML = sessionBlock(state) + hereBlock(state) + (liveSession(state) && freeOf(state) ? freeDMBlock(state) : "") + showBlock(state) + directionBlock(state) + tacticalBlock(state);
+    $$("[data-fold]", rol).forEach(b => b.onclick = () => { const k = b.dataset.fold; folded.has(k) ? folded.delete(k) : folded.add(k); draw(); });
     open.forEach(k => { const d = $(`details[data-k="${k}"]`, rol); if (d) d.open = true; });
     if (!typing($("#dmtools", el))) $("#dmtools", el).innerHTML = toolsBlock(state);
     bind(state); bindFreeDM(rol);
@@ -197,19 +203,24 @@ function toolsBlock(state) {
 }
 
 // Aquí: dónde está el grupo y lo que hay alrededor (PNJ, facciones, eventos y escenas del lugar), a un toque
+/** «Aquí» en una línea, dentro del panel de la sesión. */
+function hereLine(state) {
+  const here = hereOf(state), path = id => placePath(state, id).map(x => x.name).join(" › ");
+  return `<div class="hereline"><span title="Dónde está el grupo. Se marca solo al mostrar un lugar o cargar una escena suya, y mueve al grupo en el mapa.">📍</span><select id="herepl" aria-label="Dónde está el grupo"><option value="">— ¿Dónde estáis? —</option>${state.world.places.map(p => `<option value="${p.id}" ${here && here.id === p.id ? "selected" : ""}>${esc(path(p.id))}</option>`).join("")}</select>${here ? `<button class="qb sm" data-lcard="${here.id}" title="Ficha de ${esc(here.name)} en el Lore">📖</button>` : ""}<button class="qb sm" data-lsearch title="Buscar en el lore (tecla /)">🔎</button></div>`;
+}
 function hereBlock(state) {
   const live = liveSession(state); if (!live) return "";
   const here = hereOf(state), path = id => placePath(state, id).map(x => x.name).join(" › ");
   const sel = `<select id="herepl" aria-label="Dónde está el grupo"><option value="">— Elige dónde estáis —</option>${state.world.places.map(p => `<option value="${p.id}" ${here && here.id === p.id ? "selected" : ""}>${esc(path(p.id))}</option>`).join("")}</select>`;
-  if (!here) return `<div class="panel herepanel"><h2 class="sec">📍 Aquí</h2>${sel}<button class="btn small" data-lsearch>🔎 Buscar en el lore</button>
-    <p class="note" style="margin:6px 0 0">Se marca solo al mostrar un lugar o cargar una escena suya. Verás quién hay y qué puede pasar.</p></div>`;
+  if (!here) return ""; void sel; // el selector va en el panel de la sesión
   const c = contextOf(state, here.id);
   const chip = e => `<button class="hchip${c.near(e) ? " far" : ""}${e.vital === "muerto" ? " dead" : ""}" data-lcard="${e.id}" title="${c.near(e) ? "De los alrededores" : "De este lugar"}">${LORE[e.kind].icon} ${esc(e.name)}${badges(e)}</button>`;
   const grp = (t, l) => l.length ? `<div class="hgrp"><small>${t}</small><div class="hchips">${l.slice(0, 10).map(chip).join("")}${l.length > 10 ? `<button class="hchip" data-lsearch>+${l.length - 10}</button>` : ""}</div></div>` : "";
-  return `<div class="panel herepanel"><h2 class="sec">📍 Aquí <button class="lnk" data-lcard="${here.id}">${esc(here.name)}</button><button class="qb sm" data-lsearch title="Buscar en el lore (tecla /)">🔎</button></h2>${sel}
+  if (!c.npc.length && !c.faction.length && !c.event.length && !c.other.length && !c.scenes.length) return "";
+  return `<div class="panel herepanel cpanel">${foldHead("here", `📍 En ${esc(here.name)}`)}${folded.has("here") ? "" : `
     ${grp("Quién hay", c.npc)}${grp("Facciones", c.faction)}${grp("Puede pasar", c.event)}${grp("Dioses y batallas", c.other)}
     ${c.scenes.length ? `<div class="hgrp"><small>Escenas tácticas</small><div class="hchips">${c.scenes.map(x => `<button class="hchip" data-load="${x.id}" title="Cargar en la mesa">⚔️ ${esc(x.name)}</button>`).join("")}</div></div>` : ""}
-    ${!c.npc.length && !c.faction.length && !c.event.length ? `<p class="note" style="margin:6px 0 0">No hay nada del lore asociado a este lugar. Asigna el lugar a PNJ o facciones en el Lore.</p>` : ""}</div>`;
+    `}</div>`;
 }
 
 // ¿Qué ha cambiado? Al cerrar la sesión se repasa a quién habéis visto: vivo, muerto, hostil… y queda apuntado
@@ -249,20 +260,20 @@ function sessionBlock(state) {
     <div class="xplist">${state.characters.map(c => { const P = pendingFor(state, c.id); return `<div class="xpgrid"><span>${esc(c.name)}</span><input type="number" min="0" data-xpc="${c.id}" placeholder="0" value="${P.xp || ""}" aria-label="PX para ${esc(c.name)}"><input data-xpr="${c.id}" placeholder="Motivo" value="${esc(P.why)}" aria-label="Motivo para ${esc(c.name)}"></div>`; }).join("")}</div>
     ${mandoOf(state).xpn.some(n => !n.done) ? `<p class="note" style="margin:6px 0 0">Relleno con las notas de experiencia del centro de mando que aún no habías concedido.</p>` : ""}`}
     <div class="row" style="margin-top:12px"><button class="btn gold" id="doclose">${live.test ? "Terminar la prueba" : "Guardar y cerrar"}</button><button class="btn" id="cancelclose">Seguir jugando</button></div></div>`;
-  return `<div class="panel"><h2 class="sec">${esc(sessionName(live))} en curso</h2>
-    ${live.test ? `<p class="note" style="margin:0 0 12px">Los jugadores no ven esta sesión ni lo que muestres en ella.</p>` : ""}
-    <div class="row oneline"><button class="btn small gold" data-askroll title="Pide a todos o a alguien una tirada de habilidad, característica o salvación">🎲 Pedir tirada</button><button class="btn small" data-give title="Sellos, regalos, reliquias…">🎁 Dar objeto</button><button class="btn small" id="close">Cerrar sesión</button></div></div>`;
+  return `<div class="panel cpanel"><h2 class="sec">${esc(sessionName(live))} en curso${live.test ? ` <small class="tenue" title="Los jugadores no ven esta sesión ni lo que muestres en ella">· de pruebas</small>` : ""}</h2>
+    <div class="row oneline"><button class="btn small gold" data-askroll title="Pide a todos o a alguien una tirada de habilidad, característica o salvación">🎲 Tirada</button><button class="btn small" data-give title="Dar un objeto: sellos, regalos, reliquias…">🎁 Objeto</button>${(state.freeLog || []).length && !freeOf(state) ? `<button class="btn small" data-ftlog title="Registro del tiempo libre">📜</button>` : ""}${freeOf(state) ? "" : `<button class="btn small" data-ftnew title="Tiempo libre: cada uno decide qué hace en la ciudad (taberna, mercado, biblioteca…)${hereOf(state) ? " en " + esc(hereOf(state).name) : ""}">🕰 Libre</button>`}<button class="btn small" id="close" title="Cerrar la sesión: título, resumen y experiencia">⏹ Cerrar</button></div>
+    ${hereLine(state)}</div>`;
 }
 
 // Dirección: reloj de campaña y la carpeta de escenas preparadas para esta sesión, a un clic
 function directionBlock(state) {
   const live = liveSession(state); if (!live) return "";
   const chaps = loreOf(state).filter(e => e.kind === "chapter" && (e.session === live.id || !e.session)).sort((a, b) => (a.session ? 0 : 1) - (b.session ? 0 : 1) || (a.order || 0) - (b.order || 0));
-  return `<div class="panel"><h2 class="sec">Dirección</h2>
-    <div class="lclock inline"><span>🕯 ${esc(clockText(clockOf(state)))}</span><div class="row">${[[10, "+10 min"], [60, "+1 h"], [480, "+8 h"]].map(([m, l]) => `<button class="btn small" data-clock="${m}">${l}</button>`).join("")}</div></div>
+  return `<div class="panel cpanel">${foldHead("dir", "Dirección", `<a class="qb sm" href="#lore" title="Abrir el Lore">📖</a>`)}${folded.has("dir") ? "" : `
+    <div class="clockline"><span>🕯 ${esc(clockText(clockOf(state)))}</span>${[[10, "+10′"], [60, "+1 h"], [480, "+8 h"]].map(([m, l]) => `<button class="btn small" data-clock="${m}" title="Avanzar el reloj ${m < 60 ? m + " minutos" : m / 60 + " h"}">${l}</button>`).join("")}</div>
     ${chaps.length ? `<div class="showplaces"><details data-k="prep" open><summary><span>📂 Escenas preparadas</span><small>${chaps.length}</small></summary><ol class="prepmini">${chaps.map(c => `<li><a href="#lore/${c.id}">${esc(c.name)}</a><span>${related(state, c.id).map(r => { const n = refName(state, r), e = entry(state, r);
-        return e && e.kind !== "note" && e.kind !== "chapter" ? `<button class="btn small" data-showlore="${r}" title="Mostrar a todos">${n.icon} ${esc(n.name)}</button>` : n.kind === "scene" ? `<button class="btn small" data-load="${r}" title="Cargar en la mesa">⚔️ ${esc(n.name)}</button>` : `<a class="btn small" href="#lore/${r}">${n.icon} ${esc(n.name)}</a>`; }).join("")}</span></li>`).join("")}</ol></details></div>` : `<p class="empty">Sin escenas preparadas. <a href="#lore/s:chapter">Prepáralas en el Lore</a>.</p>`}
-    <div class="row" style="margin-top:8px"><a class="btn small" href="#lore">📖 Abrir el Lore</a>${state.backdrop ? `<button class="btn small" id="nobackdrop">Quitar fondo</button>` : ""}</div></div>`;
+        return e && e.kind !== "note" && e.kind !== "chapter" ? `<button class="btn small" data-showlore="${r}" title="Mostrar a todos">${n.icon} ${esc(n.name)}</button>` : n.kind === "scene" ? `<button class="btn small" data-load="${r}" title="Cargar en la mesa">⚔️ ${esc(n.name)}</button>` : `<a class="btn small" href="#lore/${r}">${n.icon} ${esc(n.name)}</a>`; }).join("")}</span></li>`).join("")}</ol></details></div>` : `<p class="note" style="margin:4px 0 0">Sin escenas preparadas. <a href="#lore/s:chapter">Prepáralas en el Lore</a>.</p>`}
+    ${state.backdrop ? `<div class="row" style="margin-top:6px"><button class="btn small" id="nobackdrop">Quitar fondo</button></div>` : ""}`}</div>`;
 }
 
 function tacticalBlock(state) {
@@ -271,7 +282,7 @@ function tacticalBlock(state) {
   state.world.places.forEach(pl => { const sc = state.scenes.filter(x => x.place === pl.id); if (sc.length) groups.push([pl.id, pl.name, sc]); });
   const lib = state.scenes.filter(x => !x.place || !state.world.places.some(pl => pl.id === x.place));
   if (lib.length) groups.push(["lib", "Biblioteca (para improvisar)", lib]);
-  return `<div class="panel"><h2 class="sec">Escena táctica</h2>
+  return `<div class="panel cpanel">${foldHead("tac", "Escena táctica", b ? "" : `<a class="qb sm" href="#escenas" title="Preparar escenas">✎</a>`)}${folded.has("tac") ? "" : `
     ${b ? `<p style="margin:0 0 8px">En la mesa: <b>${esc(b.name)}</b></p>
       <div class="showlist">
         <button class="btn small" data-show='{"type":"tactical"}' ${p.type === "tactical" ? 'aria-pressed="true"' : ""}>Mostrar la mesa</button>
@@ -282,34 +293,29 @@ function tacticalBlock(state) {
       </div>
       <h3 class="sub" style="margin:14px 0 6px">Personajes en la mesa</h3>
       <div class="pclist">${state.characters.map(c => { const on = state.tokens.some(t => t.kind === "pc" && t.char === c.id), live = c.owner && presence.online(c.owner);
-        return `<label class="pcrow${on ? " on" : ""}"><input type="checkbox" data-pc="${c.id}" ${on ? "checked" : ""}><span class="dot${live ? " live" : ""}" title="${live ? "Conectado" : "Desconectado"}"></span><span>${esc(c.name)}</span><small>${live ? "conectado" : "fuera"}</small><button class="insp ${c.inspiration ? "on" : ""}" data-insp="${c.id}" title="${c.inspiration ? "Tiene inspiración heroica (toca para quitarla)" : "Dar inspiración heroica"}" aria-label="Inspiración heroica de ${esc(c.name)}">✨</button></label>`; }).join("") || `<p class="empty">No hay personajes.</p>`}</div>` : `<p class="empty" style="margin:0 0 8px">No hay ninguna escena en la mesa.</p>`}
-    <div class="showplaces" style="margin-top:10px">${groups.map(([k, n, sc]) => `<details data-k="${k}"><summary><span>${esc(n)}</span><small>${sc.length}</small></summary>
-      <div class="scenelist">${sc.map(x => `<div class="scenerow"><span>${esc(x.name)}</span><small>${x.tokens.length} fichas</small><button class="btn small gold" data-load="${x.id}">Cargar</button></div>`).join("")}</div></details>`).join("")}</div>
-    <div class="row" style="margin-top:10px"><button class="btn small" id="tblank">Mesa vacía</button><a class="btn small" href="#escenas">Preparar escenas</a></div>
-    <p class="note" style="margin:10px 0 0">Al cargar una escena solo aparecen los personajes de quien está conectado. Marca o desmarca arriba para meter o sacar a alguien.</p></div>`;
+        return `<label class="pcrow${on ? " on" : ""}"><input type="checkbox" data-pc="${c.id}" ${on ? "checked" : ""}><span class="dot${live ? " live" : ""}" title="${live ? "Conectado" : "Desconectado"}"></span><span>${esc(c.name)}</span><small>${live ? "conectado" : "fuera"}</small><button class="insp ${c.inspiration ? "on" : ""}" data-insp="${c.id}" title="${c.inspiration ? "Tiene inspiración heroica (toca para quitarla)" : "Dar inspiración heroica"}" aria-label="Inspiración heroica de ${esc(c.name)}">✨</button></label>`; }).join("") || `<p class="empty">No hay personajes.</p>`}</div>` : ""}
+    <div class="loadline" title="Al cargar una escena solo aparecen los personajes de quien está conectado. Con una escena en la mesa, marca o desmarca personajes para meterlos o sacarlos.">
+      <select id="tpick" aria-label="Escena para cargar"><option value="">${b ? "Cargar otra escena…" : "Cargar una escena…"}</option>${groups.map(([k, n, sc]) => `<optgroup label="${esc(n)}">${sc.map(x => `<option value="${x.id}">${x.done ? "✓ " : ""}${esc(x.name)} (${x.tokens.length})</option>`).join("")}</optgroup>`).join("")}</select>
+      <button class="btn small gold" id="tload">Cargar</button><button class="btn small" id="tblank" title="Una mesa vacía para improvisar">Vacía</button></div>`}</div>`;
 }
 
+let showPl = null; // lugar desplegado en «Mostrar al grupo» (sus contenidos)
 function showBlock(state) {
   const p = state.presentation || {};
   const on = (t, extra = {}) => p.type === t && Object.entries(extra).every(([k, v]) => p[k] === v) ? ' aria-pressed="true"' : "";
-  const places = state.world.places;
-  return `<div class="panel"><h2 class="sec">Mostrar al grupo</h2>
-    <div class="showlist">
-      <button class="btn" data-show='{"type":"recap"}'${on("recap")} ${lastClosed(state) ? "" : "disabled"}>Anteriormente…</button>
-      <button class="btn" data-show='{"type":"world"}'${on("world")}>Mapa del mundo</button>
-      ${timeline(state, true).length ? `<button class="btn" data-tlstart${on("timeline")}>⏳ Cronología</button>` : ""}
+  const places = state.world.places, sel = places.find(x => x.id === showPl);
+  return `<div class="panel cpanel">${foldHead("show", "Mostrar al grupo", `<button class="qb sm" id="clear" ${state.presentation ? "" : "disabled"} title="Quitar lo que se muestra">✕</button>`)}${folded.has("show") ? "" : `
+    <div class="showchips">
+      <button class="chipb" data-show='{"type":"recap"}'${on("recap")} ${lastClosed(state) ? "" : "disabled"}>Anteriormente…</button>
+      <button class="chipb" data-show='{"type":"world"}'${on("world")} title="El mapa con el grupo y su ruta">🗺 Mapa</button>
+      ${timeline(state, true).length ? `<button class="chipb" data-tlstart${on("timeline")}>⏳ Cronología</button>` : ""}
+      ${(state.world.regions || []).map(r => `<button class="chipb" data-showreg="${r.id}"${on("region", { region: r.id })} title="Región${r.visible ? "" : " (oculta: mostrarla la revela)"}"><i class="regdot" style="background:${esc(r.color)}"></i> ${esc(r.name)}${r.visible ? "" : " ·🔒"}</button>`).join("")}
     </div>
-    ${(state.world.regions || []).length ? `<h2 class="sec" style="margin-top:16px">Regiones</h2><div class="showlist">${state.world.regions.map(r => `<button class="btn small" data-showreg="${r.id}"${on("region", { region: r.id })}><i class="regdot" style="background:${esc(r.color)}"></i> ${esc(r.name)}${r.visible ? "" : " · oculta"}</button>`).join("")}</div>` : ""}
-    <h2 class="sec" style="margin-top:16px">Lugares</h2>
-    <div class="showplaces">${places.map(pl => `<details data-k="pl-${pl.id}"><summary><span>${esc(pl.name)}</span>${pl.visible ? "" : `<small>oculto</small>`}</summary>
-        <div class="showlist">
-          <button class="btn small" data-show='${JSON.stringify({ type: "place", place: pl.id })}'${on("place", { place: pl.id })}>${pl.map ? "Mapa del lugar" : "El lugar"}</button>
-          ${pl.items.map(it => `<button class="btn small" data-show='${esc(JSON.stringify({ type: "item", place: pl.id, item: it.id }))}'${on("item", { item: it.id })}>${it.type === "image" ? "🖼 " : ""}${esc(it.title)}${it.revealed ? "" : " · oculto"}</button>`).join("")}
-        </div></details>`).join("") || `<p class="empty">Aún no hay lugares. Créalos en el mapa del mundo.</p>`}</div>
-    <p class="note" style="margin:12px 0 0">Mostrar un lugar o un contenido oculto lo revela a los jugadores.</p>
-    <div class="row" style="margin-top:12px"><button class="btn small" id="clear" ${state.presentation ? "" : "disabled"}>Quitar de la mesa</button></div></div>`;
+    <div class="showgrid" title="Toca un lugar para ver sus contenidos; mostrarlo lo revela a los jugadores">${places.map(pl => `<button class="plchip ${pl.id === showPl ? "open" : ""} ${p.place === pl.id ? "shown" : ""} ${pl.visible ? "" : "hid"}" data-showpl="${pl.id}">${esc(pl.name)}${pl.visible ? "" : " <small>🔒</small>"}${pl.items.length ? ` <small>${pl.items.length}</small>` : ""}</button>`).join("") || `<p class="empty">Aún no hay lugares. Créalos en el mapa.</p>`}</div>
+    ${sel ? `<div class="showsub"><button class="btn small gold" data-show='${JSON.stringify({ type: "place", place: sel.id })}'${on("place", { place: sel.id })}>👁 ${sel.map ? "Mapa de" : "Mostrar"} ${esc(sel.name)}</button>${sel.items.map(it => `<button class="btn small" data-show='${esc(JSON.stringify({ type: "item", place: sel.id, item: it.id }))}'${on("item", { item: it.id })}>${it.type === "image" ? "🖼 " : ""}${esc(it.title)}${it.revealed ? "" : " ·🔒"}</button>`).join("")}</div>` : ""}`}</div>`;
 }
 
+function loadOne(id) { tacEdit = false; const sc = store.get().scenes.find(x => x.id === id); loadScene(id); if (sc && sc.place && placeOf(store.get(), sc.place)) setHere(sc.place); }
 function bind(state) {
   const on = (id, fn) => { const b = $("#" + id, el); if (b) b.onclick = fn; };
   on("start", () => startSession(false));
@@ -360,8 +366,10 @@ function bind(state) {
     const b = $("#tsave", el);
     if (!b.dataset.sure) { b.dataset.sure = 1; b.outerHTML = `<span class="savescene"><input id="tsname" placeholder="Nombre de la escena" value="${esc(state.board.name)}"><button class="btn small gold" id="tsok">Guardar</button></span>`; $("#tsok", el).onclick = () => { saveBoardAsScene($("#tsname", el).value.trim() || state.board.name, null); toast("Guardada en la biblioteca de escenas"); }; }
   });
-  $$("[data-load]", el).forEach(b => b.onclick = () => { tacEdit = false; const sc = store.get().scenes.find(x => x.id === b.dataset.load); loadScene(b.dataset.load); if (sc && sc.place && placeOf(store.get(), sc.place)) setHere(sc.place); });
+  $$("[data-load]", el).forEach(b => b.onclick = () => loadOne(b.dataset.load));
   $$("[data-show]", el).forEach(b => b.onclick = () => { const p = JSON.parse(b.dataset.show); show(p); if (p.place) setHere(p.place); });
+  $$("[data-showpl]", el).forEach(b => b.onclick = () => { showPl = showPl === b.dataset.showpl ? null : b.dataset.showpl; draw(); });
+  { const tl = $("#tload", el), tp = $("#tpick", el); if (tl && tp) tl.onclick = () => { if (!tp.value) return toast("Elige una escena."); loadOne(tp.value); }; }
   $$("[data-showreg]", el).forEach(b => b.onclick = () => store.commit("present", s => { const r = (s.world.regions || []).find(x => x.id === b.dataset.showreg); if (r) { r.visible = true; s.presentation = { type: "region", region: r.id }; } }));
 }
 

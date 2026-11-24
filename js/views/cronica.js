@@ -5,6 +5,7 @@ import { currentUser, isDM } from "../core/session.js";
 import { visibleLive, pastSessions, sessionName, addEntry } from "../core/sesiones.js";
 import { $, $$, esc, toast, avatar } from "../core/ui.js";
 import { sessionStats } from "../core/cronica.js";
+import { tripText, kmOf } from "../core/ruta.js";
 import { fmtCp } from "../core/comercio.js";
 
 /** Fila de datos de la sesión (se ve sin desplegar): botín, PX, enemigos, PNJ caídos y lugares. */
@@ -14,6 +15,7 @@ function statChips(st, full, old) {
   if (st.xp) ch.push(`<span class="cst xp">⭐ ${st.xp.toLocaleString("es-ES")} PX</span>`);
   if (st.nKills) ch.push(`<span class="cst kill" title="${esc(st.kills.map(([n, k]) => `${k} × ${n}`).join(", "))}">⚔ ${st.nKills} enemigo${st.nKills > 1 ? "s" : ""}</span>`);
   if (st.npcs.length) ch.push(`<span class="cst npc" title="PNJ caídos">💀 ${esc(st.npcs.map(k => k.n).join(", "))}</span>`);
+  if (st.trip) ch.push(`<span class="cst trip" title="Distancia recorrida en el mapa del mundo y días de viaje (SRD)">🧭 ${esc(st.trip)}</span>`);
   if (st.places.length) ch.push(`<span class="cst place">📍 ${esc(full ? st.places.join(" · ") : st.places.slice(0, 3).join(" · ") + (st.places.length > 3 ? ` +${st.places.length - 3}` : ""))}</span>`);
   if (old) ch.push(`<span class="cst old" title="Esta sesión se jugó antes de que la mesa apuntara botín, enemigos, PNJ y lugares">sin registro de botín, enemigos ni lugares</span>`);
   return ch.length ? `<span class="cstats">${ch.join("")}</span>` : "";
@@ -48,8 +50,8 @@ function draw() {
   el.innerHTML = `<div class="wrap">
     <div class="chronhead"><h1 class="title">Crónica</h1><div class="row"><button class="btn small" id="cexp">Desplegar todo</button><button class="btn small" id="ccol">Plegar todo</button></div></div>
     <p class="lead">La historia del grupo, escrita entre todos. Durante la partida, anotad lo que pasa; al cerrar la sesión, el máster lo convierte en el «Anteriormente…».</p>
-    ${(() => { const A = list.map(x => sessionStats(s, x)), T = { cp: A.reduce((a, x) => a + x.cp, 0), items: A.reduce((a, x) => a + x.items.length, 0), xp: A.reduce((a, x) => a + x.xp, 0), k: A.reduce((a, x) => a + x.nKills, 0), npcs: A.flatMap(x => x.npcs.map(n => n.n)), pl: new Set(A.flatMap(x => x.places)).size };
-      return list.length ? `<div class="ctotals"><span><small>Sesiones</small><b>${list.length}</b></span><span><small>Botín</small><b>${T.cp ? fmtCp(T.cp) : "—"}</b>${T.items ? `<em>${T.items} objetos</em>` : ""}</span><span><small>Experiencia</small><b>${T.xp ? T.xp.toLocaleString("es-ES") + " PX" : "—"}</b></span><span><small>Enemigos abatidos</small><b>${T.k || "—"}</b></span><span><small>PNJ caídos</small><b>${T.npcs.length || "—"}</b>${T.npcs.length ? `<em>${esc(T.npcs.slice(0, 3).join(", "))}${T.npcs.length > 3 ? "…" : ""}</em>` : ""}</span><span><small>Lugares</small><b>${T.pl || "—"}</b></span></div>` : ""; })()}
+    ${(() => { const A = list.map(x => sessionStats(s, x)), T = { cp: A.reduce((a, x) => a + x.cp, 0), items: A.reduce((a, x) => a + x.items.length, 0), xp: A.reduce((a, x) => a + x.xp, 0), k: A.reduce((a, x) => a + x.nKills, 0), npcs: A.flatMap(x => x.npcs.map(n => n.n)), pl: new Set(A.flatMap(x => x.places)).size, km: A.reduce((a, x) => a + (x.km || 0), 0) };
+      return list.length ? `<div class="ctotals"><span><small>Sesiones</small><b>${list.length}</b></span><span><small>Botín</small><b>${T.cp ? fmtCp(T.cp) : "—"}</b>${T.items ? `<em>${T.items} objetos</em>` : ""}</span><span><small>Experiencia</small><b>${T.xp ? T.xp.toLocaleString("es-ES") + " PX" : "—"}</b></span><span><small>Enemigos abatidos</small><b>${T.k || "—"}</b></span><span><small>PNJ caídos</small><b>${T.npcs.length || "—"}</b>${T.npcs.length ? `<em>${esc(T.npcs.slice(0, 3).join(", "))}${T.npcs.length > 3 ? "…" : ""}</em>` : ""}</span><span><small>Lugares</small><b>${T.pl || "—"}</b></span><span><small>Distancia</small><b>${T.km >= 1 ? Math.round(T.km).toLocaleString("es-ES") + " km" : "—"}</b>${T.km >= 1 ? `<em>${(T.km / 36).toLocaleString("es-ES", { maximumFractionDigits: 1 })} días a ritmo normal</em>` : ""}</span></div>` : ""; })()}
     <div class="ctimeline">
     ${list.map(x => { const isOpen = opened.has(x.id) || (x.status === "open" && !closedLive), n = entries(x.id).length, xp = (x.xp || []).reduce((a, g) => a + (+g.amount || 0), 0);
       if (!isOpen) return `<section class="chron folded ${x.status === "open" ? "live" : ""}"><button class="chfold" data-fold="${x.id}" aria-expanded="false">

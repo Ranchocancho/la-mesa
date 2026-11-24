@@ -4,7 +4,7 @@
 // mesa, la barra y las reglas funcionan igual que con cualquier criatura. Lo que no viene del SRD es regla de campaña.
 //   combat = { base, ac, hp, hpNow, speed, size, vd, ab, svProf: [..], kit: { sv, act, bonus, react }, table, color }
 import { store } from "./store.js";
-import { isDM } from "./session.js";
+import { isDM, runsTable } from "./session.js";
 import { entry, loreOf, setEntry } from "./lore.js";
 import { findMonster, srd } from "./srd.js";
 import { loadKits } from "./criaturas.js";
@@ -110,7 +110,7 @@ const sheetSig = e => JSON.stringify([e.name, e.img, e.combat && [e.combat.ac, e
 export function watchNpcs() {
   let last = "";
   const run = () => {
-    const s = store.get(); if (!isDM(s)) return;
+    const s = store.get(); if (!runsTable(s)) return;
     const toks = (s.tokens || []).filter(t => t.npc);
     // 1) El Lore manda en la ficha: si el máster la cambia (plantilla, conjuros, ataques…), la figura en la mesa se actualiza
     const stale = toks.map(t => ({ t, e: entry(s, t.npc) })).filter(({ t, e }) => e && e.combat && t.npcSig !== sheetSig(e));

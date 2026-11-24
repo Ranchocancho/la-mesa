@@ -3,6 +3,7 @@ import { openChest } from "../core/comercio.js";
 import { deployOf, placer, zoneCells, zoneReach, markReady, endDeploy } from "../core/despliegue.js";
 import { condImmune } from "../core/defensas.js";
 import { combatEvents } from "../core/golpes.js";
+import { impactOf } from "../core/impactos.js";
 // Iniciales para la tira de iniciativa: sin paréntesis y con el número de los repetidos («Goblin 2 (en la maleza)» → «G2»)
 const initials = n => (String(n || "?").replace(/\s*\(.*?\)/g, "").split(/\s+/).map(w => w.replace(/[^\p{L}\p{N}]/gu, "")[0]).filter(Boolean).slice(0, 2).join("").toUpperCase() || "?");
 import { kitHTML, bindKit, kitPart, kitArmed, kitDefs, kitRest, multiLine, legLeft, legMax } from "./accionesnpc.js";
@@ -278,17 +279,39 @@ export function mountTactical(host, opts = {}) {
   }
 
   // Destellos de herida/curación en la fila de iniciativa y en la tira superior
-  const hpSeen = new Map(), flashes = new Map(); let lastIni = "", lastStrip = "";
+  // Hito 79: además, quién golpeó o curó a quién (etiqueta 6 s en la tira), el retrato del atacante brilla,
+  // la barra baja en dos tiempos y el último golpe queda en el aviso del retrato hasta que acaba la ronda.
+  const hpSeen = new Map(), flashes = new Map(), badges = new Map(), lastHit = new Map(), srcGlow = new Map(); let lastIni = "", lastStrip = "";
+  const BADGE_MS = 6000;
+  const later = (ms) => setTimeout(() => { lastIni = lastStrip = ""; drawInit(); }, ms + 30);
   function flashOf(id, h) {
     const now = Date.now(), cur = h ? h.cur : null, prev = hpSeen.get(id);
-    if (prev != null && cur != null && cur !== prev) flashes.set(id, { k: cur < prev ? "dmg" : "heal", until: now + 1300 });
+    if (prev != null && cur != null && cur !== prev) {
+      flashes.set(id, { k: cur < prev ? "dmg" : "heal", until: now + 1300 });
+      const s = S(), im = impactOf(s, id, prev, cur), t = s.tokens.find(x => x.id === id);
+      im.max = h.max; im.prev = prev; im.cur = cur;
+      badges.set(id, { ...im, until: now + BADGE_MS }); later(BADGE_MS);
+      lastHit.set(id, im);
+      if (im.by && im.by !== id) { srcGlow.set(im.by, { until: now + 1400, heal: im.heal }); later(1400); }
+      later(1600); // la barra «fantasma» se va
+      if (t && im.round == null) lastHit.delete(id);
+    }
     hpSeen.set(id, cur);
     const f = flashes.get(id); if (!f) return "";
     if (f.until < now) { flashes.delete(id); return ""; }
     if (!f.timer) f.timer = setTimeout(() => { flashes.delete(id); lastIni = lastStrip = ""; drawInit(); }, f.until - now + 30);
     return " fx-" + f.k;
   }
+  function noteHits(s) { for (const t of s.tokens || []) flashOf(t.id, hpOf(s, t)); }
+  /** Nombre de quien golpea, tal como lo puede ver este jugador (si está oculto para él, «?»). */
+  function hitterName(s, im, hidden) {
+    if (!im.by) return im.manual ? "Máster" : "";
+    const a = s.tokens.find(x => x.id === im.by);
+    if (!a || hidden(a)) return "?";
+    return String(nameOf(s, a)).replace(/\s*\(.*?\)/g, "").trim().split(/\s+/).filter(w => !/^(hermano|hermana|sir|lady|lord|fray|sor|don|doña)$/i.test(w))[0] || "?";
+  }
   function drawInit() {
+    noteHits(S());
     { const eb = $(".editbadge", host); if (eb) eb.hidden = !(S().board && S().board.editing) || isDM(S()); }
     const s = S(), dm = isDM(s), b = s.board, ph = phase(s), cur = current(s);
     const hid = unseenFn(s, dm), vis = t => dm || !hid(t), pv = dm ? unseenFn(s, false) : hid;
@@ -389,13 +412,21 @@ export function mountTactical(host, opts = {}) {
       const c = charOf(s, t), h = hpOf(s, t), exact = dm || t.kind === "pc", nm = nameOf(s, t);
       const pct = h ? Math.max(0, Math.min(1, h.cur / Math.max(1, h.max))) : null;
       const shown = pct == null ? null : exact ? pct : pct > 0.75 ? 1 : pct > 0.5 ? 0.7 : pct > 0.25 ? 0.45 : pct > 0 ? 0.18 : 0;
-      const fx = (flashes.get(t.id) && flashes.get(t.id).until > Date.now()) ? " fx-" + flashes.get(t.id).k : "";
+      const fx = ((flashes.get(t.id) && flashes.get(t.id).until > Date.now()) ? " fx-" + flashes.get(t.id).k : "")
+        + ((srcGlow.get(t.id) && srcGlow.get(t.id).until > Date.now()) ? (srcGlow.get(t.id).heal ? " fx-srcheal" : " fx-src") : "");
       const now = ph === "live" && k === 0;
+      const bd = badges.get(t.id), bOn = bd && bd.until > Date.now();
+      const round = s.board && s.board.round, lh = lastHit.get(t.id), lhOk = lh && lh.round != null && lh.round === round;
+      const vague = p => exact ? p : p > 0.75 ? 1 : p > 0.5 ? 0.7 : p > 0.25 ? 0.45 : p > 0 ? 0.18 : 0;
+      const ghost = bOn && !bd.heal && h && Date.now() - (bd.until - BADGE_MS) < 1600 ? Math.round(vague(Math.max(0, Math.min(1, bd.prev / Math.max(1, h.max)))) * 100) : null;
+      const who = bOn || lhOk ? hitterName(s, bOn ? bd : lh, hidU) : "";
+      const badge = bOn ? `<span class="tbhit ${bd.heal ? "heal" : "dmg"}${bd.crit ? " crit" : ""}" style="--hc:${bd.color}">${bd.heal ? "✚" : "⚔"}${who ? ` ${esc(who)}` : ""} <b>${bd.heal ? "+" : "−"}${Math.abs(bd.d)}</b></span>` : "";
+      const lastTip = lhOk ? ` · ${lh.heal ? "Última curación" : "Último golpe"}: ${who || "Máster"}, ${Math.abs(lh.d)}${lh.dtype ? " " + lh.dtype : ""}${lh.heal ? " PG" : ""} (ronda ${lh.round})` : "";
       // Ficha de la tira: retrato y, debajo, iniciativa + vida en una línea (Hito 70: sin estados, rompían la barra)
       const cds = (t.conds || []).filter(cd => estado(cd.id)), ini = t.init != null && ph === "live" ? t.init : null;
-      const hpRow = `<span class="tbrow">${ini != null ? `<b class="tbini" title="Iniciativa">${ini}</b>` : ""}${h ? `<span class="ihb ${shown <= 0.25 ? "low" : shown <= 0.5 ? "mid" : ""}"><span style="width:${Math.round(shown * 100)}%"></span></span>` : ""}</span>`;
+      const hpRow = `<span class="tbrow">${ini != null ? `<b class="tbini" title="Iniciativa">${ini}</b>` : ""}${h ? `<span class="ihb ${shown <= 0.25 ? "low" : shown <= 0.5 ? "mid" : ""}">${ghost != null && ghost > Math.round(shown * 100) ? `<em class="ghost" style="--from:${ghost}%;--to:${Math.round(shown * 100)}%"></em>` : ""}<span style="width:${Math.round(shown * 100)}%"></span></span>` : ""}</span>`;
       const cdRow = ""; // los estados no van en la tira (la rompían): están en la placa de la figura, en la barra y en Táctica
-      return `<span class="tbchip ${t.kind}${now ? " now" : ""}${h && h.cur <= 0 ? " down" : ""}${t.owner && t.owner === me() ? " mine" : ""}${fx}" data-tsel="${t.id}" title="${esc(nm)}${ini != null ? ` · iniciativa ${ini}` : ""}${h ? ` · ${exact ? `${h.cur}/${h.max} PG` : healthWord(h.cur, h.max)}` : ""}${cds.length ? " · " + cds.map(cd => estado(cd.id).n).join(", ") : ""}">
+      return `<span class="tbchip ${t.kind}${now ? " now" : ""}${h && h.cur <= 0 ? " down" : ""}${t.owner && t.owner === me() ? " mine" : ""}${fx}" data-tsel="${t.id}" title="${esc(nm)}${ini != null ? ` · iniciativa ${ini}` : ""}${h ? ` · ${exact ? `${h.cur}/${h.max} PG` : healthWord(h.cur, h.max)}` : ""}${cds.length ? " · " + cds.map(cd => estado(cd.id).n).join(", ") : ""}${esc(lastTip)}">${badge}
         <span class="tbav" style="--k:${(c || t).color || "#777"}">${esc(initials(nm))}</span>
         ${now ? `<span class="tbnow"><em>${esc((w => w.length > 1 && /^(hermano|hermana|sir|lady|lord|fray|sor|don|doña)$/i.test(w[0]) ? w[1] : w[0])(String(nm).replace(/\s*\(.*?\)/g, "").trim().split(/\s+/)))}</em>${hpRow}${cdRow}</span>` : hpRow + cdRow}</span>`;
     };

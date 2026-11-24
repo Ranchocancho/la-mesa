@@ -9,7 +9,7 @@
 //  - Subirse a un objeto (trepar, SRD «Trepar»): cuesta 1 m de movimiento por metro de altura.
 //  - Empujar un objeto (Fuerza (Atletismo); la CD según lo que pese es regla de campaña).
 import { store, uid } from "./store.js";
-import { isDM } from "./session.js";
+import { isDM, runsTable } from "./session.js";
 import { publish } from "./dados.js";
 import { charOf } from "./mesa.js";
 import { savePlan, abilitiesOf } from "./salud.js";
@@ -106,7 +106,7 @@ export function shove(aId, tId, mode = "push") {
   const p = savePlan(s, t, P.ab);
   const r = publish({ kind: "save", label: `Empujón de ${nm(s, a)} (${mode === "push" ? "apartar 1,5 m" : "derribar"}): salvación de ${P.ab === "des" ? "Destreza" : "Fuerza"} de ${nm(s, t)} CD ${P.dc}`, expr: `1d20${p.bonus >= 0 ? "+" : ""}${p.bonus}${p.extra || ""}`, adv: p.adv, by: t.id, dc: P.dc,
     apply: { type: "shove", mode, target: t.id, to } });
-  if (isDM(store.get())) applyEffect(r.id);
+  if (runsTable(store.get())) applyEffect(r.id);
   return r;
 }
 /** El máster aplica lo que ha salido (el jugador no puede mover ni derribar figuras ajenas). */
@@ -177,13 +177,13 @@ export function pushObject(tokId, propId) {
   if (phase(s) === "live" && s.board.turn === t.id) spend(tokId, "act");
   const c = charOf(s, t), b = c ? skillBonus(c, "atletismo", "fue") : mod(abilitiesOf(s, t).fue);
   const r = publish({ kind: "check", label: `${nm(s, t)} empuja ${x.name} · Fuerza (Atletismo) CD ${x.dc}`, expr: `1d20${b >= 0 ? "+" : ""}${b}`, by: t.id, dc: x.dc, apply: { type: "pushobj", prop: x.id, to: x.to } });
-  if (isDM(store.get())) applyEffect(r.id);
+  if (runsTable(store.get())) applyEffect(r.id);
   toast(r.total >= x.dc ? `Atletismo ${r.total}: lo mueves 1,5 m.` : `Atletismo ${r.total}: no se mueve.`);
 }
 
 /** En el cliente del máster: aplica empujones y objetos empujados que han pedido los jugadores. */
 export function watchEffects() {
-  const run = () => { const s = store.get(); if (!isDM(s)) return; (s.rolls || []).filter(r => r.apply && !r.applied && r.result).forEach(r => applyEffect(r.id)); };
+  const run = () => { const s = store.get(); if (!runsTable(s)) return; (s.rolls || []).filter(r => r.apply && !r.applied && r.result).forEach(r => applyEffect(r.id)); };
   store.subscribe(() => queueMicrotask(run)); setInterval(run, 2500);
 }
 export { uid, hasCond };

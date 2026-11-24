@@ -3,13 +3,14 @@
 //   · kills: criaturas que caen a 0 PG (las de Lore como PNJ, aparte) · scenes: mesas por las que pasa el grupo
 //   · loot (comercio.js) · visited (contexto.js: lugares del mapa del mundo) · xp0 → PX ganados (al cerrar: xpGot)
 import { store } from "./store.js";
-import { isDM } from "./session.js";
+import { isDM, runsTable } from "./session.js";
 import { liveSession } from "./sesiones.js";
 import { hpOf } from "./mesa.js";
+import { tripText, kmOf } from "./ruta.js";
 
 const prev = new Map(); let lastLive = null;
 function scan() {
-  const s = store.get(); if (!isDM(s)) return;
+  const s = store.get(); if (!runsTable(s)) return;
   const l = liveSession(s); if (!l || l.test) { prev.clear(); lastLive = null; return; }
   if (lastLive !== l.id) { prev.clear(); lastLive = l.id; }
   const add = [];
@@ -37,5 +38,5 @@ export function sessionStats(s, x) {
   const kills = (x.kills || []).filter(k => !k.npc), npcs = (x.kills || []).filter(k => k.npc);
   const group = {}; kills.forEach(k => { const n = String(k.n || "?").replace(/\s+\d+$/, ""); group[n] = (group[n] || 0) + 1; });
   const places = [...(x.visited || []).map(id => ((s.world && s.world.places) || []).find(p => p.id === id)).filter(Boolean).map(p => p.name), ...(x.scenes || []).map(c => c.n)];
-  return { cp, items, xp, kills: Object.entries(group).sort((a, b) => b[1] - a[1]), nKills: kills.length, npcs: npcs.map(k => ({ n: k.n, id: k.npc })), places: [...new Set(places)] };
+  return { trip: tripText(s, x.route || []), km: kmOf(s, x.route || []), cp, items, xp, kills: Object.entries(group).sort((a, b) => b[1] - a[1]), nKills: kills.length, npcs: npcs.map(k => ({ n: k.n, id: k.npc })), places: [...new Set(places)] };
 }

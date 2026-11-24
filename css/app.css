@@ -2693,3 +2693,87 @@ button.hbr:hover{box-shadow:0 0 0 1px var(--react,#c9a0ff)}
 .world .pin.droptarget .medal{outline:3px solid #ffd76a;outline-offset:4px}
 .partybar{position:absolute;left:12px;bottom:12px;z-index:6;display:flex;gap:8px;align-items:center;flex-wrap:wrap;max-width:calc(100% - 90px);padding:6px 10px;border-radius:12px;background:rgba(22,18,15,.92);border:1px solid var(--linea);font-size:13.5px}
 .partybar b{color:#ff9a7a}
+/* ---------- Hito 77: panel de Roleplay más compacto ---------- */
+.dm-rol .cpanel{padding:10px 12px}
+.dm-rol .cpanel h2.sec{margin:0 0 8px}
+.fhead{display:flex;align-items:center;gap:6px}
+.fbtn{flex:1;text-align:left;background:none;border:0;padding:0;color:inherit;font:inherit;letter-spacing:inherit;text-transform:inherit;cursor:pointer}
+.fbtn i{font-style:normal;color:var(--tenue);display:inline-block;width:12px}
+.hereline{display:flex;gap:4px;align-items:center;margin-top:8px}.hereline select{flex:1;min-width:0}
+.clockline{display:flex;gap:4px;align-items:center;flex-wrap:wrap;font-size:13.5px}.clockline span{flex:1 1 auto;color:var(--oro)}
+.showchips{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:6px}
+.chipb{font-size:12.5px;padding:3px 9px;border-radius:999px;border:1px solid var(--linea);background:rgba(0,0,0,.2);color:var(--hueso);cursor:pointer}
+.chipb[aria-pressed="true"]{border-color:var(--oro);background:#3a2c18;color:var(--oro)}.chipb:disabled{opacity:.4}
+.showgrid{display:grid;grid-template-columns:1fr 1fr;gap:4px}
+.plchip{text-align:left;font-size:13px;padding:5px 8px;border-radius:7px;border:1px solid var(--linea);background:rgba(0,0,0,.2);color:var(--hueso);cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.plchip small{color:var(--tenue)}.plchip.hid{border-style:dashed;color:#b9c4f0}.plchip.open{border-color:var(--oro)}.plchip.shown{background:#3a2c18;color:var(--oro)}
+.showsub{display:flex;flex-wrap:wrap;gap:4px;margin-top:6px;padding:6px;border-radius:8px;background:rgba(214,170,78,.07);border:1px solid rgba(214,170,78,.25)}
+.loadline{display:flex;gap:4px;align-items:center;margin-top:6px}.loadline select{flex:1;min-width:0}
+.dm-rol .hgrp{margin-top:4px}
+.dm-rol .prepmini{margin:4px 0 0;padding-left:18px;font-size:13.5px}
+.dm-rol .prepmini li{margin:0 0 4px}.dm-rol .prepmini li>span{display:inline-flex;flex-wrap:wrap;gap:3px;margin-left:4px;vertical-align:middle}
+.dm-rol .prepmini .btn.small{font-size:11.5px;padding:1px 7px}
+.dm-rol .showplaces details>summary{padding:4px 8px;font-size:13.5px}
+/* Hito 77: rutas siempre en rojo, distancia y días */
+.ctotals{grid-template-columns:repeat(7,minmax(0,1fr))}
+.cst.trip{border-color:rgba(192,57,43,.5);color:#ffb0a0}
+.ptrip b{color:#ffb0a0}.pscale{display:inline-flex;align-items:center;gap:3px}.pscale input{width:70px;font-size:12.5px;padding:2px 4px}
+.partybar select{font-size:12.5px;padding:2px 4px}
+.routesvg .rline{opacity:.75}
+.stageroute .rline{stroke:#c0392b;opacity:.7}.stageroute .rdot{fill:#c0392b}
+/* Hito 77: Mando sin huecos: el grupo a lo ancho y el resto en columnas que se rellenan de arriba abajo */
+.mando .mgrid,.mando.page .mgrid{display:block}
+.mando .mgrid>.mpanel.wide{margin-bottom:14px}
+.mcols{columns:3 380px;column-gap:14px}
+.mcols>.mpanel{break-inside:avoid;display:block;width:100%;margin:0 0 14px;box-sizing:border-box}
+.mando.compact .mcols{columns:1}
+.mando.compact .mgrid>.mpanel.wide,.mando.compact .mcols>.mpanel{margin-bottom:8px}
+/* Hito 78: invitados, sacar del mundo, jugar como jugador, historial de cambios */
+.pcmail{display:block;font-size:11px;color:var(--tenue)}
+.pcend [data-kick]{padding:2px 8px}
+.invlist{display:flex;flex-direction:column;gap:6px;margin-bottom:8px}
+.invrow{display:flex;align-items:center;gap:8px;padding:6px 8px;border:1px solid var(--linea,#3a3530);border-radius:8px}
+.invmail{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;font-size:13px}
+.invmail small{margin-left:6px;font-size:11px}.invmail .on{color:#79a85a}.invmail .off{color:var(--tenue)}
+.invadd input{flex:1;min-width:0;text-align:left;font-size:13px}
+.viewbar.selfplay{background:#1f2a1c;border-bottom-color:#5d8a4a}
+.btn.playself{white-space:nowrap}
+.histpanel{position:fixed;top:56px;right:10px;bottom:10px;width:min(420px,calc(100vw - 20px));z-index:60;display:flex;flex-direction:column;gap:8px;padding:12px;background:#17140f;border:1px solid #5a4a30;border-radius:12px;box-shadow:0 12px 40px #000a}
+.histpanel header{display:flex;align-items:center;justify-content:space-between}
+.histpanel .note{margin:0;font-size:12px}
+.histpanel #histq{text-align:left;font-size:13px}
+.histlist{flex:1;overflow:auto;display:flex;flex-direction:column;gap:6px;padding-right:2px}
+.hrow{display:grid;grid-template-columns:1fr auto;gap:2px 8px;padding:7px 9px;border:1px solid #3a3326;border-radius:8px;background:#1e1a14}
+.hrow .hmeta{display:flex;gap:8px;align-items:baseline;font-size:12px}.hrow time{color:var(--tenue);font-variant-numeric:tabular-nums}
+.hrow .hwhat{grid-column:1;font-size:13px;line-height:1.3}
+.hrow [data-undo],.hrow .hdone{grid-column:2;grid-row:1/3;align-self:center;white-space:normal;max-width:150px;font-size:12px}
+.hrow.undone{opacity:.5}.hrow.undone .hwhat{text-decoration:line-through}
+.hrow.isundo{border-color:#5a4fb0}
+/* Hito 79: quién golpea a quién en la tira de iniciativa */
+.turnbar .ihb{position:relative}
+.ihb>.ghost{position:absolute;left:0;top:0;bottom:0;width:var(--to);background:#ffe9b0;animation:hbghost 1.3s ease-in .35s both;z-index:0}
+.ihb>span{position:relative;z-index:1}
+@keyframes hbghost{from{width:var(--from)}to{width:var(--to)}}
+.turnbar .tbchip.fx-dmg{animation:chipshake .5s ease-out}
+@keyframes chipshake{0%,100%{transform:none}15%{transform:translate(-4px,1px) rotate(-3deg)}30%{transform:translate(4px,-1px) rotate(3deg)}45%{transform:translate(-3px,0) rotate(-2deg)}60%{transform:translate(2px,0)}80%{transform:translate(-1px,0)}}
+.turnbar .tbchip.fx-src .tbav{animation:fxav 1.3s ease-out;--fx:#ffb15a}
+.turnbar .tbchip.fx-srcheal .tbav{animation:fxav 1.3s ease-out;--fx:#5cff7a}
+.tbhit{position:absolute;top:100%;left:50%;transform:translateX(-50%);margin-top:3px;white-space:nowrap;z-index:5;pointer-events:none;
+  font-size:11px;line-height:16px;padding:1px 7px;border-radius:9px;background:rgba(20,12,8,.92);border:1px solid var(--hc);color:#f4ecd8;
+  box-shadow:0 0 10px color-mix(in srgb,var(--hc) 55%,transparent);animation:tbhitin .35s cubic-bezier(.3,1.6,.5,1) both,tbhitout .6s ease-in 5.4s forwards}
+.tbhit b{color:var(--hc);font-weight:800}
+.tbhit.crit{font-size:12px;border-width:2px}.tbhit.crit b::after{content:" ¡crítico!";font-size:10px;font-weight:700}
+@keyframes tbhitin{from{opacity:0;transform:translate(-50%,-6px) scale(.6)}to{opacity:1;transform:translate(-50%,0) scale(1)}}
+@keyframes tbhitout{to{opacity:0}}
+@media (prefers-reduced-motion:reduce){.turnbar .tbchip.fx-dmg,.tbhit,.ihb>.ghost{animation-duration:.01s}}
+/* Hito 79: golpe, esquiva y curación en la mesa 2D */
+.boardsvg .tok.hit>*{animation:thit .6s ease-out}
+@keyframes thit{0%{transform:none;filter:none}18%{transform:translate(var(--rx),var(--ry));filter:drop-shadow(0 0 8px #ff2a1a) brightness(1.5) sepia(.6) hue-rotate(-30deg) saturate(3)}
+  35%{transform:translate(calc(var(--rx) * .5 - 4px),calc(var(--ry) * .5))}50%{transform:translate(4px,0);filter:drop-shadow(0 0 4px #ff2a1a)}65%{transform:translate(-3px,0)}82%{transform:translate(2px,0)}100%{transform:none;filter:none}}
+.boardsvg .tok.dodge>*{animation:tdodge .55s ease-out}
+@keyframes tdodge{0%,100%{transform:none}35%{transform:translate(var(--rx),var(--ry))}}
+.boardsvg .tok.healfx>*{animation:theal .7s ease-out}
+@keyframes theal{0%{filter:none}25%{filter:drop-shadow(0 0 10px #5cff7a) brightness(1.3)}100%{filter:none}}
+.critshake{animation:critshake .4s ease-out}
+@keyframes critshake{0%,100%{transform:none}20%{transform:translate(-5px,3px)}40%{transform:translate(5px,-3px)}60%{transform:translate(-3px,2px)}80%{transform:translate(2px,-1px)}}
+@media (prefers-reduced-motion:reduce){.boardsvg .tok.hit>*,.boardsvg .tok.dodge>*,.critshake{animation-duration:.01s}}

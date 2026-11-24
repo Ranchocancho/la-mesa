@@ -6,7 +6,7 @@
 // a partir de la ronda y del orden de iniciativa, y da igual quién pase el turno (en la nube, un jugador
 // no puede tocar las figuras de los demás; lo deja hecho el máster al verlo, sin contar dos veces).
 import { store } from "./store.js";
-import { isDM } from "./session.js";
+import { isDM, runsTable } from "./session.js";
 import { order } from "./mesa.js";
 
 export const ROUNDS_PER_MIN = 10; // SRD: un asalto son 6 segundos
@@ -73,7 +73,7 @@ export function unanchor(s) {
 export function watchDurations() {
   let busy = false;
   const run = () => {
-    const s = store.get(); if (busy || !isDM(s) || !live(s)) return;
+    const s = store.get(); if (busy || !runsTable(s) || !live(s)) return;
     const copy = JSON.parse(JSON.stringify({ board: s.board, tokens: s.tokens }));
     if (!prune(copy)) return;
     busy = true; store.commit("token", st => { prune(st); }); busy = false;

@@ -13,9 +13,14 @@ export function renderAccess(root) {
       <div class="row"><button class="btn gold" id="signin">Entrar con Google</button></div>
       <p class="note">¿Solo quieres echar un vistazo? <a href="?demo" style="color:var(--oro)">Abrir el modo demostración</a>, que funciona sin cuenta en este navegador.</p>`;
   } else if (cloud.status === "joining") {
-    body = `<h1 class="title">${esc(cloud.joinable.name)}</h1>
-      <p class="lead">Te han invitado a este mundo. Entrarás como jugador con tu cuenta ${esc(u.email || "")}.</p>
-      <div class="row"><button class="btn gold" id="join">Unirme</button><button class="btn" id="tolobby">Ahora no</button></div>`;
+    const j = cloud.joinable;
+    body = j.role ? `<h1 class="title">${esc(j.name)}</h1>
+      <p class="lead">Te han invitado a este mundo. Entrarás como <b>${j.role === "dm" ? "máster" : "jugador"}</b> con tu cuenta ${esc(u.email || "")}.</p>
+      <div class="row"><button class="btn gold" id="join">Unirme</button><button class="btn" id="tolobby">Ahora no</button></div>`
+      : `<h1 class="title">${esc(j.name)}</h1>
+      <p class="lead">No estás invitado a este mundo con la cuenta <b>${esc(u.email || "")}</b>.</p>
+      <p class="note">Pide al administrador del mundo que añada este correo a su lista de invitados y vuelve a abrir el enlace. Si tienes otra cuenta de Google, sal y entra con ella.</p>
+      <div class="row"><button class="btn" id="tolobby">Volver a mis mundos</button><button class="btn" id="signout">Salir</button></div>`;
   } else {
     body = `<h1 class="title">Hola, ${esc((u.displayName || "").split(" ")[0] || "aventurero")}</h1>
       <p class="lead">Entra en tu mundo. Si vas a organizar uno nuevo, créalo aquí: serás su administrador y podrás nombrar másteres.</p>

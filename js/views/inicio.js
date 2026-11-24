@@ -50,8 +50,11 @@ function draw() {
       <section class="panel">
         <h2 class="sec">El grupo</h2>
         <div class="party" id="party"></div>
-        ${dm && store.mode() === "cloud" ? `<h2 class="sec" style="margin-top:20px">Invitar al grupo</h2>
-          <p class="note" style="margin:0 0 10px">Envía este enlace. Cada uno entra con su cuenta de Google y queda dentro del mundo como jugador.</p>
+        ${dm && (isAdmin(state) || store.mode() === "local") ? `<h2 class="sec" style="margin-top:20px">Invitados</h2>
+          <p class="note" style="margin:0 0 10px">Solo pueden entrar las cuentas de Google de esta lista, con el papel que les pongas. Quien ya está dentro sigue dentro.</p>
+          <div id="invites"></div>` : ""}
+        ${dm && store.mode() === "cloud" ? `<h2 class="sec" style="margin-top:20px">Enlace del mundo</h2>
+          <p class="note" style="margin:0 0 10px">Envía este enlace a tus invitados. Cada uno entra con la cuenta de Google de su correo.</p>
           <div class="row"><input id="invite" readonly class="btn" style="flex:1;min-width:0;text-align:left;font-size:13px" aria-label="Enlace de invitación"><button class="btn gold small" id="copyinv">Copiar enlace</button></div>` : ""}
         ${dm && store.mode() === "local" ? `<p class="note" style="margin-top:16px">Modo demostración: abre esta página en otra pestaña y entra como un jugador para ver la sincronización.</p>
           <div class="row" style="margin-top:12px"><button class="btn small danger" id="reset">Restablecer el mundo de ejemplo</button></div>` : ""}
@@ -70,6 +73,7 @@ function draw() {
     </section>
   </div>`;
   drawParty();
+  drawInvites();
   const bgURL = state.world.map ? null : exampleMap().url;
   if (bgURL) $("#recapbg").style.backgroundImage = `url('${bgURL}')`;
   else getImage(state.world.map).then(u => { const b = $("#recapbg"); if (b && u) b.style.backgroundImage = `url('${u}')`; });
@@ -131,21 +135,25 @@ function drawParty() {
   const box = el && $("#party", el);
   if (!box) return;
   const state = store.get();
-  const dm = isDM(state), admin = isAdmin(state) && dm;
+  // en la demostración el máster hace de dueño del mundo
+  const dm = isDM(state), admin = (isAdmin(state) || store.mode() === "local") && dm, myId = (currentUser(state) || {}).id;
   const players = state.users.filter(u => u.role === "player");
   const rows = state.users.map(u => {
     const ch = state.characters.find(c => c.owner === u.id);
-    const role = admin && u.role !== "admin"
-      ? `<select class="btn small" data-role="${u.id}" aria-label="Papel de ${esc(u.name)}"><option value="player" ${u.role === "player" ? "selected" : ""}>Jugador</option><option value="dm" ${u.role === "dm" ? "selected" : ""}>Máster</option></select>`
+    const role = admin && u.role !== "admin" && u.id !== myId
+      ? `<select class="btn small" data-role="${u.id}" aria-label="Papel de ${esc(u.name)}"><option value="player" ${u.role === "player" ? "selected" : ""}>Jugador</option><option value="dm" ${u.role === "dm" ? "selected" : ""}>Máster</option></select><button class="btn small danger" data-kick="${u.id}" title="Sacar del mundo">✕</button>`
       : `<span>${esc(ROLE[u.role] || "Jugador")}</span>`;
-    return `<div class="pc">${avatar(ch && u.role === "player" ? ch : u, 44)}<div><b>${esc(u.name)}</b><span>${ch ? `${esc(ch.name)} · ${esc(ch.cls)} ${ch.level}` : u.role === "player" ? "Sin personaje asignado" : esc(ROLE[u.role])}</span></div><div class="pcend">${role}${status(u.id)}</div></div>`;
+    const sub = ch ? `${esc(ch.name)} · ${esc(ch.cls)} ${ch.level}${u.role !== "player" ? ` · ${esc(ROLE[u.role])}` : ""}` : u.role === "player" ? "Sin personaje asignado" : esc(ROLE[u.role]);
+    return `<div class="pc">${avatar(ch && u.role === "player" ? ch : u, 44)}<div><b>${esc(u.name)}</b><span>${sub}</span>${admin && u.email ? `<small class="pcmail">${esc(u.email)}</small>` : ""}</div><div class="pcend">${role}${status(u.id)}</div></div>`;
   });
   let assign = "";
-  if (dm && state.characters.length && players.length) {
+  // El administrador y los másteres también pueden llevar su propio personaje (Hito 78)
+  const owners = [...players, ...state.users.filter(u => u.role !== "player")];
+  if (dm && state.characters.length && owners.length) {
     assign = `<h2 class="sec" style="margin-top:18px">Personajes</h2>
       <p class="note" style="margin:0 0 8px">Asigna cada personaje a su jugador. Las fichas están en <a href="#personajes" style="color:var(--oro)">Personajes</a>.</p>
       ${state.characters.map(c => `<label class="pc">${avatar(c, 44)}<div><b>${esc(c.name)}</b><span>${esc(c.cls)} ${c.level}</span></div>
-        <select class="btn small" data-char="${c.id}" aria-label="Jugador de ${esc(c.name)}"><option value="">Sin jugador</option>${players.map(p => `<option value="${p.id}" ${c.owner === p.id ? "selected" : ""}>${esc(p.name)}</option>`).join("")}</select></label>`).join("")}`;
+        <select class="btn small" data-char="${c.id}" aria-label="Jugador de ${esc(c.name)}"><option value="">Sin jugador</option>${owners.map(p => `<option value="${p.id}" ${c.owner === p.id ? "selected" : ""}>${esc(p.name)}${p.role !== "player" ? ` (${ROLE[p.role].toLowerCase()})` : ""}</option>`).join("")}</select></label>`).join("")}`;
   }
   box.innerHTML = rows.join("") + (players.length || !dm ? "" : `<p class="empty">Aún no se ha unido ningún jugador. Mándales el enlace de invitación.</p>`) + assign;
   $$("[data-role]", box).forEach(sel => sel.onchange = () => store.commit("place", s => {
@@ -153,11 +161,40 @@ function drawParty() {
     s.dms = s.users.filter(x => x.role === "dm").map(x => x.id);
     toast(sel.value === "dm" ? `${u.name} ahora es máster` : `${u.name} ahora es jugador`);
   }));
+  $$("[data-kick]", box).forEach(b => b.onclick = () => {
+    const u = store.get().users.find(x => x.id === b.dataset.kick); if (!u) return;
+    if (!b.dataset.sure) { b.dataset.sure = "1"; b.textContent = "¿Sacar?"; b.title = `Pulsa otra vez para sacar a ${u.name} del mundo`; return; }
+    if (store.mode() === "cloud") import("../core/cloud.js").then(m => m.removeMember(u.id));
+    else store.commit("place", s => { s.users = s.users.filter(x => x.id !== u.id); s.dms = (s.dms || []).filter(x => x !== u.id); });
+    toast(`${u.name} ya no está en el mundo. Su personaje se queda sin jugador hasta que lo asignes.`);
+  });
   $$("[data-char]", box).forEach(sel => sel.onchange = () => store.commit("place", s => {
     const c = s.characters.find(x => x.id === sel.dataset.char); c.owner = sel.value || null;
     s.users.forEach(u => { if (u.character === c.id) delete u.character; });
     const u = s.users.find(x => x.id === sel.value); if (u) u.character = c.id;
   }));
+}
+
+/* ---------- Invitados (Hito 78): solo el dueño ---------- */
+const MAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+function drawInvites() {
+  const box = el && $("#invites", el); if (!box) return;
+  const s = store.get(), inv = s.invites || [];
+  const joined = new Set(s.users.map(u => (u.email || "").toLowerCase()).filter(Boolean));
+  box.innerHTML = `<div class="invlist">${inv.map(i => `<div class="invrow"><span class="invmail">${esc(i.email)}${joined.has(i.email) ? ` <small class="on">● dentro</small>` : ` <small class="off">pendiente</small>`}</span>
+      <select class="btn small" data-invrole="${esc(i.email)}" aria-label="Papel de ${esc(i.email)}"><option value="player" ${i.role === "player" ? "selected" : ""}>Jugador</option><option value="dm" ${i.role === "dm" ? "selected" : ""}>Máster</option></select>
+      <button class="btn small" data-invdel="${esc(i.email)}" title="Quitar la invitación">✕</button></div>`).join("") || `<p class="empty">Nadie invitado todavía: con el enlace no puede entrar nadie nuevo.</p>`}</div>
+    <div class="row invadd"><input id="invmail" type="email" class="btn" placeholder="correo@gmail.com" aria-label="Correo del invitado"><select id="invrole" class="btn small" aria-label="Papel"><option value="player">Jugador</option><option value="dm">Máster</option></select><button class="btn gold small" id="invgo">Invitar</button></div>`;
+  const add = () => {
+    const e = $("#invmail", box).value.trim().toLowerCase(), role = $("#invrole", box).value;
+    if (!MAIL.test(e)) { toast("Escribe un correo válido."); return; }
+    store.commit("place", st => { st.invites = (st.invites || []).filter(x => x.email !== e); st.invites.push({ email: e, role, at: Date.now() }); st.invites.sort((a, b) => a.email.localeCompare(b.email)); });
+    toast(`${e} puede entrar como ${role === "dm" ? "máster" : "jugador"}`);
+  };
+  $("#invgo", box).onclick = add;
+  $("#invmail", box).onkeydown = ev => { if (ev.key === "Enter") add(); };
+  $$("[data-invrole]", box).forEach(sel => sel.onchange = () => store.commit("place", st => { const i = (st.invites || []).find(x => x.email === sel.dataset.invrole); if (i) i.role = sel.value; }));
+  $$("[data-invdel]", box).forEach(b => b.onclick = () => store.commit("place", st => { st.invites = (st.invites || []).filter(x => x.email !== b.dataset.invdel); }));
 }
 
 const status = id => presence.online(id) ? `<span class="on">● conectado</span>` : `<span class="off">○ fuera</span>`;
@@ -169,7 +206,7 @@ function drawWho(state) {
     <div class="who">
       ${state.users.map(u => {
         const c = state.characters.find(x => x.owner === u.id);
-        return `<button class="whoc ${u.role !== "player" ? "dmc" : ""}" data-id="${u.id}">${avatar(c || u)}<b>${esc(c ? c.name : u.name)}</b><span>${u.role !== "player" ? ROLE[u.role] : `${esc(u.name)} · ${esc(c.cls)} ${c.level}`}</span></button>`;
+        return `<button class="whoc ${u.role !== "player" ? "dmc" : ""}" data-id="${u.id}">${avatar(c && u.role === "player" ? c : u)}<b>${esc(c && u.role === "player" ? c.name : u.name)}</b><span>${u.role !== "player" ? ROLE[u.role] + (c ? ` · ${esc(c.name)}` : "") : c ? `${esc(u.name)} · ${esc(c.cls)} ${c.level}` : `${esc(u.name)} · sin personaje`}</span></button>`;
       }).join("")}
     </div>
     <p class="note">Con la versión en la nube cada uno entra con su cuenta de Google y no hay que elegir.</p>
