@@ -950,3 +950,10 @@ A partir de la auditoría de diseño comparada con Baldur's Gate 3:
 - **Agua y lava con fondo:** una segunda capa que se mueve en otra dirección; las brasas laten.
 - **▦ Cuadrícula** opcional sobre el suelo 3D (se recuerda en cada navegador).
 - **Luces del catálogo:** la forja, los farolillos y la gran hoguera alumbran con su radio y parpadean como las antorchas.
+
+## Hito 82 · Marcas tácticas en el suelo
+
+- **Zonas peligrosas con borde** (2D y 3D): lava y brasas/brea con un borde naranja que late; hielo delgado y hielo, azul discontinuo; abismo, amarillo. Al pasar el ratón (2D) dice qué pasa. Los **puentes** marcan en ámbar el borde que da al vacío, al agua o a la lava; donde hay puente no se marca peligro.
+- **Trampas con estado** inequívoco: **oculta** (solo el máster: anillo violeta discontinuo y 👁), **descubierta** (anillo ámbar que late y ⚠) y **disparada** (anillo gris, la pieza apagada y ✖).
+- **Cobertura:** cada objeto que da cobertura lleva un escudo pequeño, medio relleno (cobertura media, +2 a la CA y a las salvaciones de Destreza) o de tres cuartos (+5). En 2D, al pasar el ratón lo explica.
+- Arreglo: las animaciones del escenario (agua, lava, piezas que giran) se acumulaban cada vez que cambiaba la mesa; ahora se tiran con el escenario viejo.

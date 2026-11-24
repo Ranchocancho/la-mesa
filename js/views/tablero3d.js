@@ -25,6 +25,7 @@ import { playEffect, EFECTOS } from "./efectos3d.js";
 import { sound, AMBIENTES } from "../core/sonido.js";
 import { floatText, strike, motes } from "./golpes3d.js";
 import { makeEnvironment, makeBloom } from "./brillo3d.js";
+import { hazardEdges, HAZ_COLOR, coverOf, trapState, TRAP_LOOK } from "../core/marcas.js";
 import { toast } from "../core/ui.js";
 import { RES_TEXT, RES_COLOR, cells as cellDist } from "../core/golpes.js";
 import { impactOf } from "../core/impactos.js";
@@ -64,6 +65,19 @@ const PROC_BIG = ["altar", "sarcofago", "estatua", "pozo", "brasero", "arbolmuer
 const WALL_TALL = 1.6; // muros altos: 6,4 unidades ≈ 2,4 m (antes 1,5 m, más bajos que las figuras)
 // Texturas de terreno como materiales 3D (con relieve sacado de la propia imagen); una por tipo
 const TEXMAT = new Map();
+// Hito 82: insignias pequeñas (estado de trampa, cobertura) dibujadas en un lienzo
+const BADGE = new Map();
+function badgeTex(key, draw) {
+  if (BADGE.has(key)) return BADGE.get(key);
+  const c = document.createElement("canvas"); c.width = c.height = 96; const g = c.getContext("2d"); draw(g);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; BADGE.set(key, t); return t;
+}
+const trapBadge = st => badgeTex("trap:" + st, g => { const L = TRAP_LOOK[st]; g.fillStyle = L.color; g.beginPath(); g.arc(48, 48, 40, 0, 7); g.fill(); g.lineWidth = 6; g.strokeStyle = "rgba(20,14,10,.85)"; g.stroke(); g.fillStyle = "#1a1410"; g.font = "bold 50px sans-serif"; g.textAlign = "center"; g.textBaseline = "middle"; g.fillText(L.icon, 48, 52); });
+const coverBadge = cv => badgeTex("cov:" + cv, g => {
+  const sh = () => { g.beginPath(); g.moveTo(48, 8); g.lineTo(84, 22); g.lineTo(78, 62); g.lineTo(48, 88); g.lineTo(18, 62); g.lineTo(12, 22); g.closePath(); };
+  sh(); g.fillStyle = "rgba(20,16,12,.85)"; g.fill(); g.lineWidth = 5; g.strokeStyle = "#e8dfd0"; g.stroke();
+  g.save(); sh(); g.clip(); g.fillStyle = "#e8dfd0"; if (cv === "3q") { g.fillRect(0, 0, 48, 96); g.fillRect(48, 48, 48, 48); } else g.fillRect(0, 0, 48, 96); g.restore();
+});
 function terrainMat(k) {
   if (TEXMAT.has(k)) return TEXMAT.get(k);
   const ty = TERRAIN[k] || TERRAIN.piedra, map = new THREE.CanvasTexture(terrainCanvas(k));
@@ -417,9 +431,10 @@ export function createBoard3D(host, opts) {
   }
 
   // ---------- Construir el escenario ----------
+  let worldTicks = new Set(); // animaciones del escenario actual (se tiran al reconstruirlo)
   async function buildWorld(g) {
     const my = ++build;
-    const grp = new THREE.Group(), newTorches = [];
+    const grp = new THREE.Group(), newTorches = [], ticks = new Set(); // estas «ticks» son las del escenario nuevo
     const W = g.cols * CELL, H = g.rows * CELL;
     // Mesa de madera y marco del tablero
     const wood = woodTex(); wood.repeat.set(3, 3);
@@ -584,11 +599,42 @@ export function createBoard3D(host, opts) {
         light.position.set(x + (L.dx || 0), L.y + py, z + (L.dz || 0));
         grp.add(light); newTorches.push({ light, power: L.power, base: 34 * L.power, seed: Math.random() * 10 });
       }
+      // Hito 82: estado de la trampa (anillo + insignia) y cobertura (escudo pequeño)
+      const ts = trapState(p), cv = coverOf(p);
+      if (ts) {
+        const col = new THREE.Color(TRAP_LOOK[ts].color);
+        const ring = new THREE.Mesh(new THREE.RingGeometry(CELL * 0.4, CELL * 0.47, 40), new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: ts === "disparada" ? 0.55 : 0.8, depthWrite: false, side: THREE.DoubleSide }));
+        ring.rotation.x = -Math.PI / 2; ring.position.y = 0.1; ring.raycast = () => {}; w.add(ring);
+        if (ts === "descubierta") { let k = Math.random() * 3; ticks.add(dt => { k += dt; ring.material.opacity = 0.55 + Math.sin(k * 3.6) * 0.3; }); }
+        const bd = new THREE.Sprite(new THREE.SpriteMaterial({ map: trapBadge(ts), depthWrite: false, transparent: true })); bd.scale.setScalar(0.95); bd.position.set(CELL * 0.32, 2.4, -CELL * 0.32); bd.raycast = () => {}; w.add(bd);
+        if (ts === "disparada") w.traverse(o => { if (o.isMesh && o !== ring && o.material && o.material.color) { o.material = o.material.clone(); o.material.color.multiplyScalar(0.45); if (o.material.emissive) o.material.emissive.setScalar(0); } });
+      }
+      if (cv && !ghostly) { const cb = new THREE.Sprite(new THREE.SpriteMaterial({ map: coverBadge(cv), depthWrite: false, transparent: true, opacity: 0.85 })); cb.scale.setScalar(1); cb.position.set(-CELL * 0.38, 1.1, -CELL * 0.38); cb.raycast = () => {}; w.add(cb); }
       grp.add(w); shroudable.push({ obj: w, c: p.c, r: p.r });
     } catch (e) { console.warn("Pieza sin montar", p.k, e); } }
     if (my !== build) return;
     // Sustituir el escenario anterior de golpe (sin parpadeos)
     world.children.slice().forEach(o => world.remove(o));
+    worldTicks = ticks;
+    // Hito 82: borde luminoso de las zonas peligrosas (lava, brasas, brea, hielo, abismo) y de los puentes
+    const HE = hazardEdges(g);
+    if (HE.length) {
+      const byK = {};
+      HE.forEach(e => {
+        const t = TERRAIN[(g.terrain || {})[e.c + "," + e.r] || "piedra"] || {}, X = cx(e.c), Z = cz(e.r), h = CELL / 2 - 0.04, w = e.kind === "bridge" ? 0.18 : 0.34;
+        const y = elevAt(g, e.c, e.r) * YS + (e.kind === "bridge" ? 0.42 : t.liquid ? -0.06 : 0.08);
+        // cuatro esquinas de la banda, por dentro de la casilla
+        const q = [[[-h, -h], [h, -h], [h, -h + w], [-h, -h + w]], [[h - w, -h], [h, -h], [h, h], [h - w, h]], [[-h, h - w], [h, h - w], [h, h], [-h, h]], [[-h, -h], [-h + w, -h], [-h + w, h], [-h, h]]][e.side];
+        const a = (byK[e.kind] = byK[e.kind] || []);
+        [0, 1, 2, 0, 2, 3].forEach(i => a.push(X + q[i][0], y, Z + q[i][1]));
+      });
+      for (const [kind, pts] of Object.entries(byK)) {
+        const geo = new THREE.BufferGeometry(); geo.setAttribute("position", new THREE.Float32BufferAttribute(pts, 3));
+        const mesh = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: new THREE.Color(HAZ_COLOR[kind]).multiplyScalar(kind === "slip" || kind === "bridge" ? 1 : 1.6), transparent: true, opacity: 0.6, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
+        mesh.raycast = () => {}; mesh.renderOrder = 2; grp.add(mesh);
+        if (kind === "fire" || kind === "lava") { let k = Math.random() * 3; ticks.add(dt => { k += dt; mesh.material.opacity = 0.45 + Math.sin(k * 2.2) * 0.2; }); }
+      }
+    }
     // Hito 81: cuadrícula opcional (▦) sobre el suelo
     if (gridPts.length) { const gg = new THREE.BufferGeometry(); gg.setAttribute("position", new THREE.Float32BufferAttribute(gridPts, 3)); gridObj = new THREE.LineSegments(gg, new THREE.LineBasicMaterial({ color: 0xfff4dc, transparent: true, opacity: 0.09, depthWrite: false })); gridObj.raycast = () => {}; gridObj.renderOrder = 2; gridObj.visible = GRID(); grp.add(gridObj); } else gridObj = null;
     world.add(grp); shroud = shroudable; pickFloors = floorsPick; fogSurf = null; fogSig = ""; // la niebla se vuelve a aplicar sobre el escenario nuevo
@@ -1183,7 +1229,7 @@ export function createBoard3D(host, opts) {
       mv.multiplyScalar(s); controls.target.add(mv); camera.position.add(mv);
     }
     controls.update();
-    ticks.forEach(f => f(dt));
+    ticks.forEach(f => f(dt)); worldTicks.forEach(f => f(dt));
     if (fxList.length) fxList = fxList.filter(f => f(dt));
     // Luz de antorcha: una respiración lenta y suave (el parpadeo rápido hacía «bailar» los reflejos de las paredes)
     torches.forEach(t => { t.light.intensity = t.base * (0.95 + 0.035 * Math.sin(time * 2.1 + t.seed) + 0.015 * Math.sin(time * 4.7 + t.seed * 2)); });

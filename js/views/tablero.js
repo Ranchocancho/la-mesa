@@ -19,6 +19,7 @@ import { sound } from "../core/sonido.js";
 import { pathTo, moveHint } from "../core/movimiento.js";
 import { RES_TEXT, RES_COLOR } from "../core/golpes.js";
 import { impactOf } from "../core/impactos.js";
+import { hazardEdges, HAZ_COLOR, HAZ_TEXT, coverOf, COVER_TEXT, trapState, TRAP_LOOK } from "../core/marcas.js";
 export { TERRAIN, PROPS };
 
 const T = 44, S = T / 2; // lado de la casilla en el plano 2D
@@ -252,7 +253,7 @@ export function createBoard(host, opts) {
     // Apuntar (BG3): alcance del arma o conjuro y, sobre cada criatura, cómo sería el golpe
     TG = opts.targeting ? opts.targeting() : null;
     const tgt = targetSvg(TG, tokens, grid, fog);
-    world.innerHTML = `<g class="cells">${cells}</g><g>${dif}</g>${relief.under}<g filter="url(#wsh)">${walls}</g>${grid2}${relief.over}${start}<g class="props">${props}</g><g class="fog">${fogSvg}</g><g class="reach">${reach}</g><g class="trange">${tgt.under}</g><g class="tmpl"></g><g class="toks">${toks}</g><g class="tmarks">${tgt.over}</g><g class="aim">${aimSvg}</g><g class="ghost"></g>`;
+    world.innerHTML = `<g class="cells">${cells}</g><g>${dif}</g>${relief.under}<g filter="url(#wsh)">${walls}</g>${grid2}${hzSvg(grid)}${relief.over}${start}<g class="props">${props}</g><g class="fog">${fogSvg}</g><g class="reach">${reach}</g><g class="trange">${tgt.under}</g><g class="tmpl"></g><g class="toks">${toks}</g><g class="tmarks">${tgt.over}</g><g class="aim">${aimSvg}</g><g class="ghost"></g>`;
     if (TG && TG.kind === "tmpl") drawTmpl();
     ghost();
   }
@@ -264,6 +265,14 @@ export function createBoard(host, opts) {
     return `<g class="cicons">${show.map((cd, i) => { const e = estado(cd.id), n = cd.dur ? leftOf(S0, cd) : null;
       return `<g transform="translate(${x0 + i * w},${y})"><title>${esc(e.n)}${n != null ? ` · ${n} turno${n === 1 ? "" : "s"}` : ""}</title><circle r="9" style="fill:${e.c}"/><text y="4">${e.i || "•"}</text>${n != null ? `<text class="cin" x="7" y="10">${n}</text>` : ""}</g>`; }).join("")}${L.length > 5 ? `<text class="cimore" x="${x0 + 5 * w}" y="${y + 4}">+${L.length - 5}</text>` : ""}</g>`;
   }
+  // Hito 82: borde de las zonas peligrosas y de los puentes
+  function hzSvg(grid) {
+    const E = hazardEdges(grid); if (!E.length) return "";
+    const ins = 2.5;
+    return `<g class="hzedges">${E.map(e => { const [x, y] = center(e.c, e.r), a = S - ins;
+      const d = [`M${x - a},${y - a}h${a * 2}`, `M${x + a},${y - a}v${a * 2}`, `M${x - a},${y + a}h${a * 2}`, `M${x - a},${y - a}v${a * 2}`][e.side];
+      return `<path d="${d}" class="hz hz-${e.kind}" style="stroke:${HAZ_COLOR[e.kind]}"><title>${esc(HAZ_TEXT[e.kind])}</title></path>`; }).join("")}</g>`;
+  }
   function propSvg(p, grid, wallAt) {
     const v = PROPS[p.k] || { i: "?", n: p.k }, [x, y] = center(p.c, p.r), hid = p.hidden ?? v.hidden, sel = selProp === p.id ? " sel" : "";
     if (v.door) {
@@ -271,7 +280,9 @@ export function createBoard(host, opts) {
       const leaf = p.open ? `<rect x="${-S + 2}" y="-3" width="${T * .42}" height="6" rx="1" transform="rotate(-70 ${-S + 2} 0)" class="dleaf"/>` : v.seeThrough ? `<g class="dbars">${[-14, -7, 0, 7, 14].map(o => `<line x1="${o}" y1="-5" x2="${o}" y2="5"/>`).join("")}<line x1="${-S + 3}" y1="0" x2="${S - 3}" y2="0"/></g>` : `<rect x="${-S + 2}" y="-5" width="${T - 4}" height="10" rx="2" class="dleaf"/>`;
       return `<g class="prop door${hid ? " hid" : ""}${sel}" data-prop="${p.id}" transform="translate(${x},${y}) rotate(${rot})">${leaf}${v.lock && !p.open ? `<text y="4" class="dlock" transform="rotate(${-rot})">🔒</text>` : ""}${hid ? `<rect x="${-S + 1}" y="-8" width="${T - 2}" height="16" class="hidring"/>` : ""}</g>`;
     }
-    return `<g class="prop c-${v.cat}${hid ? " hid" : ""}${sel}${v.block ? " block" : ""}" data-prop="${p.id}" transform="translate(${x},${y})"><circle r="${S * .78}" class="pbg"/><text y="${S * .32}" transform="rotate(${(p.rot || 0) * 90})">${v.i}</text>${p.label ? `<title>${esc(p.label)}</title>` : ""}</g>`;
+    const ts = trapState(p), cov = coverOf(p), TL = ts && TRAP_LOOK[ts];
+    const tip = [p.label, ts && TL.text, cov && COVER_TEXT[cov]].filter(Boolean).join(" · ");
+    return `<g class="prop c-${v.cat}${hid ? " hid" : ""}${sel}${v.block ? " block" : ""}${ts ? " trap-" + ts : ""}" data-prop="${p.id}" transform="translate(${x},${y})"><circle r="${S * .78}" class="pbg"/>${ts ? `<circle r="${S * .9}" class="trapring" style="stroke:${TL.color}"/>` : ""}<text y="${S * .32}" transform="rotate(${(p.rot || 0) * 90})">${v.i}</text>${ts ? `<g class="trapbadge" transform="translate(${S * .62},${-S * .62})"><circle r="8" style="fill:${TL.color}"/><text y="3.5">${TL.icon}</text></g>` : ""}${cov ? `<g class="covbadge" transform="translate(${-S * .62},${-S * .62})"><path d="M0,-7 L6,-4.5 L5,3 L0,7 L-5,3 L-6,-4.5 Z"/><path class="covfill" d="${cov === "3q" ? "M0,-7 L6,-4.5 L5,3 L0,7 L-5,3 L-5.5,0 L0,0 Z" : "M0,-7 L0,7 L-5,3 L-6,-4.5 Z"}"/></g>` : ""}${tip ? `<title>${esc(tip)}</title>` : ""}</g>`;
   }
   /** Vista previa de lo que se va a pintar o trazar. */
   function ghost() {
