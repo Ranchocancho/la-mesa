@@ -2596,3 +2596,28 @@ button.hbr:hover{box-shadow:0 0 0 1px var(--react,#c9a0ff)}
 .turnbar .tbnow .tbconds{justify-content:flex-start}
 .turnbar.tight .tbini{display:none}
 .turnbar .tbchip.now .tbrow .ihb{position:static;left:auto;right:auto;bottom:auto;width:auto;flex:1}
+/* Hito 70: pregunta al pisar una escalera o un paso */
+.travelask{position:fixed;left:50%;bottom:150px;transform:translateX(-50%);z-index:80;display:flex;gap:8px;align-items:center;padding:10px 14px;border-radius:12px;
+  background:linear-gradient(180deg,#2c2118,#1a130d);border:1px solid var(--oro,#d6aa4e);box-shadow:0 10px 30px rgba(0,0,0,.6);font-size:14.5px;max-width:min(720px,92vw);animation:rise .25s ease}
+@keyframes rise{from{opacity:0;transform:translate(-50%,10px)}to{opacity:1;transform:translate(-50%,0)}}
+/* ---------- Hito 70: crónica como línea de tiempo ---------- */
+.ctotals{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:8px;margin:4px 0 18px}
+.ctotals span{display:flex;flex-direction:column;gap:1px;padding:9px 12px;border-radius:10px;background:var(--piedra);border:1px solid var(--linea)}
+.ctotals small{font-size:10.5px;text-transform:uppercase;letter-spacing:.07em;color:var(--tenue)}
+.ctotals b{font-family:var(--display);font-size:19px;color:var(--oro)}
+.ctotals em{font-style:normal;font-size:12px;color:var(--tenue);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+@media (max-width:900px){.ctotals{grid-template-columns:repeat(3,1fr)}}
+.ctimeline{position:relative;padding-left:26px}
+.ctimeline::before{content:"";position:absolute;left:9px;top:6px;bottom:6px;width:2px;background:linear-gradient(var(--oro),rgba(214,170,78,.15))}
+.ctimeline>.chron{position:relative}
+.ctimeline>.chron::before{content:"";position:absolute;left:-23px;top:18px;width:12px;height:12px;border-radius:50%;background:#1a130d;border:2px solid var(--oro);box-shadow:0 0 0 3px #120c08}
+.ctimeline>.chron.live::before{background:var(--oro);box-shadow:0 0 0 3px #120c08,0 0 10px var(--oro)}
+.cstats{display:flex;flex-wrap:wrap;gap:5px;grid-column:1/-1}
+.chfold .cstats{grid-row:3}
+.cst{font-size:12.5px;padding:2px 9px;border-radius:999px;background:rgba(0,0,0,.25);border:1px solid var(--linea);color:var(--hueso);white-space:nowrap;max-width:100%;overflow:hidden;text-overflow:ellipsis}
+.cst.loot{border-color:rgba(230,194,106,.45)}.cst.xp{border-color:rgba(255,215,106,.45);color:#ffe08a}.cst.kill{border-color:rgba(200,80,60,.45)}
+.cst.npc{border-color:rgba(160,120,200,.5);color:#d8c2f0}.cst.place{border-color:rgba(120,170,200,.45);color:#bfe0f0}
+.chron>.cstats{margin:8px 0 4px}
+.cdetail{display:flex;flex-direction:column;gap:4px;margin:6px 0 10px;padding:8px 12px;border-left:2px solid var(--linea);font-size:13.5px}
+.cdetail div{display:flex;gap:10px}.cdetail b{flex:0 0 160px;color:var(--tenue);font-weight:600}
+.ctimeline>.chron,.ctimeline>.chron.folded{overflow:visible}

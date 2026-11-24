@@ -25,6 +25,7 @@ export function awaitsDM(s, r) {
   }
   if (r.kind === "mastery" && r.status === "pending") return "aplicar la maestría";
   if (r.apply && !r.applied && r.result) return "aplicar el efecto";
+  if (r.kind === "travel" && !r.applied) return "llevar al grupo";
   return null;
 }
 

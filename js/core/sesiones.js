@@ -61,6 +61,7 @@ export function closeSession(title, recap, xp = []) {
     else if (l) {
       Object.assign(l, { status: "closed", title: title || `Sesión ${l.n}`, recap });
       l.xp = xp.filter(x => x.amount).map(x => { const c = s.characters.find(y => y.id === x.char); if (c) c.xp = (c.xp || 0) + x.amount; return { char: x.char, name: c ? c.name : "", amount: x.amount, reason: x.reason || "" }; });
+      if (l.xp0) l.xpGot = s.characters.reduce((a, c) => a + Math.max(0, (c.xp || 0) - (l.xp0[c.id] ?? (c.xp || 0))), 0); // PX de toda la sesión (para la crónica)
     }
     s.live = null; s.presentation = null;
   });

@@ -28,6 +28,7 @@ import { computeVision, explored, visionOn, tokenSeen, unseenFn, LIGHT_ITEMS } f
 import { renderRolls, visibleRolls } from "./tiradas.js";
 import { attacksOf, attack, acOf, nameOf, damageFor, answerOA, decide } from "../core/combate.js";
 import { prefForTok } from "../core/reacciones.js";
+import { goLink } from "../core/viajes.js";
 import { glyph, COND } from "../data/iconos.js";
 import { canActNow, phase, current, pending, beginCombat, rollInit, startRounds, endTurn, stopCombat, eco, moveBudget, speedOf, spend, toggle, ACCIONES, rangeOf, inRange, cover, modifiers, dist, metres, gap } from "../core/turnos.js";
 import { durFor, durText, durTag, leftOf } from "../core/duraciones.js";
@@ -390,10 +391,10 @@ export function mountTactical(host, opts = {}) {
       const shown = pct == null ? null : exact ? pct : pct > 0.75 ? 1 : pct > 0.5 ? 0.7 : pct > 0.25 ? 0.45 : pct > 0 ? 0.18 : 0;
       const fx = (flashes.get(t.id) && flashes.get(t.id).until > Date.now()) ? " fx-" + flashes.get(t.id).k : "";
       const now = ph === "live" && k === 0;
-      // Ficha de la tira (Hito 69): retrato, y debajo iniciativa + vida en una línea y los estados; nada se monta encima de nada
+      // Ficha de la tira: retrato y, debajo, iniciativa + vida en una línea (Hito 70: sin estados, rompían la barra)
       const cds = (t.conds || []).filter(cd => estado(cd.id)), ini = t.init != null && ph === "live" ? t.init : null;
       const hpRow = `<span class="tbrow">${ini != null ? `<b class="tbini" title="Iniciativa">${ini}</b>` : ""}${h ? `<span class="ihb ${shown <= 0.25 ? "low" : shown <= 0.5 ? "mid" : ""}"><span style="width:${Math.round(shown * 100)}%"></span></span>` : ""}</span>`;
-      const cdRow = cds.length ? `<span class="tbconds">${cds.slice(0, 4).map(cd => { const e = estado(cd.id); return `<span class="tbcd" style="--c:${e.c}" title="${esc(e.n)}">${COND[cd.id] ? glyph([COND[cd.id], "#fff"]) : e.i || ""}</span>`; }).join("")}${cds.length > 4 ? `<small>+${cds.length - 4}</small>` : ""}</span>` : "";
+      const cdRow = ""; // los estados no van en la tira (la rompían): están en la placa de la figura, en la barra y en Táctica
       return `<span class="tbchip ${t.kind}${now ? " now" : ""}${h && h.cur <= 0 ? " down" : ""}${t.owner && t.owner === me() ? " mine" : ""}${fx}" data-tsel="${t.id}" title="${esc(nm)}${ini != null ? ` · iniciativa ${ini}` : ""}${h ? ` · ${exact ? `${h.cur}/${h.max} PG` : healthWord(h.cur, h.max)}` : ""}${cds.length ? " · " + cds.map(cd => estado(cd.id).n).join(", ") : ""}">
         <span class="tbav" style="--k:${(c || t).color || "#777"}">${esc(initials(nm))}</span>
         ${now ? `<span class="tbnow"><em>${esc((w => w.length > 1 && /^(hermano|hermana|sir|lady|lord|fray|sor|don|doña)$/i.test(w[0]) ? w[1] : w[0])(String(nm).replace(/\s*\(.*?\)/g, "").trim().split(/\s+/)))}</em>${hpRow}${cdRow}</span>` : hpRow + cdRow}</span>`;
@@ -483,7 +484,7 @@ export function mountTactical(host, opts = {}) {
       const id = selPropId, setP = fn => store.commit("board", st => { const x = (st.board.props || []).find(y => y.id === id); if (x) fn(x); });
       $(".hudprop .x", hud).onclick = () => { selPropId = null; drawHud(); };
       bindPropEditor(pc, setP, { reveal: () => setP(p => { p.hidden = false; }), loot: () => openChest(id),
-        go: () => { const p = (S().board.props || []).find(y => y.id === id); if (p && p.to) { selPropId = null; travelTo(p.to); } },
+        go: () => { selPropId = null; goLink(id); },
         trap: () => { const st = S(), p = st.board.props.find(y => y.id === id), on = st.tokens.filter(t => p && t.c === p.c && t.r === p.r).map(t => t.id); if (!on.length) return toast("No hay nadie en esa casilla."); triggerTrap(id, on); },
         rot: () => setP(p => { p.rot = ((p.rot || 0) + 1) % 4; }), del: () => { store.commit("board", st => { st.board.props = st.board.props.filter(y => y.id !== id); }); selPropId = null; drawHud(); } });
     }

@@ -49,6 +49,11 @@ export function sendToFloor(g, tokens, id, to) {
   return tokens.filter(x => x.id !== id);
 }
 
+/** Escaleras enlazadas a una planta (Hito 70): si las plantas se corren (un sótano nuevo) o se quita una, los enlaces siguen bien. */
+function shiftFloorLinks(g, fn) {
+  const fix = L => (L || []).forEach(p => { if (p.toFloor != null) { const v = fn(p.toFloor); if (v == null) delete p.toFloor; else p.toFloor = v; } });
+  fix(g.props); (g.floors || []).forEach(f => fix(f.props));
+}
 /** Añade una planta vacía del mismo tamaño: encima (al final) o debajo (un sótano, al principio). */
 export function addFloor(g, below = false) {
   const fl = floorsOf(g).map(f => ({ ...f })), cur = floorIdx(g);
@@ -57,6 +62,7 @@ export function addFloor(g, below = false) {
   const blank = { name, cols: g.cols, rows: g.rows, terrain, props: [], tokens: [] };
   if (below) { fl.unshift(blank); g.floor = cur + 1; } else { fl.push(blank); g.floor = cur; }
   g.floors = fl;
+  if (below) shiftFloorLinks(g, v => v + 1);
   return below ? 0 : fl.length - 1;
 }
 export function renameFloor(g, i, name) { const fl = floorsOf(g).map(f => ({ ...f })); if (fl[i] && name) { fl[i].name = name.slice(0, 40); g.floors = fl; g.floor = floorIdx(g); } }
@@ -65,6 +71,7 @@ export function removeFloor(g, i) {
   const fl = floorsOf(g).map(f => ({ ...f })), cur = floorIdx(g);
   if (i === cur || !fl[i] || fl.length < 2) return;
   fl.splice(i, 1); g.floors = fl; g.floor = i < cur ? cur - 1 : cur;
+  shiftFloorLinks(g, v => v === i ? null : v > i ? v - 1 : v);
   if (fl.length === 1) { delete g.floors; g.floor = 0; }
 }
 /** Copia profunda de las plantas guardadas (para escenas ↔ mesa), con ids nuevos para las fichas. */

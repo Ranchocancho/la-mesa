@@ -5,10 +5,23 @@ import { PROPS } from "../data/mapas.js";
 import { TRAPS, TIER_TXT } from "../data/trampas.js";
 import { esc, $, $$ } from "../core/ui.js";
 import { store } from "../core/store.js";
+import { floorsOf, floorIdx } from "../core/plantas.js";
+import { LINKABLE, linkOf, linkVerb } from "../core/viajes.js";
 
 const AB = { fue: "Fuerza", des: "Destreza", con: "Constitución", int: "Inteligencia", sab: "Sabiduría", car: "Carisma" };
 
-export function propEditorHTML(p, { live = false } = {}) {
+/** Adónde lleva una escalera o un paso (Hito 70): otra planta de este mapa u otra escena. Sin destino, es decorado. */
+function linkHTML(p, live, grid, sceneId) {
+  const S = store.get(), g = grid || S.board || {}, here = sceneId || (S.board && S.board.scene), cur = floorIdx(g), L = live ? linkOf(S, g, p) : null;
+  const val = p.toFloor != null ? "f:" + p.toFloor : p.to ? "s:" + p.to : "";
+  const fl = floorsOf(g).map((f, i) => [i, f]).filter(([i]) => i !== cur), sc = (S.scenes || []).filter(x => x.id !== here);
+  return `<label class="field">Lleva a<select data-pe-link><option value="">— A ningún sitio (decorado) —</option>
+      ${fl.length ? `<optgroup label="Otra planta de este mapa">${fl.map(([i, f]) => `<option value="f:${i}" ${val === "f:" + i ? "selected" : ""}>${i > cur ? "↑" : "↓"} ${esc(f.name || "Planta")}</option>`).join("")}</optgroup>` : ""}
+      ${sc.length ? `<optgroup label="Otra escena">${sc.map(x => `<option value="s:${x.id}" ${val === "s:" + x.id ? "selected" : ""}>🧭 ${esc(x.name)}</option>`).join("")}</optgroup>` : ""}</select></label>
+    <p class="note">Fuera de combate, cuando un jugador deja a su personaje encima, le pregunta si pasa con el grupo, y todo el grupo aparece junto a la escalera (o el paso) de llegada. En combate, solo tú.</p>
+    ${L ? `<button class="btn small gold" data-pe-go>➜ Llevar al grupo: ${esc(linkVerb(g, L).toLowerCase())} «${esc(L.name)}»</button>` : ""}`;
+}
+export function propEditorHTML(p, { live = false, grid = null, sceneId = null } = {}) {
   const v = PROPS[p.k] || { n: p.k, i: "?" }, tr = p.trap || {};
   return `<div class="propedit"><h3><span>${v.i}</span>${esc(v.n)}</h3>
     <label class="field">Nombre o nota<input data-pe="label" value="${esc(p.label || "")}" placeholder="${v.cat === "marca" ? "Qué hay aquí, qué pasa…" : "Opcional"}"></label>
@@ -17,8 +30,7 @@ export function propEditorHTML(p, { live = false } = {}) {
     ${v.haz === "fall" ? `<label class="field">Altura de la caída (m)<input type="number" min="1" max="120" data-pe-h value="${+p.h || v.h || 3}"></label><p class="note">SRD «Caídas»: ${Math.max(1, Math.min(20, Math.floor((+p.h || v.h || 3) / 3)))}d6 contundente y derribado. La mesa lo tira al entrar.</p>` : ""}
     ${v.haz === "fire" ? `<p class="note">Quien entra empieza a arder (SRD «Fuego»: 1d4 de fuego al principio de cada turno hasta apagarse con una acción).</p>` : ""}
     ${v.note ? `<p class="note">${esc(v.note)}</p>` : ""}
-    ${p.k === "pasaje" ? (S => `<label class="field">Lleva a la escena<select data-pe-to><option value="">— Elige la escena —</option>${(S.scenes || []).filter(x => x.id !== (S.board && S.board.scene)).map(x => `<option value="${x.id}" ${p.to === x.id ? "selected" : ""}>${esc(x.name)}</option>`).join("")}</select></label>
-      ${live && p.to ? `<button class="btn small gold" data-pe-go>➜ Llevar al grupo a «${esc((S.scenes.find(x => x.id === p.to) || {}).name || "?")}»</button>` : ""}`)(store.get()) : ""}
+    ${LINKABLE.includes(p.k) ? linkHTML(p, live, grid, sceneId) : ""}
     ${v.trap ? `<fieldset class="trapf"><legend>Trampa</legend>
       <label class="field">Trampa del SRD<select data-pe-srd><option value="">Personalizada (tus números)</option>${Object.entries(TRAPS).map(([k, t]) => `<option value="${k}" ${tr.srd === k ? "selected" : ""}>${t.n}</option>`).join("")}</select></label>
       ${tr.srd && TRAPS[tr.srd] ? (T => `<div class="trapsrd"><b>${esc(T.n)}</b> · ${esc(T.sev)}<br><b>Activador:</b> ${esc(T.trig)}<br><b>Efecto:</b> ${T.save ? `salvación de ${AB[T.save]} CD ${T.dc.join(" / ")}` : "sin salvación"}${T.dmg ? ` · ${T.dmg.join(" / ")} de ${esc(T.type)}${T.half ? " (mitad si la supera)" : ""}` : T.darts ? ` · 1d3 dardos de ${T.darts.join(" / ")} de veneno` : ""}${T.condTxt ? ` · ${esc(T.condTxt)}` : ""}<br><small>Por rangos de niveles: ${TIER_TXT.join(" / ")}. La mesa usa el nivel medio del grupo.</small><br><b>Detectar:</b> ${esc(T.detect)}<br><b>Desarmar:</b> ${esc(T.disarm)}${T.note ? `<br>${esc(T.note)}` : ""}</div>`)(TRAPS[tr.srd]) : `
@@ -45,7 +57,7 @@ export function bindPropEditor(el, set, extra = {}) {
   $$("[data-pe]", el).forEach(i => i.addEventListener("input", () => later(() => set(p => { p[i.dataset.pe] = i.value; }))));
   const h = $("[data-pe-hidden]", el); if (h) h.onchange = () => set(p => { p.hidden = h.checked; });
   const hh = $("[data-pe-h]", el); if (hh) hh.addEventListener("input", () => later(() => set(p => { p.h = Math.max(1, Math.min(120, +hh.value || 3)); })));
-  const to = $("[data-pe-to]", el); if (to) to.onchange = () => set(p => { p.to = to.value || null; });
+  const lk = $("[data-pe-link]", el); if (lk) lk.onchange = () => set(p => { const v = lk.value; delete p.toFloor; p.to = null; if (v.startsWith("f:")) p.toFloor = +v.slice(2); else if (v.startsWith("s:")) p.to = v.slice(2); });
   const sr = $("[data-pe-srd]", el); if (sr) sr.onchange = () => set(p => { p.trap = sr.value ? { srd: sr.value } : { dc: 13, save: "des", dmg: "2d10", type: "perforante", detect: 13 }; });
   $$("[data-tr]", el).forEach(i => i.addEventListener("input", () => later(() => set(p => { p.trap = p.trap || {}; p.trap[i.dataset.tr] = i.type === "number" ? +i.value : i.value; }))));
   $$("select[data-tr]", el).forEach(i => i.onchange = () => set(p => { p.trap = p.trap || {}; p.trap[i.dataset.tr] = i.value; }));

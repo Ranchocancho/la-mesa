@@ -146,7 +146,7 @@ function side() {
       ${difficultyHTML(difficulty(store.get(), sceneFoes(sc), partyOf(store.get(), [])))}
       <button class="btn gold" id="monpick">👹 Añadir criaturas…</button>
       <p class="note" style="margin:6px 0 0">Busca por nombre o tipo, ajusta su nivel y despliégalas junto al punto de inicio.</p></div>
-    ${pr ? `<div class="panel" style="margin-top:12px">${propEditorHTML(pr)}</div>` : ""}
+    ${pr ? `<div class="panel" style="margin-top:12px">${propEditorHTML(pr, { grid: sc, sceneId: sc.id })}</div>` : ""}
     <div class="panel" style="margin-top:12px">${t ? `<h2 class="sec">Ficha seleccionada</h2>${tokenEditor(t)}` : `<p class="empty">Usa «👹 Enemigo» para colocar enemigos y tócalos para editarlos. Con «✋ Mover» los recolocas o seleccionas objetos.</p>`}</div>`;
   if (pr && board && board.editProp) bindPropEditor(box, fn => board.editProp(pr.id, fn), { rot: () => board.editProp(pr.id, p => { p.rot = ((p.rot || 0) + 1) % 4; }), del: () => { const id = pr.id; board.selectProp(null); store.commit("board", st => { const x = st.scenes.find(y => y.id === openId); x.props = (x.props || []).filter(z => z.id !== id); }); } });
   const M = fn => store.commit("board", st => fn(st.scenes.find(y => y.id === openId)));

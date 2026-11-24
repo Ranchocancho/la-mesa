@@ -151,6 +151,20 @@ import("./core/tesoros.js").then(m => m.watchGifts());
 import("./core/comercio.js").then(m => m.watchChests());
 import("./core/tiempolibre.js").then(m => m.watchFree());
 import("./core/acciones.js").then(m => m.watchEffects());
+// Escaleras y pasos (Hito 70): al pisarlos fuera de combate, preguntar al jugador si el grupo pasa
+import("./core/viajes.js").then(m => {
+  m.setTravelAsk(({ L, verb, tokId, propId, name }) => {
+    document.querySelectorAll(".travelask").forEach(x => x.remove());
+    const box = document.createElement("div"); box.className = "travelask"; box.setAttribute("role", "dialog");
+    box.innerHTML = `<span>${L.kind === "scene" ? "🧭" : "🪜"} <b>${esc(name)}</b> llega a ${L.kind === "scene" ? "un paso" : "las escaleras"}. ¿${esc(verb)} «${esc(L.name)}» con el grupo?</span><button class="btn small gold" data-y>Sí, vamos</button><button class="btn small" data-n>No, me quedo</button>`;
+    document.body.appendChild(box);
+    const close = () => box.remove(); const tm = setTimeout(close, 20000);
+    box.querySelector("[data-y]").onclick = () => { clearTimeout(tm); close(); m.requestTravel(tokId, propId); };
+    box.querySelector("[data-n]").onclick = () => { clearTimeout(tm); close(); };
+  });
+  m.watchTravel();
+});
+import("./core/cronica.js").then(m => m.watchChronicle());
 import("./core/reacciones.js").then(m => m.watchReactions());
 import("./core/combate.js").then(m => { m.watchAutoResolve(); m.watchAutoDamage(); });
 import("./core/duraciones.js").then(m => m.watchDurations());

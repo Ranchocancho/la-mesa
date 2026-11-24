@@ -86,7 +86,7 @@ export const PROPS = {
   brasero:    { n: "Brasero", i: "🏮", cat: "luz", cover: "half" },
   // Mazmorra
   columna:    { n: "Columna", i: "🏛️", cat: "mazmorra", block: true, cover: "3q" },
-  escaleras:  { n: "Escaleras", i: "🪜", cat: "mazmorra" },
+  escaleras:  { n: "Escaleras", i: "🪜", cat: "mazmorra", note: "Si eliges adónde llevan (otra planta u otra escena), al pisarlas fuera de combate preguntan si el grupo pasa." },
   rampa:      { n: "Rampa / sendero", i: "⛰️", cat: "natural" },
   calavera:   { n: "Huesos y escombros", i: "💀", cat: "mazmorra" },
   estandarte: { n: "Estandarte (en pared)", i: "🚩", cat: "mazmorra", wall: true },
@@ -203,7 +203,7 @@ export const PROPS = {
   // Marcadores del máster
   nota:       { n: "Nota del máster", i: "📌", cat: "marca", hidden: true },
   interes:    { n: "Punto de interés", i: "⭐", cat: "marca" },
-  pasaje:     { n: "Paso a otra escena", i: "🧭", cat: "marca", note: "Une esta mesa con otra escena (el ala este del castillo, el nivel inferior de la mina…). En partida, el máster lleva al grupo desde aquí y aparece junto al paso de vuelta, si lo hay." }
+  pasaje:     { n: "Paso a otra escena", i: "🧭", cat: "marca", note: "Une esta mesa con otra escena o con otra planta (el ala este del castillo, el nivel inferior de la mina…)." }
 };
 /** Paquetes de región: luz y sonido que proponen al elegirlos en el editor. */
 export const REGIONS = {
