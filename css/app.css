@@ -2621,3 +2621,12 @@ button.hbr:hover{box-shadow:0 0 0 1px var(--react,#c9a0ff)}
 .cdetail{display:flex;flex-direction:column;gap:4px;margin:6px 0 10px;padding:8px 12px;border-left:2px solid var(--linea);font-size:13.5px}
 .cdetail div{display:flex;gap:10px}.cdetail b{flex:0 0 160px;color:var(--tenue);font-weight:600}
 .ctimeline>.chron,.ctimeline>.chron.folded{overflow:visible}
+/* Hito 71: las pestañas y herramientas del mapa del mundo, arriba de la columna derecha */
+.wside{padding:0;gap:0}
+.wside .sidetop{position:sticky;top:0;z-index:2;display:flex;flex-direction:column;gap:6px;padding:12px 14px 10px;background:var(--piedra);border-bottom:1px solid var(--linea)}
+.wside .maptabs,.world .wside .maptools{position:static;left:auto;top:auto;background:transparent;border:0;padding:0;border-radius:0;box-shadow:none}
+.wside .maptabs{flex-wrap:wrap}.wside .maptabs button{padding:5px 10px}
+.wside .maptools[hidden]{display:none}.wside .maptools:empty{display:none}
+.wside .maptools .btn{flex:1 1 auto}
+.wside .sidebody{padding:14px 18px 18px;display:flex;flex-direction:column;gap:14px}
+.cst.old{opacity:.6;font-style:italic;border-style:dashed}

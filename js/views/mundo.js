@@ -23,12 +23,10 @@ export function mount(root) {
   el.innerHTML = `
     <div class="viewport" id="vp">
       <div class="stage" id="stage"><img id="mapimg" alt="Mapa del mundo"><svg id="regsvg" class="regsvg" aria-hidden="true"></svg><div id="pins"></div></div>
-      <div class="maptabs" id="maptabs"></div>
-      <div class="maptools" id="maptools"></div>
       <div class="mapzoom"><button id="zin" aria-label="Acercar">+</button><button id="zout" aria-label="Alejar">−</button><button id="zfit" aria-label="Ver el mapa entero" title="Ver el mapa entero">⤢</button></div>
       <div class="hintbar" id="hint" hidden>Haz clic en el mapa para colocar el nuevo lugar · Esc para cancelar</div>
     </div>
-    <aside class="side" id="side" aria-label="Detalle del lugar"></aside>`;
+    <aside class="side wside" aria-label="Regiones y lugares"><div class="sidetop"><div class="maptabs" id="maptabs"></div><div class="maptools" id="maptools"></div></div><div class="sidebody" id="side"></div></aside>`;
   root.appendChild(el);
   vp = $("#vp", el); stage = $("#stage", el); img = $("#mapimg", el); pinsEl = $("#pins", el); side = $("#side", el);
   fitted = false; mapKey = "";

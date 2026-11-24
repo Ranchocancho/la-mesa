@@ -8,15 +8,18 @@ import { sessionStats } from "../core/cronica.js";
 import { fmtCp } from "../core/comercio.js";
 
 /** Fila de datos de la sesión (se ve sin desplegar): botín, PX, enemigos, PNJ caídos y lugares. */
-function statChips(st, full) {
+function statChips(st, full, old) {
   const ch = [];
   if (st.cp || st.items.length) ch.push(`<span class="cst loot" title="${esc(st.items.join(", "))}">💰 ${st.cp ? fmtCp(st.cp) : ""}${st.items.length ? `${st.cp ? " · " : ""}${st.items.length} objeto${st.items.length > 1 ? "s" : ""}` : ""}</span>`);
   if (st.xp) ch.push(`<span class="cst xp">⭐ ${st.xp.toLocaleString("es-ES")} PX</span>`);
   if (st.nKills) ch.push(`<span class="cst kill" title="${esc(st.kills.map(([n, k]) => `${k} × ${n}`).join(", "))}">⚔ ${st.nKills} enemigo${st.nKills > 1 ? "s" : ""}</span>`);
   if (st.npcs.length) ch.push(`<span class="cst npc" title="PNJ caídos">💀 ${esc(st.npcs.map(k => k.n).join(", "))}</span>`);
   if (st.places.length) ch.push(`<span class="cst place">📍 ${esc(full ? st.places.join(" · ") : st.places.slice(0, 3).join(" · ") + (st.places.length > 3 ? ` +${st.places.length - 3}` : ""))}</span>`);
+  if (old) ch.push(`<span class="cst old" title="Esta sesión se jugó antes de que la mesa apuntara botín, enemigos, PNJ y lugares">sin registro de botín, enemigos ni lugares</span>`);
   return ch.length ? `<span class="cstats">${ch.join("")}</span>` : "";
 }
+/** Sesiones de antes de que la mesa apuntara estos datos (Hito 70): se dice, para que no parezca que no pasó nada. */
+const noData = x => !x.loot && !x.kills && !x.scenes && !(x.visited || []).length && x.status !== "open";
 /** Detalle desplegado: qué se encontró, a quién se abatió y por dónde se pasó. */
 function statDetail(st) {
   const rows = [];
@@ -52,11 +55,11 @@ function draw() {
       if (!isOpen) return `<section class="chron folded ${x.status === "open" ? "live" : ""}"><button class="chfold" data-fold="${x.id}" aria-expanded="false">
         <span class="chn">${esc(sessionName(x))}</span><span class="cht"><b>${esc(x.title || (x.status === "open" ? "En curso" : ""))}</b><small>${x.status === "open" ? "En curso" : esc(x.date || "")}</small></span>
         <span class="chs">${esc((x.recap || "").slice(0, 150))}${(x.recap || "").length > 150 ? "…" : ""}</span>
-        <span class="chm">${n ? `📝 ${n} nota${n > 1 ? "s" : ""}` : ""}</span><i>▸</i>${statChips(sessionStats(s, x), false)}</button></section>`;
+        <span class="chm">${n ? `📝 ${n} nota${n > 1 ? "s" : ""}` : ""}</span><i>▸</i>${statChips(sessionStats(s, x), false, noData(x))}</button></section>`;
       return `<section class="chron ${x.status === "open" ? "live" : ""}">
       <header><button class="chfold open" data-fold="${x.id}" aria-expanded="true"><h2>${esc(sessionName(x))}${x.title ? ` · ${esc(x.title)}` : ""}</h2><i>▾</i></button><small>${x.status === "open" ? "En curso" : esc(x.date || "")}${x.status !== "open" && dm ? ` · <a href="#lore/ses:${x.id}">✎ Editar</a>` : ""}</small></header>
       ${x.recap ? `<p class="recaptext">${esc(x.recap)}</p>` : ""}
-      ${statChips(sessionStats(s, x), true)}${statDetail(sessionStats(s, x))}
+      ${statChips(sessionStats(s, x), true, noData(x))}${statDetail(sessionStats(s, x))}
       ${(x.xp || []).length ? `<div class="xpgot">${x.xp.map(g => `<span><b>+${g.amount} PX</b> ${esc(g.name)}${g.reason ? ` · ${esc(g.reason)}` : ""}</span>`).join("")}</div>` : ""}
       <div class="entries">${entries(x.id).map(e => {
         const u = who(e.by) || { name: e.name, initials: "?" }, mine = e.by === me.id;
