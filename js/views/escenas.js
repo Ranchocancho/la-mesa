@@ -110,6 +110,8 @@ function draw() {
         const x = st.scenes[i];
         if ((x.ex || 1) < sc.ex && (x.tokens || []).every(t => t.srd || t.kind === "pc")) { st.scenes[i] = Object.assign(sc, { id: x.id }); upd++; }
       });
+      // Los pasos entre escenas de ejemplo apuntan por nombre (al renovar, una escena conserva su id antiguo)
+      st.scenes.forEach(sc => (sc.props || []).forEach(p => { if (p.k === "pasaje" && p.toName) { const t = st.scenes.find(x => x.name === p.toName); if (t) p.to = t.id; } }));
     });
     toast(`Escenas de ejemplo: ${gone} antiguas quitadas, ${added} nuevas, ${upd} actualizadas.`);
   };

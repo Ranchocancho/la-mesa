@@ -18,7 +18,9 @@ export const LIGHT_ITEMS = {
   luz: { n: "Conjuro Luz", b: 4, d: 8, src: "SRD (conjuro Luz): brillante 6 m y tenue 6 m más" }
 };
 /** Objetos de escenografía que dan luz. Hoguera: como una antorcha (regla de campaña). */
-const PROP_LIGHT = { antorcha: LIGHT_ITEMS.antorcha, velas: LIGHT_ITEMS.vela, hoguera: LIGHT_ITEMS.antorcha };
+// Hito 90: el pilar con antorcha alumbra como una antorcha y el farol como una lámpara (SRD).
+// El SRD no define braseros: aquí alumbran como una antorcha (regla de campaña).
+const PROP_LIGHT = { antorcha: LIGHT_ITEMS.antorcha, velas: LIGHT_ITEMS.vela, hoguera: LIGHT_ITEMS.antorcha, pilarantorcha: LIGHT_ITEMS.antorcha, farol: LIGHT_ITEMS.lampara, brasero: LIGHT_ITEMS.antorcha };
 export const LEVELS = { bright: "☀️ Luz brillante", dim: "◐ Luz tenue", dark: "● Oscuridad" };
 /** Luz de la escena: la que elija el máster; si no, de noche hay oscuridad y si no, luz brillante. */
 export const ambientLevel = g => g && LEVELS[g.light] ? g.light : g && (g.ambient === "noche" || g.ambient === "oscuro") ? "dark" : g && g.ambient === "penumbra" ? "dim" : "bright";

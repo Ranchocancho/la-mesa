@@ -176,6 +176,7 @@ import("./core/viajes.js").then(m => {
   m.watchTravel();
 });
 import("./core/cronica.js").then(m => m.watchChronicle());
+import("./core/ocultos.js").then(m => m.watchHidden());
 import("./core/historial.js").then(m => m.watchHistory());
 import("./core/reacciones.js").then(m => m.watchReactions());
 import("./core/combate.js").then(m => { m.watchAutoResolve(); m.watchAutoDamage(); });

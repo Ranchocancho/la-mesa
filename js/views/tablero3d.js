@@ -81,7 +81,7 @@ function contactMat() {
 const CONTACT_GEO = (() => { const g = new THREE.PlaneGeometry(1, 1); g.rotateX(-Math.PI / 2); return g; })();
 function contactShadow(size) { const m = new THREE.Mesh(CONTACT_GEO, contactMat()); m.scale.set(size, 1, size); m.position.y = 0.03; m.renderOrder = 1; m.raycast = () => {}; m.userData.keep = true; return m; }
 // objetos planos o colgados que no llevan sombra de contacto
-const FLATP = new Set(["trampaoculta", "aguja", "dardos", "red", "techo", "foso", "carta", "mapa", "llave", "pasaje", "nota", "interes", "telarana", "nenufares", "flores", "tumbaabierta", "grieta"]);
+const FLATP = new Set(["circulo", "piedrasrio", "cadenas", "letrero", "trampaoculta", "aguja", "dardos", "red", "techo", "foso", "carta", "mapa", "llave", "pasaje", "nota", "interes", "telarana", "nenufares", "flores", "tumbaabierta", "grieta"]);
 // piezas naturales: cada copia algo distinta (tamaño, giro, inclinación)
 const NATURAL = new Set(["arbol", "arbusto", "roca", "penasco", "tocon", "arbolmuerto", "setas", "cristales", "pinonevado", "manglar", "arbolgigante", "monticulo", "juncos", "raices", "huesos"]);
 // terreno → color del polvo al pisar
@@ -905,14 +905,24 @@ export function createBoard3D(host, opts) {
         rec = { pending: true }; toks.set(t.id, rec);
         rec = await makeToken(t); if (disposed) return;
         toks.set(t.id, rec);
-        rec.root.position.set(cx(t.c), ty(t), cz(t.r)); rec.target.copy(rec.root.position);
+        rec.root.position.set(cx(t.c), ty(t), cz(t.r)); rec.target.copy(rec.root.position); rec.dest = rec.target.clone(); rec.cell = { c: t.c, r: t.r };
       } else if (rec.pending) continue;
       const want = miniFor(t, opts.charOf(t)), dd = opts.decorate(t) || {};
       const dressKey = [want, t.hidden, +t.size || 1, t.img, t.icon, dd.portrait, dd.name || t.name].join("|");
       if (dressKey !== rec.dressKey) { const first = !rec.dressKey; rec.dressKey = dressKey; if (!first || want !== rec.miniKey) { rec.miniKey = want; await dressToken(rec, t); } }
       rec.hidden = !!t.hidden; rec.size = +t.size || 1;
       const tx = cx(t.c), tz = cz(t.r), tyy = ty(t);
-      if (rec.target.x !== tx || rec.target.z !== tz || Math.abs(rec.target.y - tyy) > 0.01) { const walk = rec.target.x !== tx || rec.target.z !== tz; rec.target.set(tx, tyy, tz); rec.moving = 1; if (walk) play(rec, "Walking_A"); }
+      // Hito 91: la figura anda hasta su casilla nueva siguiendo un camino por las casillas (no en línea recta ni de golpe)
+      if (!rec.dest) rec.dest = rec.target.clone();
+      if (rec.dest.x !== tx || rec.dest.z !== tz || Math.abs(rec.dest.y - tyy) > 0.01) {
+        const walk = rec.dest.x !== tx || rec.dest.z !== tz, from = rec.cell;
+        rec.dest.set(tx, tyy, tz); rec.path = null;
+        const P = walk && from && fxReady ? gridPath(from, { c: t.c, r: t.r }) : null;
+        if (P && P.length > 2) { const alt = tyy - gy(t.c, t.r); rec.path = P.slice(1, -1).map(q => new THREE.Vector3(cx(q.c), gy(q.c, q.r) + alt, cz(q.r))); rec.path.push(rec.dest.clone()); rec.target.copy(rec.path.shift()); }
+        else rec.target.set(tx, tyy, tz);
+        rec.moving = 1; if (walk) play(rec, "Walking_A");
+      }
+      rec.cell = { c: t.c, r: t.r };
       // Mirar hacia el otro bando
       const others = t.kind === "pc" ? foes : pcs;
       if (others.length) { let mx = 0, mz = 0; others.forEach(o => { mx += cx(o.c); mz += cz(o.r); }); rec.face = Math.atan2(mx / others.length - tx, mz / others.length - tz); }
@@ -1030,6 +1040,26 @@ export function createBoard3D(host, opts) {
     if (!rec.mini) return;
     if (!rec.fmats) { rec.fmats = []; rec.mini.traverse(o => { const ms = o.material ? (Array.isArray(o.material) ? o.material : [o.material]) : []; ms.forEach(m => { if (m && m.emissive && !rec.fmats.some(x => x.m === m)) rec.fmats.push({ m, c: m.emissive.clone() }); }); }); }
     rec.flash = { t: 0, dur: 0.35, k, col: new THREE.Color(color) };
+  }
+  /** Camino por casillas (8 direcciones, sin cortar esquinas de muro) para que la figura ande por donde se puede. */
+  function gridPath(a, b) {
+    if (!G || (a.c === b.c && a.r === b.r)) return null;
+    if (Math.max(Math.abs(a.c - b.c), Math.abs(a.r - b.r)) > 40) return null;
+    const K = (c, r) => c + "," + r, blockedProp = new Set((G.props || []).filter(p => (PROPS[p.k] || {}).block || (isDoor(p) && !p.open)).map(p => K(p.c, p.r)));
+    const free = (c, r) => c >= 0 && r >= 0 && c < G.cols && r < G.rows && !isWallIn(G, c, r) && (!blockedProp.has(K(c, r)) || (c === b.c && r === b.r));
+    const prev = new Map([[K(a.c, a.r), null]]), q = [[a.c, a.r]];
+    while (q.length) {
+      const [c, r] = q.shift(); if (c === b.c && r === b.r) break;
+      for (const [dc, dr] of [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]]) {
+        const nc = c + dc, nr = r + dr, nk = K(nc, nr); if (prev.has(nk) || !free(nc, nr)) continue;
+        if (dc && dr && (!free(c + dc, r) || !free(c, r + dr))) continue;
+        prev.set(nk, K(c, r)); q.push([nc, nr]);
+      }
+      if (prev.size > 4000) break;
+    }
+    if (!prev.has(K(b.c, b.r))) return null;
+    const out = []; let k = K(b.c, b.r); while (k) { const [c, r] = k.split(",").map(Number); out.unshift({ c, r }); k = prev.get(k); }
+    return out;
   }
   /** Polvo al arrancar y al llegar (del color del terreno); más grande si baja de un desnivel o cae. */
   function puff(rec, big) {
@@ -1352,7 +1382,8 @@ export function createBoard3D(host, opts) {
     drag.moved = true;
     const h = cellAt(); if (!h) return;
     const rec = toks.get(drag.id);
-    if (rec && rec.root) { rec.root.position.set(hit.x, hit.y + 1.2, hit.z); rec.target.copy(rec.root.position); }
+    // Hito 91: la figura no vuela con el ratón; se levanta un poco en su sitio y se ve el camino. Al soltar, anda hasta allí
+    if (rec && rec.root) { rec.root.position.set(cx(drag.from.c), gy(drag.from.c, drag.from.r) + 0.6, cz(drag.from.r)); rec.target.copy(rec.root.position); }
     const ok = reachR ? reachR.cells.has(h.c + "," + h.r) && !reachR.cells.get(h.c + "," + h.r).occ : !isWall(h.c, h.r);
     if (inside(h)) { hl.visible = true; hl.position.x = cx(h.c); hl.position.z = cz(h.r); hl.material.color.set(ok ? 0xd6aa4e : 0xb33a2e); }
     if (!drag.last || drag.last.c !== h.c || drag.last.r !== h.r) { drag.last = h; showPath(h); }
@@ -1374,7 +1405,7 @@ export function createBoard3D(host, opts) {
       }
       const shut = (G.props || []).some(pr => isDoor(pr) && !pr.open && pr.c === h?.c && pr.r === h?.r);
       if (h && inside(h) && !isWall(h.c, h.r) && (!shut || opts.dm)) {
-        if (rec && rec.root) { rec.root.position.set(cx(h.c), gy(h.c, h.r), cz(h.r)); rec.target.copy(rec.root.position); }
+        if (rec && rec.root) { rec.root.position.y = gy(d.from.c, d.from.r); rec.target.copy(rec.root.position); }
         opts.mutate("token", mm => { const k = mm.tokens.find(z => z.id === d.id); if (k) { k.c = h.c; k.r = h.r; } });
       } else if (rec && rec.root) { rec.root.position.set(cx(d.from.c), gy(d.from.c, d.from.r), cz(d.from.r)); rec.target.copy(rec.root.position); }
       select(d.id); return;
@@ -1383,7 +1414,7 @@ export function createBoard3D(host, opts) {
     down = null;
   };
   renderer.domElement.addEventListener("pointerup", up);
-  renderer.domElement.addEventListener("pointercancel", () => { showPath(null); drag = null; controls.enabled = true; hl.visible = false; tip.hidden = true; });
+  renderer.domElement.addEventListener("pointercancel", () => { showPath(null); if (drag) { const rec = toks.get(drag.id); if (rec && rec.root) { rec.root.position.set(cx(drag.from.c), gy(drag.from.c, drag.from.r), cz(drag.from.r)); rec.target.copy(rec.root.position); } } drag = null; controls.enabled = true; hl.visible = false; tip.hidden = true; });
   function select(id) { selected = id; opts.onSelect && opts.onSelect(id); sync(); }
   function refreshReach() { try { if (drag) return; const id = selected && opts.reach && opts.reach(selected) ? selected : null; showReach(id); showPath(null); } catch (e) { /* aún montándose */ } }
 
@@ -1422,14 +1453,17 @@ export function createBoard3D(host, opts) {
         const len = d.length(), horiz = Math.hypot(d.x, d.z);
         rec.walkT = (rec.walkT || 0) + dt;
         const turnTo = () => { if (horiz > 0.05) { const want = Math.atan2(d.x, d.z), diff = ((want - rec.root.rotation.y + Math.PI * 3) % (Math.PI * 2)) - Math.PI; rec.root.rotation.y += diff * Math.min(1, dt * 12); } };
-        if (len < 0.08) {
+        if (len < 0.08 && rec.path && rec.path.length) { rec.target.copy(rec.path.shift()); }
+        else if (len < 0.08) {
           const fell = rec.startY != null && rec.startY - rec.target.y > 1.5;
           p.copy(rec.target); rec.moving = 0; rec.walkT = 0; rec.walkY = 0; if (rec.walked) { rec.settle = 0.3; puff(rec, fell); } rec.walked = false; rec.startY = null; if (!rec.down) play(rec, "Idle");
         }
         else if (rec.walkT < 0.1 && horiz > CELL * 0.6 && !rec.walked) { turnTo(); rec.walkY = -0.1 * Math.sin(rec.walkT / 0.1 * Math.PI / 2); }
         else {
           turnTo();
-          p.add(d.multiplyScalar(Math.min(1, dt * 7 / Math.max(1, len / 4))));
+          // por el camino, paso constante; en el último tramo, frenando
+          if (rec.path && rec.path.length) p.add(d.multiplyScalar(Math.min(1, (dt * 17) / Math.max(len, 0.001))));
+          else p.add(d.multiplyScalar(Math.min(1, dt * 7 / Math.max(1, len / 4))));
           if (horiz > 0.05) { if (!rec.walked) { puff(rec, false); rec.startY = p.y; } rec.walked = true; rec.bob = (rec.bob || 0) + dt * 11; rec.walkY = Math.abs(Math.sin(rec.bob)) * 0.14 * Math.min(1, horiz / 2); rec.sway = Math.cos(rec.bob) * 0.07; }
           else rec.walkY = 0;
         }

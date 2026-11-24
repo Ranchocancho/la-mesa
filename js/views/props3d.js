@@ -348,3 +348,136 @@ Object.assign(PROC, {
     return g;
   }
 });
+
+/* ---------- Hito 90: objetos nuevos para las escenas ---------- */
+const glowM = (c, e, k = 1.3) => mat(c, { emissive: e, emissiveIntensity: k });
+Object.assign(PROC, {
+  mesaritual(fire) {
+    const g = new THREE.Group(), dw = darkWood();
+    g.add(M(box(3, 0.18, 1.6), dw, 0, 1.3)); [[-1.3, -0.65], [1.3, -0.65], [-1.3, 0.65], [1.3, 0.65]].forEach(([x, z]) => g.add(M(cyl(0.09, 0.12, 1.25, 6), dw, x, 0.62, z)));
+    g.add(M(box(2.6, 0.03, 1.3), mat(0x2a1a3a, { roughness: 1 }), 0, 1.41));                                     // paño morado
+    const bk = book(0x3a1a1a, 0.9, 0.7, 0.12); bk.position.set(-0.5, 1.42, 0.1); bk.rotation.y = 0.3; g.add(bk);    // libro abierto
+    g.add(M(new THREE.SphereGeometry(0.2, 8, 6), mat(0xdcd2b8), 0.6, 1.62, -0.25));                                 // calavera
+    g.add(M(cyl(0.08, 0.1, 0.35, 8), glowM(0x5aff9a, 0x2aff6a, 1.6), 0.95, 1.6, 0.3));                              // frasco que brilla
+    g.add(M(cyl(0.06, 0.06, 0.3, 6), mat(0xf0e8d0), -1.2, 1.57, -0.45)); const f = fire(0.22); f.position.set(-1.2, 1.78, -0.45); g.add(f);
+    g.add(M(box(0.4, 0.3, 0.3), mat(0x4a3a24), 1.1, 1.55, -0.4));
+    g.userData.glow = { color: 0x5aff9a, power: 0.4, y: 1.8 };
+    return g;
+  },
+  circulo() {
+    const g = new THREE.Group(), gm = glowM(0x9a5aff, 0x7a2aff, 1.5);
+    [1.75, 1.3].forEach(r => { const t = M(new THREE.TorusGeometry(r, 0.05, 4, 48), gm, 0, 0.05); t.rotation.x = Math.PI / 2; g.add(t); });
+    for (let i = 0; i < 5; i++) { const a = i / 5 * Math.PI * 2, b = (i + 2) / 5 * Math.PI * 2; const L = Math.hypot(Math.cos(a) - Math.cos(b), Math.sin(a) - Math.sin(b)) * 1.3; const l = M(box(L, 0.03, 0.06), gm, (Math.cos(a) + Math.cos(b)) * 0.65, 0.05, (Math.sin(a) + Math.sin(b)) * 0.65); l.rotation.y = -Math.atan2(Math.sin(b) - Math.sin(a), Math.cos(b) - Math.cos(a)); g.add(l); }
+    for (let i = 0; i < 8; i++) { const a = i / 8 * Math.PI * 2; g.add(M(box(0.14, 0.03, 0.14), gm, Math.cos(a) * 1.52, 0.05, Math.sin(a) * 1.52)); }
+    g.userData.glow = { color: 0x9a5aff, power: 0.35, y: 0.6 };
+    return g;
+  },
+  pilarantorcha(fire) {
+    const g = new THREE.Group(), m = stoneV();
+    g.add(M(box(1.4, 0.3, 1.4), darkStone(), 0, 0.15)); g.add(M(cyl(0.5, 0.58, 4.6, 10), m, 0, 2.6)); g.add(M(box(1.3, 0.3, 1.3), darkStone(), 0, 5.0));
+    const arm = M(box(0.12, 0.12, 0.7), iron(), 0, 3.4, 0.75); g.add(arm); g.add(M(cyl(0.16, 0.08, 0.3, 6), iron(), 0, 3.55, 1.05));
+    const f = fire(0.6); f.position.set(0, 3.85, 1.05); g.add(f);
+    return g;
+  },
+  caldero() {
+    const g = new THREE.Group(), ir = mat(0x24221f, { metalness: 0.6, roughness: 0.5 });
+    const pot = M(new THREE.SphereGeometry(0.9, 14, 10, 0, Math.PI * 2, Math.PI * 0.3, Math.PI * 0.7), ir, 0, 0.95); pot.material.side = THREE.DoubleSide; g.add(pot);
+    g.add(M(new THREE.TorusGeometry(0.78, 0.06, 6, 20), ir, 0, 1.5)).children; g.children[1].rotation.x = Math.PI / 2;
+    const brew = M(new THREE.CircleGeometry(0.76, 20), glowM(0x6aff4a, 0x3aff2a, 1.4), 0, 1.42); brew.rotation.x = -Math.PI / 2; g.add(brew);
+    for (let i = 0; i < 4; i++) { const b = M(new THREE.SphereGeometry(0.1 + i * 0.02, 8, 6), glowM(0x9aff7a, 0x4aff3a, 1.6), (R() - 0.5) * 0.8, 1.48, (R() - 0.5) * 0.8); b.userData.spin = true; g.add(b); }
+    [0, 1, 2].forEach(i => { const a = i / 3 * Math.PI * 2; g.add(M(cyl(0.08, 0.1, 0.5, 5), ir, Math.cos(a) * 0.6, 0.2, Math.sin(a) * 0.6)); });
+    g.add(M(cyl(0.5, 0.6, 0.12, 8), mat(0x3a2a1a), 0, 0.06)); // leña
+    g.userData.glow = { color: 0x6aff4a, power: 0.45, y: 1.8 };
+    return g;
+  },
+  orbe() {
+    const g = new THREE.Group();
+    g.add(M(cyl(0.5, 0.7, 0.3, 8), darkStone(), 0, 0.15)); g.add(M(cyl(0.18, 0.28, 1.6, 8), stoneV(), 0, 1.1));
+    [0, 1, 2].forEach(i => { const c = M(new THREE.ConeGeometry(0.06, 0.6, 4), brass(), Math.cos(i * 2.1) * 0.28, 2.05, Math.sin(i * 2.1) * 0.28); c.rotation.z = Math.cos(i * 2.1) * -0.5; c.rotation.x = Math.sin(i * 2.1) * 0.5; g.add(c); });
+    const o = M(new THREE.SphereGeometry(0.42, 18, 14), glowM(0x7ad8ff, 0x3a9aff, 1.8), 0, 2.55); o.material.transparent = true; o.material.opacity = 0.9; o.userData.spin = true; g.add(o);
+    const ring = M(new THREE.TorusGeometry(0.62, 0.025, 4, 32), glowM(0xbfe6ff, 0x6ab8ff, 1.5), 0, 2.55); ring.rotation.x = 1.2; ring.userData.spin = true; g.add(ring);
+    g.userData.glow = { color: 0x6ab8ff, power: 0.6, y: 2.6 };
+    return g;
+  },
+  trono() {
+    const g = new THREE.Group(), m = mat(0x4a3a2c), au = brass(), red = mat(0x7a1e24, { roughness: 1 });
+    g.add(M(box(2.2, 0.3, 2), stoneV(), 0, 0.15)); g.add(M(box(1.6, 0.8, 1.3), m, 0, 0.7)); g.add(M(box(1.4, 0.12, 1.1), red, 0, 1.15));
+    g.add(M(box(1.6, 2.6, 0.25), m, 0, 2.3, -0.55)); g.add(M(box(1.2, 2, 0.06), red, 0, 2.2, -0.41));
+    [-0.85, 0.85].forEach(x => { g.add(M(box(0.22, 0.6, 1.2), m, x, 1.3, 0)); g.add(M(new THREE.SphereGeometry(0.15, 8, 6), au, x, 1.65, 0.5)); });
+    [-0.6, 0, 0.6].forEach((x, i) => g.add(M(new THREE.ConeGeometry(0.12, 0.45, 5), au, x, 3.8 + (i === 1 ? 0.15 : 0), -0.55)));
+    return g;
+  },
+  escritorio() {
+    const g = new THREE.Group(), w = wood(), dw = darkWood();
+    g.add(M(box(2.4, 0.14, 1.2), w, 0, 1.2)); [[-1.05, -0.5], [1.05, -0.5], [-1.05, 0.5], [1.05, 0.5]].forEach(([x, z]) => g.add(M(box(0.14, 1.15, 0.14), dw, x, 0.6, z)));
+    g.add(M(box(2.4, 0.9, 0.12), dw, 0, 1.7, -0.55)); for (let i = 0; i < 4; i++) g.add(M(box(0.5, 0.25, 0.25), dw, -0.85 + i * 0.57, 1.6, -0.42));
+    for (let i = 0; i < 4; i++) { const p = M(box(0.5 + R() * 0.2, 0.02, 0.35), paper(), -0.6 + R() * 1.2, 1.28 + i * 0.01, (R() - 0.3) * 0.5); p.rotation.y = (R() - 0.5) * 0.8; g.add(p); }
+    const sc = M(cyl(0.08, 0.08, 0.6, 8), paper(), 0.8, 1.35, 0.25); sc.rotation.z = Math.PI / 2; g.add(sc);
+    g.add(M(cyl(0.06, 0.07, 0.12, 8), mat(0x1a1a2a), -0.9, 1.33, 0.3)); const q = M(cyl(0.01, 0.03, 0.5, 4), mat(0xf0f0f0), -0.9, 1.55, 0.3); q.rotation.z = 0.4; g.add(q);
+    return g;
+  },
+  telescopio() {
+    const g = new THREE.Group(), b = brass(), w = darkWood();
+    [0, 1, 2].forEach(i => { const a = i / 3 * Math.PI * 2, l = M(cyl(0.05, 0.06, 1.8, 5), w, Math.cos(a) * 0.4, 0.85, Math.sin(a) * 0.4); l.rotation.set(Math.sin(a) * 0.25, 0, -Math.cos(a) * 0.25); g.add(l); });
+    const tube = new THREE.Group(); tube.position.y = 1.8; tube.rotation.z = 0.7;
+    tube.add(M(cyl(0.16, 0.22, 2.2, 12), b, 0, 0.4)); tube.add(M(cyl(0.24, 0.24, 0.12, 12), b, 0, 1.5)); tube.add(M(cyl(0.08, 0.1, 0.4, 8), b, 0, -0.85));
+    g.add(tube); return g;
+  },
+  ataud() {
+    const g = new THREE.Group(), w = darkWood();
+    const sh = new THREE.Shape(); sh.moveTo(-0.45, -1.3); sh.lineTo(0.45, -1.3); sh.lineTo(0.7, 0.6); sh.lineTo(0.45, 1.3); sh.lineTo(-0.45, 1.3); sh.lineTo(-0.7, 0.6); sh.closePath();
+    const body = M(new THREE.ExtrudeGeometry(sh, { depth: 0.7, bevelEnabled: false }), w, 0, 0.7); body.rotation.x = Math.PI / 2; g.add(body);
+    const lid = M(new THREE.ExtrudeGeometry(sh, { depth: 0.12, bevelEnabled: true, bevelSize: 0.03, bevelThickness: 0.03, bevelSegments: 1 }), mat(0x3a2414), 0.3, 0.86, 0.15); lid.rotation.x = Math.PI / 2; lid.rotation.z = 0.25; g.add(lid);
+    g.add(M(box(0.08, 0.02, 0.6), brass(), 0.3, 1.0, 0)); g.add(M(box(0.35, 0.02, 0.08), brass(), 0.3, 1.0, 0.1));
+    return g;
+  },
+  cadenas() {
+    const g = new THREE.Group(), ir = iron();
+    g.add(M(box(0.25, 3.4, 0.25), darkWood(), 0, 1.7)); g.add(M(box(1.4, 0.2, 0.2), darkWood(), 0.55, 3.3));
+    [-0.1, 0.4, 0.9].forEach((x, k) => { for (let i = 0; i < 6 - k; i++) { const l = M(new THREE.TorusGeometry(0.09, 0.025, 4, 8), ir, x + 0.1, 3.1 - i * 0.16, 0); l.rotation.y = i % 2 ? Math.PI / 2 : 0; g.add(l); } g.add(M(new THREE.TorusGeometry(0.16, 0.04, 5, 10), ir, x + 0.1, 3.1 - (6 - k) * 0.16 - 0.1, 0)); });
+    return g;
+  },
+  estatuarota() {
+    const g = plinth(1.5, 0.7, 1.5), m = mat(0x8e887e), y0 = 1.06;
+    g.add(M(cyl(0.38, 0.62, 1.1, 10), m, 0, y0 + 0.55)); const torso = M(cyl(0.48, 0.38, 0.6, 10), m, 0, y0 + 1.4); torso.rotation.z = 0.15; g.add(torso);
+    const head = M(new THREE.SphereGeometry(0.3, 10, 8), m, 1.1, 0.3, 0.6); g.add(head);
+    const arm = M(cyl(0.11, 0.13, 1, 7), m, -0.9, 0.12, 0.8); arm.rotation.z = Math.PI / 2; arm.rotation.y = 0.6; g.add(arm);
+    for (let i = 0; i < 5; i++) { const r = M(new THREE.DodecahedronGeometry(0.15 + R() * 0.15, 0), m, (R() - 0.5) * 2.2, 0.1, (R() - 0.5) * 2.2); r.rotation.set(R(), R(), R()); g.add(r); }
+    g.add(M(box(1.2, 0.04, 0.5), moss(), 0.3, 0.2, -0.62));
+    return g;
+  },
+  estalagmita() {
+    const g = new THREE.Group(), m = mat(0x6a645c);
+    g.add(M(new THREE.DodecahedronGeometry(0.9, 0), m, 0, 0.1)); g.children[0].scale.y = 0.35;
+    [[0, 0, 3.4, 0.55], [0.6, 0.3, 2.2, 0.38], [-0.5, 0.4, 1.6, 0.32], [0.2, -0.6, 1.2, 0.28]].forEach(([x, z, h, r]) => { const c = M(new THREE.ConeGeometry(r, h, 7), m, x, h / 2, z); c.rotation.set((R() - 0.5) * 0.12, R() * 6, (R() - 0.5) * 0.12); g.add(c); });
+    return g;
+  },
+  piedrasrio() {
+    const g = new THREE.Group(), m = mat(0x7a756c, { roughness: 0.7 });
+    [[-0.9, -0.8, 0.55], [0.1, -0.2, 0.6], [0.9, 0.7, 0.5], [-0.4, 0.9, 0.4]].forEach(([x, z, r]) => { const s = M(new THREE.DodecahedronGeometry(r, 0), m, x, 0.02, z); s.scale.y = 0.35; s.rotation.y = R() * 6; g.add(s); s.add(M(new THREE.TorusGeometry(r * 1.05, 0.04, 4, 16), mat(0xdfeef5, { transparent: true, opacity: 0.6 }), 0, 0.02 / 0.35, 0)); s.children[0].rotation.x = Math.PI / 2; });
+    return g;
+  },
+  farol() {
+    const g = new THREE.Group(), ir = iron();
+    g.add(M(box(0.6, 0.2, 0.6), darkStone(), 0, 0.1)); g.add(M(cyl(0.08, 0.1, 3.6, 6), ir, 0, 1.9)); g.add(M(box(0.8, 0.08, 0.08), ir, 0.35, 3.6));
+    g.add(M(box(0.45, 0.55, 0.45), glowM(0xffd68a, 0xffa040, 1.6), 0.7, 3.25)); g.add(M(new THREE.ConeGeometry(0.38, 0.3, 4), ir, 0.7, 3.68)); g.children[g.children.length - 1].rotation.y = Math.PI / 4;
+    g.userData.glow = { color: 0xffb060, power: 0.9, y: 3.2 };
+    return g;
+  },
+  letrero() {
+    const g = new THREE.Group(), dw = darkWood();
+    g.add(M(box(0.2, 3.4, 0.2), dw, -0.9, 1.7)); g.add(M(box(1.6, 0.15, 0.15), dw, -0.15, 3.3));
+    const sign = new THREE.Group(); sign.position.set(0.15, 2.65, 0); g.add(sign);
+    [-0.45, 0.45].forEach(x => sign.add(M(cyl(0.015, 0.015, 0.5, 3), iron(), x, 0.4, 0)));
+    sign.add(M(box(1.2, 0.8, 0.08), wood(), 0, 0)); sign.add(M(cyl(0.18, 0.15, 0.3, 10), mat(0xc8a03a, { metalness: 0.4 }), 0, 0, 0.08)); // una jarra pintada
+    return g;
+  },
+  basura() {
+    const g = new THREE.Group();
+    for (let i = 0; i < 6; i++) { const b = M(new THREE.DodecahedronGeometry(0.25 + R() * 0.25, 0), mat([0x4a3a24, 0x5a5040, 0x3a3428][i % 3]), (R() - 0.5) * 1.4, 0.15, (R() - 0.5) * 1.4); b.scale.y = 0.6; g.add(b); }
+    g.add(M(cyl(0.3, 0.3, 0.7, 10), wood(), 0.6, 0.2, -0.3)).children; g.children[g.children.length - 1].rotation.z = Math.PI / 2;
+    g.add(M(box(0.7, 0.5, 0.5), mat(0x6a4a2c), -0.6, 0.25, 0.5));
+    for (let i = 0; i < 3; i++) g.add(M(new THREE.SphereGeometry(0.08, 6, 4), mat(0xd8cfb8), (R() - 0.5), 0.1, (R() - 0.5)));
+    return g;
+  }
+});
