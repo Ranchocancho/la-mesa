@@ -28,7 +28,9 @@ export function hazardEdges(g) {
       if (C < 0 || R < 0 || C >= g.cols || R >= g.rows) return;
       const n = TERRAIN[terOf(g, C, R)];
       if (n && n.wall) return;
-      if (hazOfCell(g, C, R) !== k) out.push({ c, r, side, kind: k });
+      // Hito 96: entre lava y brasas no hay borde (las dos queman): solo se marca donde empieza el suelo seguro
+      const n2 = hazOfCell(g, C, R), burn = x => x === "lava" || x === "fire";
+      if (n2 !== k && !(burn(k) && burn(n2))) out.push({ c, r, side, kind: k });
     });
   }
   // Puentes: el borde que da al agua, la lava o el abismo

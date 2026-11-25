@@ -110,8 +110,41 @@ function terrainMat(k) {
   const bump = rep(new THREE.CanvasTexture(heightCanvas(k))), rough = rep(new THREE.CanvasTexture(roughCanvas(k)));
   const m = new THREE.MeshStandardMaterial({ map, bumpMap: bump, bumpScale: ty.liquid ? 0.25 : ty.wall ? 0.9 : 1.6, roughness: 1, roughnessMap: rough, metalness: 0,
     ...(ty.liquid && k !== "lava" ? { transparent: true, opacity: 0.9 } : {}), ...(ty.glow ? { emissive: 0xff5a10, emissiveMap: map, emissiveIntensity: 1.1 } : {}) });
+  if (k === "ceniza") m.color.setHex(0xa49c94); // Hito 96: menos contraste con la roca volcánica (se leía como tablero de ajedrez)
   if (!ty.wall) enhanceFloor(m, k); // Hito 84: menos repetición (tono a gran escala y segunda lectura)
   TEXMAT.set(k, m); return m;
+}
+/* Hito 96 (A1): el agua es un solo plano. Cada esquina toma la profundidad media de sus cuatro casillas
+   (tierra 0, agua poco profunda 0,5, profunda 1), así no hay cuadros: se aclara hacia la orilla y se oscurece en el centro. */
+const WATER = { agua: 0.5, aguaprof: 1 };
+let WATERMAT = null;
+function waterMesh(g, list, cx, cz, y) {
+  const geo = floorGeometry(list, cx, cz, y), dep = (c, r) => WATER[(g.terrain || {})[c + "," + r]] ?? 0;
+  const corner = (c, r, sx, sy) => { const a = c + (sx > 0 ? 0 : -1), b = r + (sy > 0 ? 0 : -1); return (dep(a, b) + dep(a + 1, b) + dep(a, b + 1) + dep(a + 1, b + 1)) / 4; };
+  const col = [], shore = new THREE.Color(0x8fb8a8), mid = new THREE.Color(1, 1, 1), deep = new THREE.Color(0x4a6680), tmp = new THREE.Color();
+  list.forEach(([c, r]) => [[-1, -1], [1, -1], [1, 1], [-1, 1]].forEach(([sx, sy]) => {
+    const d = corner(c, r, sx, sy);
+    if (d < 0.5) tmp.copy(shore).lerp(mid, d / 0.5); else tmp.copy(mid).lerp(deep, (d - 0.5) / 0.5);
+    col.push(tmp.r, tmp.g, tmp.b);
+  }));
+  geo.setAttribute("color", new THREE.Float32BufferAttribute(col, 3));
+  if (!WATERMAT) { const b = terrainMat("agua"); WATERMAT = enhanceFloor(b.clone(), "agua"); WATERMAT.map = b.map; WATERMAT.bumpMap = b.bumpMap; WATERMAT.roughnessMap = b.roughnessMap; WATERMAT.vertexColors = true; WATERMAT.opacity = 0.93; TEXMAT.set("agua#", WATERMAT); }
+  return new THREE.Mesh(geo, WATERMAT);
+}
+/** Espuma: una franja clara y suave en cada borde del agua que da a tierra. */
+function foamMesh(g, list, cx, cz, y) {
+  const isW = (c, r) => WATER[(g.terrain || {})[c + "," + r]] != null, h = CELL / 2, w = CELL * 0.22, pos = [], col = [];
+  list.forEach(([c, r]) => [[0, -1], [1, 0], [0, 1], [-1, 0]].forEach(([dc, dr]) => {
+    if (isW(c + dc, r + dr)) return;
+    const X = cx(c), Z = cz(r), along = dc === 0 ? [1, 0] : [0, 1];
+    const e0 = [X + dc * h, Z + dr * h], e1 = [e0[0] - dc * w, e0[1] - dr * w];
+    const q = [[e0[0] - along[0] * h, e0[1] - along[1] * h, 1], [e0[0] + along[0] * h, e0[1] + along[1] * h, 1], [e1[0] + along[0] * h, e1[1] + along[1] * h, 0], [e1[0] - along[0] * h, e1[1] - along[1] * h, 0]];
+    [0, 1, 2, 0, 2, 3].forEach(i => { pos.push(q[i][0], y, q[i][1]); const k = q[i][2] * 0.32; col.push(k, k, k * 0.95); });
+  }));
+  if (!pos.length) return null;
+  const geo = new THREE.BufferGeometry(); geo.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3)); geo.setAttribute("color", new THREE.Float32BufferAttribute(col, 3));
+  const m = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.5, blending: THREE.AdditiveBlending, depthWrite: false }));
+  m.raycast = () => {}; m.renderOrder = 1; return m;
 }
 /** Suelo continuo de un tipo de terreno: un cuadrado por casilla con coordenadas de textura del mundo (sin costuras). */
 function floorGeometry(list, cx, cz, y) {
@@ -130,9 +163,9 @@ const FLOOR_TINT = { barro: 0x8a7458 };
 const AMBIENT = {
   dia: { n: "Día", hemi: [0xdfeaff, 0x6b5a45, 1.6], sun: [0xfff1dc, 2.6], bg: 0x2b2722, torch: 0.5 },
   interior: { n: "Interior", hemi: [0xffe2c0, 0x3a2c20, 0.55], sun: [0xffc58a, 0.9], bg: 0x17120e, torch: 1 },
-  noche: { n: "Noche", hemi: [0x7a8fc8, 0x1a1c26, 0.5], sun: [0x9fb4ff, 0.6], bg: 0x080a10, torch: 1.25 },
-  penumbra: { n: "Penumbra", hemi: [0xc8b498, 0x231a12, 0.34], sun: [0xd6a070, 0.45], bg: 0x100c09, torch: 1.15 },
-  oscuro: { n: "Oscuridad", hemi: [0x6a6a80, 0x0c0c12, 0.16], sun: [0x8a90b0, 0.12], bg: 0x050507, torch: 1.4 }
+  noche: { n: "Noche", hemi: [0x8a9ad0, 0x1e2230, 0.68], sun: [0x9fb4ff, 0.6], bg: 0x080a10, torch: 1.25 },
+  penumbra: { n: "Penumbra", hemi: [0xa8b8c8, 0x2a2418, 0.62], sun: [0xd6a070, 0.45], bg: 0x100c09, torch: 1.15 },
+  oscuro: { n: "Oscuridad", hemi: [0x6c78a0, 0x101218, 0.32], sun: [0x8a90b0, 0.12], bg: 0x050507, torch: 1.4 }
 };
 
 // ---------- Texturas procedurales (sin descargas) ----------
@@ -187,7 +220,8 @@ function tree() {
   const g = new THREE.Group(), h = 0.85 + Math.random() * 0.35;
   const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.4, 2, 7), mat(0x5a3d22)); trunk.position.y = 1; g.add(trunk);
   const leaf = mat(new THREE.Color().setHSL(0.27 + Math.random() * 0.05, 0.45, 0.22 + Math.random() * 0.06));
-  [[1.9, 2.6, 2.2], [1.5, 2.2, 3.4], [1, 1.8, 4.5]].forEach(([r, hh, y]) => { const m = new THREE.Mesh(new THREE.ConeGeometry(r, hh, 8), leaf); m.position.y = y; g.add(m); });
+  const leaf2 = leaf.clone(); leaf2.color.offsetHSL(0.02, -0.05, 0.08); // Hito 96: la copa de arriba más clara (le da la luz)
+  [[1.9, 2.6, 2.2], [1.5, 2.2, 3.4], [1, 1.8, 4.5]].forEach(([r, hh, y], i) => { const m = new THREE.Mesh(new THREE.ConeGeometry(r, hh, 8), i ? leaf2 : leaf); m.position.y = y; g.add(m); });
   g.scale.setScalar(h); g.rotation.y = Math.random() * 6;
   return g;
 }
@@ -480,7 +514,7 @@ export function createBoard3D(host, opts) {
     refreshAtmo();
     ctl.querySelectorAll('[data-cam="quality"]').forEach(b => { b.setAttribute("aria-pressed", q === "alta"); if (b.textContent.includes("Alta") || b.textContent.includes("Normal")) b.textContent = "✨ " + (q === "alta" ? "Alta" : "Normal"); b.title = q === "alta" ? "Calidad alta: reflejos y resplandor (pulsa para normal)" : "Calidad normal (pulsa para alta: resplandor del fuego y la magia)"; });
   }
-  const EXPO = { dia: 1.05, interior: 1.0, noche: 0.96, penumbra: 0.98, oscuro: 0.93 };
+  const EXPO = { dia: 1.05, interior: 1.0, noche: 1.02, penumbra: 1.08, oscuro: 1.0 };
   const BLOOM_K = { dia: 0.26, interior: 0.38, noche: 0.5, penumbra: 0.46, oscuro: 0.55 };
   let ambKey = "";
   function applyAmbient(k) {
@@ -520,15 +554,16 @@ export function createBoard3D(host, opts) {
     for (let r = 0; r < g.rows; r++) for (let c = 0; c < g.cols; c++) {
       const t = (g.terrain || {})[c + "," + r] || "piedra";
       if (TERRAIN[t] && TERRAIN[t].wall) continue;
-      const e = elevAt(g, c, r); (cells[t + "|" + e] = cells[t + "|" + e] || []).push([c, r]);
+      const e = elevAt(g, c, r), tk = WATER[t] != null ? "agua" : t; (cells[tk + "|" + e] = cells[tk + "|" + e] || []).push([c, r]);
     }
     const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), v = new THREE.Vector3(), one = new THREE.Vector3(1, 1, 1);
     const floorsPick = [], gridPts = [];
     for (const [tk, list] of Object.entries(cells)) {
       const [t, es] = tk.split("|"), e0 = +es * YS;
-      const ty = TERRAIN[t] || TERRAIN.piedra, y = e0 + (t === "abismo" ? -1.6 : ty.liquid ? -0.18 : 0.01);
+      const ty = TERRAIN[t] || TERRAIN.piedra, y = e0 + (t === "abismo" ? -1.6 : t === "lava" ? -0.03 : ty.liquid ? -0.18 : 0.01); // Hito 96: la lava, a ras con las brasas (sin escalón de baldosa)
       if (t !== "abismo") { const gyv = y + (ty.liquid ? 0.1 : 0.05), h = CELL / 2; list.forEach(([c, r]) => { const X = cx(c), Z = cz(r); gridPts.push(X - h, gyv, Z - h, X + h, gyv, Z - h, X - h, gyv, Z - h, X - h, gyv, Z + h, X + h, gyv, Z - h, X + h, gyv, Z + h, X - h, gyv, Z + h, X + h, gyv, Z + h); }); }
-      const mesh = new THREE.Mesh(floorGeometry(list, cx, cz, y), terrainMat(t)); mesh.receiveShadow = true; grp.add(mesh); floorsPick.push(mesh);
+      const mesh = t === "agua" ? waterMesh(g, list, cx, cz, y) : new THREE.Mesh(floorGeometry(list, cx, cz, y), terrainMat(t)); mesh.receiveShadow = true; grp.add(mesh); floorsPick.push(mesh);
+      if (t === "agua") { const fo = foamMesh(g, list, cx, cz, y + 0.05); if (fo) { grp.add(fo); let k = 0; ticks.add(dt => { k += dt; fo.material.opacity = 0.5 + Math.sin(k * 1.3) * 0.12; }); } }
       if (ty.liquid || t === "abismo") { // lecho y orillas debajo del agua, la lava o el abismo
         const bed = new THREE.Mesh(floorGeometry(list, cx, cz, y - 0.5), new THREE.MeshStandardMaterial({ color: t === "lava" ? 0x1a0804 : 0x1a2a2a, roughness: 1 })); grp.add(bed);
       }
@@ -575,7 +610,7 @@ export function createBoard3D(host, opts) {
     // Muros: bloque de piedra y caras de muro de KayKit hacia las casillas transitables
     const wallGl = await load("dungeon/wall"); if (my !== build) return;
     let wallMesh = null; wallGl && wallGl.scene.traverse(o => { if (o.isMesh && !wallMesh) wallMesh = o; });
-    const wh = lowWalls ? 0.36 : WALL_TALL, faces = [], blocks = [];
+    const wh = lowWalls ? 0.52 : WALL_TALL, faces = [], blocks = [];
     // Hito 86: cada tramo de muro con su tono (algo más claro, oscuro, cálido o frío), siempre igual para la misma casilla
     const wallTint = (c, r) => { const h = Math.abs(Math.sin(c * 12.9898 + r * 78.233) * 43758.5453) % 1, h2 = Math.abs(Math.sin(c * 39.3468 + r * 11.135) * 24634.6345) % 1; const k = 0.86 + h * 0.2; return new THREE.Color(k * (0.97 + h2 * 0.06), k, k * (1.03 - h2 * 0.06)); };
     const shroudable = []; // piezas que se esconden mientras su casilla no se haya visto nunca (niebla)
@@ -801,15 +836,17 @@ export function createBoard3D(host, opts) {
       const byK = {};
       HE.forEach(e => {
         const t = TERRAIN[(g.terrain || {})[e.c + "," + e.r] || "piedra"] || {}, X = cx(e.c), Z = cz(e.r), h = CELL / 2 - 0.04, w = e.kind === "bridge" ? 0.18 : 0.34;
-        const y = elevAt(g, e.c, e.r) * YS + (e.kind === "bridge" ? 0.42 : t.liquid ? -0.06 : 0.08);
+        const y = elevAt(g, e.c, e.r) * YS + (e.kind === "bridge" ? 0.42 : t.liquid && e.kind !== "lava" ? -0.06 : 0.08);
         // cuatro esquinas de la banda, por dentro de la casilla
         const q = [[[-h, -h], [h, -h], [h, -h + w], [-h, -h + w]], [[h - w, -h], [h, -h], [h, h], [h - w, h]], [[-h, h - w], [h, h - w], [h, h], [-h, h]], [[-h, -h], [-h + w, -h], [-h + w, h], [-h, h]]][e.side];
-        const a = (byK[e.kind] = byK[e.kind] || []);
-        [0, 1, 2, 0, 2, 3].forEach(i => a.push(X + q[i][0], y, Z + q[i][1]));
+        const a = (byK[e.kind] = byK[e.kind] || { p: [], c: [] });
+        // Hito 96: la banda se apaga hacia dentro de la casilla (el borde de fuera, el que toca la arista, es el más vivo)
+        const outer = [[1, 1, 0, 0], [0, 1, 1, 0], [0, 0, 1, 1], [1, 0, 0, 1]][e.side];
+        [0, 1, 2, 0, 2, 3].forEach(i => { a.p.push(X + q[i][0], y, Z + q[i][1]); const k = outer[i] ? 1 : 0.05; a.c.push(k, k, k); });
       });
-      for (const [kind, pts] of Object.entries(byK)) {
-        const geo = new THREE.BufferGeometry(); geo.setAttribute("position", new THREE.Float32BufferAttribute(pts, 3));
-        const mesh = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: new THREE.Color(HAZ_COLOR[kind]).multiplyScalar(kind === "slip" || kind === "bridge" ? 1 : 1.6), transparent: true, opacity: 0.6, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
+      for (const [kind, B] of Object.entries(byK)) {
+        const geo = new THREE.BufferGeometry(); geo.setAttribute("position", new THREE.Float32BufferAttribute(B.p, 3)); geo.setAttribute("color", new THREE.Float32BufferAttribute(B.c, 3));
+        const mesh = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ vertexColors: true, color: new THREE.Color(HAZ_COLOR[kind]).multiplyScalar(kind === "slip" || kind === "bridge" ? 1 : 1.6), transparent: true, opacity: 0.6, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
         mesh.raycast = () => {}; mesh.renderOrder = 2; grp.add(mesh);
         if (kind === "fire" || kind === "lava") { let k = Math.random() * 3; ticks.add(dt => { k += dt; mesh.material.opacity = 0.45 + Math.sin(k * 2.2) * 0.2; }); }
       }
@@ -867,7 +904,7 @@ export function createBoard3D(host, opts) {
       }
     }
     if (!mini) mini = await card(t);
-    mini.scale.multiplyScalar(size * (key === "peana" ? 1.22 : 1.35));
+    mini.scale.multiplyScalar(size * (key === "peana" ? 1.05 : 1.35));
     mini.position.y = 0.28;
     mini.traverse(o => { if (o.isMesh) { o.castShadow = true; o.frustumCulled = false; } });
     { const bb = new THREE.Box3().setFromObject(mini); rec.h = Math.max(2.5, bb.max.y - bb.min.y + 0.28); } // altura real de la figura (para la placa del nombre)
@@ -903,7 +940,7 @@ export function createBoard3D(host, opts) {
     g.fillText(name, W / 2, H - 50);
     const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 4;
     // La ilustración brilla un poco por sí misma: así no se apaga con la luz de interior o de noche (como una carta impresa bien iluminada)
-    const face = new THREE.MeshStandardMaterial({ map: tex, roughness: 0.75, emissive: 0xffffff, emissiveMap: tex, emissiveIntensity: 0.55 }), side = new THREE.MeshStandardMaterial({ color: edge, roughness: 0.8 });
+    const face = new THREE.MeshStandardMaterial({ map: tex, roughness: 0.75, emissive: 0xffffff, emissiveMap: tex, emissiveIntensity: 0.42 }), side = new THREE.MeshStandardMaterial({ color: edge, roughness: 0.8 });
     const CW = 3.0, CH = 4.0;
     const mesh = new THREE.Mesh(new THREE.BoxGeometry(CW, CH, 0.09), [side, side, side, side, face, face]);
     mesh.position.y = CH / 2; mesh.castShadow = true;

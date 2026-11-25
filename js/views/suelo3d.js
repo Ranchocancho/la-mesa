@@ -12,7 +12,8 @@ import { TERRAIN } from "../data/mapas.js";
 export const SPREAD = {
   hierbalta: 9, juncos: 9, hierba: 8, musgo: 8, flores: 8, hojarasca: 7, raices: 7, nieve: 7,
   ceniza: 6, arena: 6, barro: 5, removida: 5, pisoteada: 5, tierra: 4, camino: 4, escombros: 4, paja: 4,
-  cueva: 3, rocanevada: 3, volcanica: 3, piedra: 2, adoquin: 2
+  cueva: 3, rocanevada: 3, volcanica: 3, piedra: 2, adoquin: 2,
+  brasas: 3.5, lava: 1 // Hito 96: las brasas se funden con la lava y con la roca de alrededor
 };
 // Terrenos naturales: admiten la segunda lectura girada sin que se note (no tienen dibujo regular de losas)
 const ORGANIC = new Set(["hierba", "hierbalta", "musgo", "hojarasca", "raices", "nieve", "ceniza", "arena", "barro", "removida", "pisoteada", "tierra", "camino", "escombros", "cueva", "rocanevada", "volcanica", "juncos", "paja", "agua", "aguaprof", "lava", "brea", "brasas", "hielo", "hielofino"]);
@@ -89,7 +90,7 @@ export function fringeMaterial(base, k) {
  */
 export function fringeGeometries(g, cx, cz, CELL, elevY, isWall) {
   const ter = (c, r) => (g.terrain || {})[c + "," + r] || "piedra";
-  const out = {}, h = CELL / 2, W = CELL * 0.62;
+  const out = {}, h = CELL / 2, W = CELL * 0.85; // Hito 96: franja más ancha, para que no se lean cuadros
   for (let r = 0; r < g.rows; r++) for (let c = 0; c < g.cols; c++) {
     const a = ter(c, r), pa = SPREAD[a]; if (!pa) continue;
     const ea = elevY(c, r);

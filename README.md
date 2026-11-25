@@ -1068,3 +1068,15 @@ Para tenerlas en un mundo que ya existe: **Escenas → 🔄 Renovar escenas de e
 - **Acercarse y atacar con aviso**: la figura busca primero una casilla que no provoque ataques de oportunidad. Si no la hay, la vista previa lo avisa (⚠AO) y hace falta un segundo clic para atacar igualmente.
 - **Textos de criaturas completos**: 34 efectos de «Fallo» que se cortaban a media frase ya salen completos.
 - **📜 Reglas de esta mesa**: botón en la barra de la mesa con las reglas de campaña (y si están activadas), lo que se juega como en BG3 y las reglas 2024 que la mesa aplica sola.
+
+## Hito 96 — Fase 3: arte de la escena
+
+- **Agua (A1)**: el agua poco profunda y la profunda forman un solo plano. Se aclara hacia la orilla y se oscurece en el centro, sin cuadros. Lleva una franja de espuma suave donde toca tierra.
+- **Lava (A2)**: la lava ya no está hundida como una baldosa: va a ras de las brasas, que se funden con ella y con la roca de alrededor. Entre lava y brasas ya no se dibuja borde de peligro, solo donde empieza el suelo seguro. El borde brilla en la arista y se apaga hacia dentro.
+- **Suelo volcánico (A3)**: la ceniza tiene menos contraste con la roca, y las franjas de mezcla entre terrenos son más anchas (0,85 de casilla).
+- **Penumbra, noche y oscuridad (A4)**: luz de relleno fría (azulada) y algo más de exposición, en vez de negro. Ahora se distingue el suelo.
+- **Adoquín (A5)**: piedras irregulares con juntas de tierra y variación de tono.
+- **Obsidiana (A6)**: gris violáceo con brillo propio, no negro puro.
+- **Muros bajos (A7)**: algo más altos, para que la sala se lea como sala.
+- **Bosque (A8)**: hierba menos saturada con manchas de tierra; los árboles hechos por código tienen la copa de arriba más clara.
+- **Peanas (A9)**: algo más pequeñas y con menos brillo propio.
