@@ -219,7 +219,7 @@ function refresh() {
     world: { map: c.map ? c.map.key : null, mapW: c.map ? c.map.w : null, mapH: c.map ? c.map.h : null, places, gen: c.wgen || null, party: c.party || null,
       regions: (c.regions || []).map(r => ({ ...r, secret: (cache.secrets.get(r.id) || {}).secret || "" })) },
     sessions: c.sessions || [], presentation: c.presentation || null, clock: c.clock || null, backdrop: c.backdrop || null, bestiary: c.bestiary || {},
-    loot: c.loot || null, shopAdj: +c.shopAdj || 0, freeLog: c.freeLog || [], showOdds: c.showOdds !== false,
+    loot: c.loot || null, shopAdj: +c.shopAdj || 0, freeLog: c.freeLog || [], showOdds: c.showOdds !== false, bg3Spells: c.bg3Spells !== false,
     freeTime: c.freeTime ? { ...c.freeTime, spots: (c.freeTime.spots || []).map(x => ({ ...x, secret: (cache.secrets.get("ft-" + x.id) || {}).secret || "" })) } : null,
     mando: cache.secrets.get("mando") || null, // centro de mando del máster (solo él lo lee)
     whispers: [...cache.whispers.entries()].map(([id, x]) => ({ id, ...x })).sort((a, b) => a.at - b.at),
@@ -249,7 +249,7 @@ function docsOf(s, dm) {
     name: s.campaign.name, rules: s.campaign.rules,
     dms: s.dms || [], live: s.live || null,
     sessions: s.sessions, presentation: s.presentation || null, clock: s.clock || null, backdrop: s.backdrop || null, bestiary: s.bestiary || {},
-    loot: s.loot || null, shopAdj: +s.shopAdj || 0, freeLog: s.freeLog || [], showOdds: s.showOdds !== false,
+    loot: s.loot || null, shopAdj: +s.shopAdj || 0, freeLog: s.freeLog || [], showOdds: s.showOdds !== false, bg3Spells: s.bg3Spells !== false,
     freeTime: s.freeTime ? { ...s.freeTime, spots: (s.freeTime.spots || []).map(({ secret, ...x }) => x) } : null,
     map: s.world.map ? { key: s.world.map, w: s.world.mapW, h: s.world.mapH } : null,
     wgen: s.world.gen || null, party: s.world.party || null, // mapa generado del mundo (Hito 72) y dónde está el grupo (Hito 74)

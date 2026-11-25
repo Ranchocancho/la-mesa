@@ -1046,3 +1046,10 @@ Para tenerlas en un mundo que ya existe: **Escenas → 🔄 Renovar escenas de e
 - **Un solo estilo de pestañas** (el de la navegación) en las columnas, el modo del máster y la ficha. En el móvil, la barra de secciones avisa con un degradado de que se puede deslizar, y las pestañas son más altas.
 - **Detalles:** espacios de conjuro más grandes, nombres largos recortados en la barra, notas explicativas más discretas, sombras en los avisos y el registro de tiradas algo más rápido con muchas tiradas.
 - Las mejoras de estilo están en un archivo nuevo, `css/mejoras.css`, que carga `index.html` después de `app.css`.
+
+## Hito 93 — Levantarse, interruptor de conjuros, reglas Firebase
+
+- **Levantarse estando derribado**: entrada «Levantarse» en la barra y botón en la ficha. Cuesta la mitad de tu velocidad; si no te quedan metros o tu velocidad es 0, sale bloqueado con el motivo.
+- **Dos conjuros con espacio por turno (BG3)**: interruptor del DM en el menú de colores de la mesa, activado por defecto. Si se apaga, se aplica la regla 2024 (un solo conjuro con espacio por turno). Se sincroniza con la campaña.
+- **firestore.rules**: los jugadores no pueden poner PG fuera de rango (actual entre 0 y el máximo, temporales entre 0 y 500) ni hacer tiradas secretas. **Hay que publicar las reglas en la consola de Firebase.**
+- **Rendimiento 3D**: los objetos de atrezzo comparten materiales en lugar de crear uno por pieza.

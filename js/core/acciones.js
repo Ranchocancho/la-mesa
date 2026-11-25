@@ -13,7 +13,7 @@ import { isDM, runsTable } from "./session.js";
 import { publish } from "./dados.js";
 import { charOf } from "./mesa.js";
 import { savePlan, abilitiesOf } from "./salud.js";
-import { cover, dist, eco, spend, phase, hasCond } from "./turnos.js";
+import { cover, dist, eco, spend, phase, hasCond, speedOf } from "./turnos.js";
 import { lightMap, darkvisionOf } from "./vision.js";
 import { sightLine } from "./vision.js";
 import { PROPS, TERRAIN, isDoor } from "../data/mapas.js";
@@ -187,3 +187,22 @@ export function watchEffects() {
   store.subscribe(() => queueMicrotask(run)); setInterval(run, 2500);
 }
 export { uid, hasCond };
+
+/* ---------- Levantarse (Hito 93, SRD 5.2.1 «Derribado») ----------
+ * Para dejar de estar derribado gastas movimiento igual a la mitad de tu velocidad (redondeando hacia abajo).
+ * Si tu velocidad es 0 no puedes levantarte. Fuera de combate no cuesta nada. */
+export function standInfo(s, t) {
+  if (!t || !hasCond(t, "derribado")) return null;
+  const live = phase(s) === "live", speed = speedOf(s, t), cost = Math.floor(speed / 2 * 10) / 10;
+  if (!live) return { ok: true, cost: 0, why: "" };
+  if (speed <= 0) return { ok: false, cost, why: "Tu velocidad es 0: no puedes levantarte" };
+  const left = moveBudget(s, t) - (eco(s, t).mov || 0);
+  return left + 0.01 >= cost ? { ok: true, cost, why: "" } : { ok: false, cost, why: `Te faltan metros: levantarte cuesta ${String(cost).replace(".", ",")} m` };
+}
+export function standUp(tokId) {
+  const s = store.get(), t = s.tokens.find(x => x.id === tokId), I = standInfo(s, t); if (!I) return;
+  if (!I.ok) return toast(I.why);
+  if (I.cost) spend(tokId, { mov: I.cost });
+  store.commit("token", st => { const k = st.tokens.find(y => y.id === tokId); if (k) k.conds = (k.conds || []).filter(c => c.id !== "derribado"); });
+  toast(I.cost ? `Te levantas: gastas ${String(I.cost).replace(".", ",")} m de movimiento` : "Te levantas");
+}

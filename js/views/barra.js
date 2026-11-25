@@ -23,7 +23,7 @@ import { PROPS } from "../data/mapas.js";
 import { kitOf, multiOf, multiN, spellsOf, usesLeft, gate } from "../core/criaturas.js";
 import { kitArmed, bindKit, legLeft, legMax } from "./accionesnpc.js";
 import { dist } from "../core/turnos.js";
-import { hide, search, hideCheck, shoveDC, climbables, climbOn, climbDown, pushables, pushObject } from "../core/acciones.js";
+import { hide, search, hideCheck, shoveDC, climbables, climbOn, climbDown, pushables, pushObject, standInfo, standUp } from "../core/acciones.js";
 import { topOfTok } from "../core/alturas.js";
 import { rageInfo, rage, extendRage, bardicInfo, inspirable, inspire } from "../core/rasgos.js";
 import { rxOpen, answerRx, RX, PREFS, reactionsOf, prefOf, setPref, npcOAPref, setNpcOAPref, OA_X } from "../core/reacciones.js";
@@ -91,7 +91,7 @@ function entries(s, c, tok) {
     const used = m.time === "bonus" ? e.bonus : m.time === "react" ? !!e.react : e.act;
     let why = incap || (m.time === "react" ? "" : notTurn) || (used ? (m.time === "bonus" ? "Ya has usado tu acción adicional" : m.time === "react" ? "Ya has usado tu reacción" : "Ya has usado tu acción") : "");
     if (!why && m.lvl && !freeSlots(c, m.lvl).length) why = `Sin espacios de nivel ${m.lvl} o más`;
-    if (!why && m.lvl && e.slotCast && m.time !== "react") why = "Ya lanzaste un conjuro con espacio este turno: solo trucos";
+    if (!why && m.lvl && e.slotCast && m.time !== "react" && s.bg3Spells === false) why = "Ya lanzaste un conjuro con espacio este turno: solo trucos (regla 2024)";
     if (!why && m.time === "react") why = "Es una reacción: la mesa te la ofrecerá cuando toque";
     if (!why && ids.includes("furia")) why = "En furia no puedes lanzar conjuros";
     G.spell.push({ id: "s:" + x.name, ico: spellIcon(d, m), lvl: d.lvl || 0, name: d.n, cost: m.time, why, on: pop && pop.spell === d.n,
@@ -118,6 +118,8 @@ function entries(s, c, tok) {
   const asked = new Set((s.rolls || []).filter(r => r.kind === "open" && r.status === "pending").map(r => r.prop));
   (s.board.props || []).filter(p => ((PROPS[p.k] || {}).loot || p.loot != null || p.chest) && !p.opened && !p.hidden && dist(p, tok) <= 1).forEach(p => { const v = PROPS[p.k] || {}, nm = p.label || v.n || "Cofre";
     G.act.push({ id: "op" + p.id, ico: MISC.chest, name: `${v.open ? "Abrir" : "Coger"} ${nm}`, cost: "free", why: asked.has(p.id) ? "Esperando al máster…" : "", tip: ["Interacción con un objeto: el máster te dice lo que hay."], run: () => { requestOpen(p.id, tok.id); toast("Se lo pides al máster: lo verá al momento"); } }); });
+  // Hito 93: levantarse estando derribado (mitad de la velocidad, SRD «Derribado»)
+  { const SI = standInfo(s, tok); if (SI) G.act.unshift({ id: "stand", ico: MISC.climb, name: "Levantarse", cost: "move", why: moveWhy || (SI.ok ? "" : SI.why), tip: [SI.cost ? `Cuesta ${fm(SI.cost)} m de movimiento (la mitad de tu velocidad).` : "Fuera de combate no cuesta nada.", "Mientras estés derribado solo puedes arrastrarte: cada metro cuesta el doble."], run: () => standUp(tok.id) }); }
   climbables(s, tok).forEach(x => G.act.push({ id: "cl" + x.id, ico: MISC.climb, name: `Subirte a ${x.name}`, cost: "move", why: moveWhy, tip: [`Cuesta ${fm(x.cost)} m de movimiento. Alturas de objetos: regla de campaña.`], run: () => climbOn(tok.id, x.id) }));
   if (topOfTok(s.board, tok)) G.act.push({ id: "down", ico: MISC.down, name: "Bajar", cost: "move", why: moveWhy, tip: ["Bajar del objeto."], run: () => climbDown(tok.id) });
   pushables(s, tok).forEach(x => G.act.push({ id: "po" + x.id, ico: MISC.pushobj, name: `Empujar ${x.name}`, cost: "act", why: whyAct || (!x.free ? "No hay sitio detrás" : ""), tip: [`Fuerza (Atletismo) CD ${x.dc} (regla de campaña): lo mueves 1,5 m.`], run: () => pushObject(tok.id, x.id) }));

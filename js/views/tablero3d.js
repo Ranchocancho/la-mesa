@@ -10,7 +10,7 @@ import { TERRAIN, dist } from "./tablero.js";
 import { PROPS, isDoor, propVisible } from "../data/mapas.js";
 import { pathTo, moveHint } from "../core/movimiento.js";
 import { terrainCanvas, heightCanvas, roughCanvas } from "./texturas.js";
-import { PROC } from "./props3d.js";
+import { PROC, PROP_MATS } from "./props3d.js";
 import { siluetaFor, siluetaURL } from "../data/siluetas.js";
 import { COND } from "../data/iconos.js";
 import { estado, etiqueta } from "../data/estados.js";
@@ -399,7 +399,7 @@ export function createBoard3D(host, opts) {
     if (shroud && atmo.shroud.length) { shroud.push(...atmo.shroud); fogSig = ""; }
   }
   host.prepend(renderer.domElement);
-  renderer.domElement.__b3d = () => ({ toks, camera, THREE }); // para las pruebas automáticas
+   // para las pruebas automáticas
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(42, 1, 0.5, 600);
   const controls = new OrbitControls(camera, renderer.domElement);
@@ -774,7 +774,7 @@ export function createBoard3D(host, opts) {
     // Sustituir el escenario anterior de golpe (sin parpadeos)
     // Hito 89: liberar lo que ocupaba el escenario viejo en la tarjeta gráfica (sin tocar lo compartido entre mesas)
     const keepG = new Set([CONTACT_GEO]), keepM = new Set([CONTACT]);
-    TEXMAT.forEach(m => keepM.add(m)); FRINGE.forEach(m => keepM.add(m));
+    TEXMAT.forEach(m => keepM.add(m)); PROP_MATS.forEach(m => keepM.add(m)); FRINGE.forEach(m => keepM.add(m));
     for (const pr of cache.values()) { const gl = await pr; if (gl) gl.scene.traverse(o => { if (o.geometry) keepG.add(o.geometry); (Array.isArray(o.material) ? o.material : [o.material]).forEach(m => m && keepM.add(m)); }); }
     if (my !== build) return;
     world.children.slice().forEach(o => {

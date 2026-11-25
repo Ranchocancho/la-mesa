@@ -2,7 +2,10 @@
 // Formas sencillas con sombreado plano, en el mismo estilo que los modelos KayKit.
 import * as THREE from "three";
 
-const mat = (color, extra = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.85, flatShading: true, ...extra });
+// Hito 93: los objetos comparten materiales (misma combinación → mismo material); quien lo cambie, que lo clone.
+export const PROP_MATS = new Map();
+const mat = (color, extra = {}) => { const k = color + "|" + JSON.stringify(extra); let m = PROP_MATS.get(k); if (!m) { m = new THREE.MeshStandardMaterial({ color, roughness: 0.85, flatShading: true, ...extra }); PROP_MATS.set(k, m); } return m; };
+const own = o => { o.material = o.material.clone(); return o; };
 const M = (geo, m, x = 0, y = 0, z = 0) => { const o = new THREE.Mesh(geo, m); o.position.set(x, y, z); return o; };
 const R = () => Math.random();
 const stone = () => mat(0x7d776e), darkStone = () => mat(0x4a4540), gold = () => mat(0xe0b040, { metalness: 0.8, roughness: 0.3, emissive: 0x3a2400 });
@@ -21,7 +24,7 @@ export const PROC = {
   estatua() { const g = new THREE.Group(), m = stone(); g.add(M(new THREE.BoxGeometry(1.8, 0.6, 1.8), darkStone(), 0, 0.3)); g.add(M(new THREE.CylinderGeometry(0.45, 0.6, 2.2, 8), m, 0, 1.7)); g.add(M(new THREE.SphereGeometry(0.42, 8, 6), m, 0, 3.1)); const a = M(new THREE.CylinderGeometry(0.13, 0.13, 1.3, 6), m, 0.55, 2.1, 0); a.rotation.z = 0.5; g.add(a); return g; },
   altar() { const g = new THREE.Group(); g.add(M(new THREE.BoxGeometry(2.8, 1.1, 1.5), stone(), 0, 0.55)); g.add(M(new THREE.BoxGeometry(3.1, 0.18, 1.8), mat(0x6a6058), 0, 1.15)); g.add(M(new THREE.BoxGeometry(2.4, 0.04, 1.2), mat(0x7a1e24), 0, 1.26)); return g; },
   sarcofago() { const g = new THREE.Group(); g.add(M(new THREE.BoxGeometry(1.5, 1, 3.2), stone(), 0, 0.5)); const lid = M(new THREE.BoxGeometry(1.6, 0.25, 3.3), mat(0x8a847a), 0, 1.12); g.add(lid); g.add(M(new THREE.BoxGeometry(0.6, 0.12, 0.9), mat(0x6a645a), 0, 1.3, -0.9)); return g; },
-  pozo() { const g = new THREE.Group(); const ring = M(new THREE.CylinderGeometry(1.3, 1.4, 1, 12, 1, true), stone(), 0, 0.5); ring.material.side = THREE.DoubleSide; g.add(ring); g.add(M(new THREE.CircleGeometry(1.2, 12), mat(0x0a0a10), 0, 0.3)); g.children[1].rotation.x = -Math.PI / 2;
+  pozo() { const g = new THREE.Group(); const ring = M(new THREE.CylinderGeometry(1.3, 1.4, 1, 12, 1, true), stone(), 0, 0.5); own(ring).material.side = THREE.DoubleSide; g.add(ring); g.add(M(new THREE.CircleGeometry(1.2, 12), mat(0x0a0a10), 0, 0.3)); g.children[1].rotation.x = -Math.PI / 2;
     [-1.2, 1.2].forEach(x => g.add(M(new THREE.BoxGeometry(0.15, 2.4, 0.15), mat(0x5a3d22), x, 1.2))); g.add(M(new THREE.BoxGeometry(2.6, 0.15, 0.15), mat(0x5a3d22), 0, 2.4)); return g; },
   telarana() { const c = document.createElement("canvas"); c.width = c.height = 128; const x = c.getContext("2d"); x.strokeStyle = "rgba(235,235,235,.8)"; x.lineWidth = 1.2; for (let i = 0; i < 9; i++) { const a = i / 9 * Math.PI * 2; x.beginPath(); x.moveTo(64, 64); x.lineTo(64 + Math.cos(a) * 64, 64 + Math.sin(a) * 64); x.stroke(); } for (let r = 10; r < 64; r += 10) { x.beginPath(); for (let i = 0; i <= 9; i++) { const a = i / 9 * Math.PI * 2; x.lineTo(64 + Math.cos(a) * r, 64 + Math.sin(a) * r); } x.stroke(); }
     const t = new THREE.CanvasTexture(c); const p = M(new THREE.PlaneGeometry(3.6, 3.6), new THREE.MeshBasicMaterial({ map: t, transparent: true, side: THREE.DoubleSide, depthWrite: false }), 0, 1.8); p.rotation.y = R() * 3; return p; },
@@ -381,7 +384,7 @@ Object.assign(PROC, {
   },
   caldero() {
     const g = new THREE.Group(), ir = mat(0x24221f, { metalness: 0.6, roughness: 0.5 });
-    const pot = M(new THREE.SphereGeometry(0.9, 14, 10, 0, Math.PI * 2, Math.PI * 0.3, Math.PI * 0.7), ir, 0, 0.95); pot.material.side = THREE.DoubleSide; g.add(pot);
+    const pot = M(new THREE.SphereGeometry(0.9, 14, 10, 0, Math.PI * 2, Math.PI * 0.3, Math.PI * 0.7), ir, 0, 0.95); own(pot).material.side = THREE.DoubleSide; g.add(pot);
     g.add(M(new THREE.TorusGeometry(0.78, 0.06, 6, 20), ir, 0, 1.5)).children; g.children[1].rotation.x = Math.PI / 2;
     const brew = M(new THREE.CircleGeometry(0.76, 20), glowM(0x6aff4a, 0x3aff2a, 1.4), 0, 1.42); brew.rotation.x = -Math.PI / 2; g.add(brew);
     for (let i = 0; i < 4; i++) { const b = M(new THREE.SphereGeometry(0.1 + i * 0.02, 8, 6), glowM(0x9aff7a, 0x4aff3a, 1.6), (R() - 0.5) * 0.8, 1.48, (R() - 0.5) * 0.8); b.userData.spin = true; g.add(b); }
@@ -394,7 +397,7 @@ Object.assign(PROC, {
     const g = new THREE.Group();
     g.add(M(cyl(0.5, 0.7, 0.3, 8), darkStone(), 0, 0.15)); g.add(M(cyl(0.18, 0.28, 1.6, 8), stoneV(), 0, 1.1));
     [0, 1, 2].forEach(i => { const c = M(new THREE.ConeGeometry(0.06, 0.6, 4), brass(), Math.cos(i * 2.1) * 0.28, 2.05, Math.sin(i * 2.1) * 0.28); c.rotation.z = Math.cos(i * 2.1) * -0.5; c.rotation.x = Math.sin(i * 2.1) * 0.5; g.add(c); });
-    const o = M(new THREE.SphereGeometry(0.42, 18, 14), glowM(0x7ad8ff, 0x3a9aff, 1.8), 0, 2.55); o.material.transparent = true; o.material.opacity = 0.9; o.userData.spin = true; g.add(o);
+    const o = M(new THREE.SphereGeometry(0.42, 18, 14), glowM(0x7ad8ff, 0x3a9aff, 1.8), 0, 2.55); own(o).material.transparent = true; o.material.opacity = 0.9; o.userData.spin = true; g.add(o);
     const ring = M(new THREE.TorusGeometry(0.62, 0.025, 4, 32), glowM(0xbfe6ff, 0x6ab8ff, 1.5), 0, 2.55); ring.rotation.x = 1.2; ring.userData.spin = true; g.add(ring);
     g.userData.glow = { color: 0x6ab8ff, power: 0.6, y: 2.6 };
     return g;

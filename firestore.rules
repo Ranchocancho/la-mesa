@@ -32,11 +32,17 @@ service cloud.firestore {
       return b.get('inspiration', false) == a.get('inspiration', false) || b.get('inspiration', false) == false
         || a.get('species', '').matches('^Humano.*');
     }
+    // Hito 93: los PG actuales entre 0 y el máximo, y los temporales sin cifras absurdas
+    function hpInRange(d) {
+      return d.hp.get('cur', 0) >= 0 && d.hp.get('cur', 0) <= d.hp.max
+        && d.hp.get('temp', 0) >= 0 && d.hp.get('temp', 0) <= 500;
+    }
     function playerPlays() {
       let a = resource.data;
       let b = request.resource.data;
       return changed().hasOnly(playKeys())
         && b.hp.max == a.hp.max
+        && hpInRange(b)
         && slotMaxSame(a, b) && spellListSame(a, b)
         && inspirationOk(a, b);
     }
@@ -143,7 +149,9 @@ service cloud.firestore {
       // Tiradas: todos las ven; cada uno publica las suyas; el máster las confirma, cambia o anula.
       match /rolls/{r} {
         allow read: if isMember(c);
-        allow create: if isMember(c) && request.resource.data.who == request.auth.uid;
+        // Hito 93: las tiradas secretas solo las crea el máster (el botón «Secreta» es suyo)
+        allow create: if isMember(c) && request.resource.data.who == request.auth.uid
+          && (isEditor(c) || request.resource.data.get('secret', false) != true);
         allow update: if isEditor(c);
         allow delete: if isEditor(c) || (isMember(c) && resource.data.who == request.auth.uid);
       }

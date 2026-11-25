@@ -2,7 +2,7 @@
 // PG, CA, estados, salvaciones contra muerte, salvaciones y pruebas, ataques, conjuros con espacios y descansos.
 import { requestOpen } from "../core/comercio.js";
 import { PROPS } from "../data/mapas.js";
-import { hide, search, hideCheck, hideDC, shoveDC, climbables, climbOn, climbDown, pushables, pushObject } from "../core/acciones.js";
+import { hide, search, hideCheck, hideDC, shoveDC, climbables, climbOn, climbDown, pushables, pushObject, standInfo, standUp } from "../core/acciones.js";
 import { topOfTok } from "../core/alturas.js";
 import { lightMap, darkvisionOf, LIGHT_ITEMS } from "../core/vision.js";
 import { sheetFreeHTML, whispersHTML, bindSheetFree } from "./tiempolibre.js";
@@ -112,7 +112,7 @@ function spellWhy(c, e, m, incap) {
   if (incap) return `Estás ${incap}`;
   if (e && (m.time === "bonus" ? e.bonus : m.time === "react" ? e.react : e.act)) return m.time === "bonus" ? "Ya usaste la acción adicional" : m.time === "react" ? "Ya usaste la reacción" : "Ya usaste la acción";
   if (m.lvl && !freeSlots(c, m.lvl).length) return `Sin espacios de nivel ${m.lvl} o más`;
-  if (m.lvl && e && e.slotCast) return "Ya lanzaste un conjuro con espacio este turno: solo trucos";
+  if (m.lvl && e && e.slotCast && store.get().bg3Spells === false) return "Ya lanzaste un conjuro con espacio este turno: solo trucos (regla 2024)";
   return "";
 }
 function spellRows(s, c, tok, list, e, incap) {
@@ -145,9 +145,10 @@ function classBonusHTML(s, c, tok, bWhy) {
   return out.length ? `<small class="phsub">Rasgos de clase</small>${out.join("")}` : "";
 }
 function climbHTML(s, tok) {
-  const on = topOfTok(s.board, tok), list = climbables(s, tok);
-  if (!on && !list.length) return "";
-  return `<div class="fclimb">${on ? `<span>⤒ Estás subido (${fm(on)} m)</span><button class="btn small" data-fdown>⬇ Bajar · ${fm(on)} m</button>` : ""}${list.map(x => `<button class="btn small" data-fclimb="${x.id}" title="Trepar: cada metro de altura cuesta 1 m de movimiento${x.cost > x.h ? " (+1,5 m por estar al lado)" : ""}. Las alturas de los objetos son regla de campaña.">🧗 Subirte a ${esc(x.name)} · ${fm(x.cost)} m</button>`).join("")}</div>`;
+  const on = topOfTok(s.board, tok), list = climbables(s, tok), SI = standInfo(s, tok);
+  const up = SI ? `<button class="btn small gold" data-fstand ${SI.ok ? "" : `disabled title="${esc(SI.why)}"`}>⬆ Levantarte${SI.cost ? ` · ${fm(SI.cost)} m` : ""}</button>` : "";
+  if (!on && !list.length) return up ? `<div class="fclimb">${up}</div>` : "";
+  return `<div class="fclimb">${up}${on ? `<span>⤒ Estás subido (${fm(on)} m)</span><button class="btn small" data-fdown>⬇ Bajar · ${fm(on)} m</button>` : ""}${list.map(x => `<button class="btn small" data-fclimb="${x.id}" title="Trepar: cada metro de altura cuesta 1 m de movimiento${x.cost > x.h ? " (+1,5 m por estar al lado)" : ""}. Las alturas de los objetos son regla de campaña.">🧗 Subirte a ${esc(x.name)} · ${fm(x.cost)} m</button>`).join("")}</div>`;
 }
 /** Cofres sin abrir y visibles junto a tu figura (a 1 casilla): pides abrirlo y su contenido va al botín del grupo. */
 function chestNear(s, tok) {
@@ -238,7 +239,7 @@ function turnBlock(s, c, tok) {
     ${phaseBox("act", "⚡", "Acción", actUsed || !!incap, actState, actBody, !incap && !actUsed)}
     ${phaseBox("bonus", "✦", "Acción adicional", bUsed || !!incap, stateTag(bUsed || !!incap || !hasBonus, incap ? "no puedes" : bUsed ? "gastada" : hasBonus ? "disponible" : "nada que puedas usar"), bonusBody, !incap && !bUsed && !!hasBonus)}
     ${phaseBox("react", "↺", "Reacción", !!e.react || !!incap, stateTag(!!e.react || !!incap, e.react ? "gastada" : "disponible"), reactBody, false)}
-    <p class="phfree">Gratis en tu turno: una interacción con un objeto (abrir una puerta, desenvainar) y hablar.${e.slotCast ? " · Ya lanzaste un conjuro con espacio: solo trucos." : ""}</p>
+    <p class="phfree">Gratis en tu turno: una interacción con un objeto (abrir una puerta, desenvainar) y hablar.${e.slotCast && s.bg3Spells === false ? " · Ya lanzaste un conjuro con espacio: solo trucos." : ""}</p>
     ${!incap && !nowK ? `<p class="phdone">Lo has gastado todo. Termina tu turno.</p>` : ""}
   </section>`;
 }
@@ -317,6 +318,7 @@ function bind(el, s, c, tok) {
   $$("[data-xhide]", el).forEach(b => b.onclick = () => hide(tok.id, null));
   $$("[data-xsearch]", el).forEach(b => b.onclick = () => search(tok.id, null));
   $$("[data-fdown]", el).forEach(b => b.onclick = () => climbDown(tok.id));
+  $$("[data-fstand]", el).forEach(b => b.onclick = () => standUp(tok.id));
   $$("[data-fpush]", el).forEach(b => b.onclick = () => pushObject(tok.id, b.dataset.fpush));
   on("finit", () => tok && rollInit(tok.id));
   on("fend", () => { arm(null); endTurn(); });

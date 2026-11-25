@@ -105,7 +105,7 @@ export function cast(casterId, spellName, slot, targetIds, P = null) {
   if (!P && phase(s) === "live" && s.board.turn === a.id && a.kind === "pc") {
     const e = eco(s, a), used = m.time === "bonus" ? e.bonus : m.time === "react" ? !!e.react : e.act;
     if (used) { toast(m.time === "bonus" ? "Ya has usado tu acción adicional." : m.time === "react" ? "Ya has usado tu reacción." : "Ya has usado tu acción este turno."); return null; }
-    if (slot > 0 && e.slotCast) { toast("Ya has lanzado un conjuro con espacio este turno: solo puedes lanzar trucos."); return null; }
+    if (slot > 0 && e.slotCast && s.bg3Spells === false) { toast("Ya has lanzado un conjuro con espacio este turno: solo puedes lanzar trucos."); return null; }
   }
   if (!P) { spend(a.id, m.time); if (slot > 0) spend(a.id, { slotCast: true }); }
   // Concentración: el conjuro anterior termina

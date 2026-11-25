@@ -666,11 +666,12 @@ export function mountTactical(host, opts = {}) {
     const draw = () => { const c = colors(), s = S();
       pop.innerHTML = `<h4>🎨 Colores de la mesa</h4>${COLOR_KEYS.map(([k, n, d]) => `<label title="${esc(d)}">${n}<input type="color" data-col="${k}" value="${c[k]}"></label>`).join("")}
         <label>Intensidad<input type="range" min="0.5" max="1.8" step="0.1" data-colk="strength" value="${c.strength}"></label>
-        ${isDM(s) ? `<label title="Regla de campaña: como en BG3, los jugadores ven la probabilidad de impactar (deja adivinar la CA)"><span>Mostrar % de impacto a los jugadores</span><input type="checkbox" data-odds ${s.showOdds !== false ? "checked" : ""}></label>` : ""}
+        ${isDM(s) ? `<label title="Regla de campaña: como en BG3, los jugadores ven la probabilidad de impactar (deja adivinar la CA)"><span>Mostrar % de impacto a los jugadores</span><input type="checkbox" data-odds ${s.showOdds !== false ? "checked" : ""}></label><label title="Regla de campaña (Hito 93). Con ella, como en Baldur&#39;s Gate 3, se puede lanzar un conjuro con espacio con la acción y otro con la acción adicional en el mismo turno. Sin ella, la regla 2024: un solo espacio de conjuro por turno."><span>Dos conjuros con espacio por turno (BG3)</span><input type="checkbox" data-bg3sp ${s.bg3Spells !== false ? "checked" : ""}></label>` : ""}
         <div class="row"><button class="btn small" data-colreset>Restablecer</button><span class="grow"></span><button class="btn small" data-colx>Cerrar</button></div><p class="note" style="margin:6px 0 0">Solo cambia en tu pantalla.</p>`;
       $$("[data-col]", pop).forEach(i => i.oninput = () => setColor(i.dataset.col, i.value));
       $$("[data-colk]", pop).forEach(i => i.oninput = () => setColor("strength", +i.value));
       const od = $("[data-odds]", pop); if (od) od.onchange = () => store.commit("campaign", st => { st.showOdds = od.checked; });
+      const b3 = $("[data-bg3sp]", pop); if (b3) b3.onchange = () => { store.commit("campaign", st => { st.bg3Spells = b3.checked; }); toast(b3.checked ? "Regla BG3: un conjuro con espacio con la acción y otro con la adicional" : "Regla 2024: un solo espacio de conjuro por turno"); };
       $("[data-colreset]", pop).onclick = () => { resetColors(); draw(); };
       $("[data-colx]", pop).onclick = () => pop.remove(); };
     draw();
