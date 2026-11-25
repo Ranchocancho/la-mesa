@@ -358,7 +358,7 @@ export function mountTactical(host, opts = {}) {
   function drawNow() {
     const s = S(), dm = isDM(s), N = nowState(s, me(), dm), box = $(".tb-now", host);
     const html = `<div class="nowhead">${esc(N.head)}${N.next ? `<small> · después: ${esc(N.next)}${N.nextMine ? " (tú)" : ""}</small>` : ""}</div>
-      <div class="nowtask">${N.who ? `<b class="nowwho">${esc(N.who)}</b>` : ""}<span>${esc(N.text)}</span></div>
+      <div class="nowtask"${N.tip && N.tip !== N.text ? ` title="${esc(N.tip)}"` : ""}>${N.who ? `<b class="nowwho">${esc(N.who)}</b>` : ""}<span>${esc(N.text)}</span></div>
       ${N.eco || N.acts.length ? `<div class="nowrow">${N.eco ? `<span class="noweco"><i class="${N.eco.act ? "used" : ""}" title="Acción">A</i><i class="${N.eco.bonus ? "used" : ""}" title="Acción adicional">+</i><em title="Movimiento">👣 ${esc(N.eco.mov)}</em></span>` : ""}${N.acts.map((a, i) => `<button class="btn small${a.gold ? " gold" : ""}" data-now="${i}">${esc(a.label)}</button>`).join("")}</div>` : ""}`;
     box.className = `tb-now ${N.tone || ""}${N.mine ? " me" : ""}`;
     if (html !== nowSig) {
@@ -387,7 +387,9 @@ export function mountTactical(host, opts = {}) {
     }
     // Aviso momentáneo cuando algo pasa a depender de ti (tirar daño, decidir una reacción, confirmar…)
     const key = N.mine ? N.text : null;
-    if (key && key !== lastTaskKey && lastTaskKey !== undefined && !/^Te queda|^Lo has gastado/.test(key)) {
+    // (no al gastar recursos dentro del mismo turno: solo cuando empieza o cuando te piden algo nuevo)
+    const routine = /^(Tu turno|Sin recursos|Mueve a |.+ sin recursos)/;
+    if (key && key !== lastTaskKey && lastTaskKey !== undefined && !(routine.test(key) && lastTaskKey && routine.test(lastTaskKey))) {
       // Como BG3: nada de carteles encima del mapa; parpadea el aviso de arriba a la izquierda
       const t = $(".tb-now", host); if (t) { t.classList.remove("flash"); void t.offsetWidth; t.classList.add("flash"); }
     }

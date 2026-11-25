@@ -3,13 +3,12 @@ import { store } from "../core/store.js";
 import { isDM, currentUser } from "../core/session.js";
 import { publish, RESULT, mySkin, setMySkin, diceAnim, setDiceAnim } from "../core/dados.js";
 import { pendingTag, awaitsDM } from "../core/avisos.js";
-import { decide, damageFor, nameOf, attack, attacksOf, oaOpen, answerOA, reactionPending } from "../core/combate.js";
+import { decide, damageFor, nameOf, attacksOf, oaOpen, answerOA, reactionPending } from "../core/combate.js";
 import { rxOpen, answerRx, RX } from "../core/reacciones.js";
 import { sneakInfo, smiteInfo, canBardic, useBardic } from "../core/rasgos.js";
 import { canInspire, useInspiration } from "../core/inspiracion.js";
 import { masteryChoice, useMastery, applyMastery, cleaveTargets, MASTERY } from "../core/maestria.js";
 import { applySpell, toggleMagicRes, useLegendaryRes } from "../core/hechizos.js";
-import { spend } from "../core/turnos.js";
 import { $, $$, esc } from "../core/ui.js";
 import { srd, srdNow, findMonster } from "../core/srd.js";
 import { estado, etiqueta } from "../data/estados.js";
@@ -19,8 +18,14 @@ const openInfo = new Set();
 
 export { damageTraits };
 /** Botones del máster para aplicar daño: el principal ya trae la defensa del objetivo (½, ×2 o 0), y se puede cambiar. */
+// Hito 92: índice de figuras, personajes y usuarios por id, rehecho solo cuando cambia el estado (antes, cada fila del
+// registro recorría las listas enteras varias veces)
+let IX = null;
+const ix = s => { if (!IX || IX.s !== s || IX.rev !== s.rev) IX = { s, rev: s.rev, t: new Map((s.tokens || []).map(x => [x.id, x])), c: new Map((s.characters || []).map(x => [x.id, x])), u: new Map((s.users || []).map(x => [x.id, x])) }; return IX; };
+const tokOf = (s, id) => ix(s).t.get(id), charById = (s, id) => ix(s).c.get(id), userOf = (s, id) => ix(s).u.get(id);
+
 function dmgButtons(s, r, short = false) {
-  const tr = damageTraits(s.tokens.find(x => x.id === r.target), r.dtype), act = suggestedAction(tr);
+  const tr = damageTraits(tokOf(s, r.target), r.dtype), act = suggestedAction(tr);
   const lbl = tr ? (tr.k === "resiste" ? " ½" : tr.k === "vulnerable" ? " ×2" : " 0") : "";
   return `<button class="ib gold" data-dec="${r.id}|${act}" title="${tr ? esc(tr.txt) : "Aplicar el daño"}">✓ Aplicar${lbl}${tr && r.total != null ? ` (${withTraits(r.total, tr)})` : ""}</button>${act !== "ok" ? `<button class="ib" data-dec="${r.id}|ok" title="Daño completo, sin la defensa">${r.total}</button>` : ""}${act !== "half" ? `<button class="ib" data-dec="${r.id}|half" title="Mitad">½</button>` : ""}${short ? "" : `<button class="ib" data-edit="${r.id}" title="Cambiar">✎</button><button class="ib danger" data-dec="${r.id}|void" title="Anular">✕</button>`}`;
 }
@@ -43,7 +48,7 @@ function calcHTML(s, r) {
   return `<p class="rcalc">${dice}${mod ? ` <span class="cmod">${mod > 0 ? "+" : "−"} ${Math.abs(mod)}</span>` : ""} = <b>${r.total}</b>${vs}${r.adv ? ` <small class="${r.adv > 0 ? "adv" : "dis"}">(${r.adv > 0 ? "ventaja: el mayor" : "desventaja: el menor"})</small>` : ""}</p>`;
 }
 function rollInfo(s, r) {
-  const t = s.tokens.find(x => x.id === r.target), parts = [];
+  const t = tokOf(s, r.target), parts = [];
   if (r.why) parts.push(`<p>${r.why.map(w => `<span class="${w.startsWith("ventaja") ? "adv" : w.startsWith("desventaja") ? "dis" : ""}">${esc(w)}</span>`).join(" · ")}</p>`);
   if (r.cov) parts.push(`<p>🛡️ ${esc(r.cov)} (ya sumado a la CA)</p>`);
   if (r.auto) parts.push(`<p>💥 ${esc(r.auto)}</p>`);
@@ -149,7 +154,7 @@ function spellTable(s, r, dm) {
   const pend = r.status === "pending" && r.applied == null;
   const base = how => r.total == null ? 0 : how === "full" ? r.total : how === "half" ? Math.floor(r.total / 2) : how === "double" ? r.total * 2 : 0;
   return `<div class="spt">${r.saves.map(sv => {
-    const t = s.tokens.find(x => x.id === sv.t), tr = r.dtype && t ? damageTraits(t, r.dtype) : null;
+    const t = tokOf(s, sv.t), tr = r.dtype && t ? damageTraits(t, r.dtype) : null;
     const how = (spellPer[r.id] || {})[sv.t] || (sv.auto ? "full" : sv.ok ? (r.half ? "half" : "none") : "full");
     const defOn = tr && !(spellDefOff[r.id] || {})[sv.t];
     const done = (r.plan || []).find(p => p.t === sv.t), lr = dm && pend && !sv.auto && !sv.ok && t ? lrLeft(t) : 0;
@@ -168,11 +173,11 @@ function spellTable(s, r, dm) {
 /* ---------- Una línea por acción (estilo registro de combate): quién → a quién · qué · resultado ---------- */
 const ICON = { xp: "⭐", loot: "💰", attack: "⚔", damage: "🩸", save: "🛡", check: "🎯", init: "⏱", spell: "✨", cast: "✨", heal: "✚", death: "💀", oa: "⚠", react: "⚡", rxuse: "⚡", feat: "🎵", free: "🎲", mastery: "⚔" };
 const first = n => String(n || "").split(" ")[0];
-function who(s, id) { const t = s.tokens.find(x => x.id === id); return t ? first(nameOf(s, t)) : ""; }
+function who(s, id) { const t = tokOf(s, id); return t ? first(nameOf(s, t)) : ""; }
 // Quién tira (la figura, o la persona si es una tirada libre) y su color
 function actor(s, r) {
-  const t = r.tok && s.tokens.find(x => x.id === r.tok), c = t && t.kind === "pc" ? s.characters.find(x => x.id === t.char) : null;
-  const u = s.users.find(x => x.id === r.who);
+  const t = r.tok && tokOf(s, r.tok), c = t && t.kind === "pc" ? charById(s, t.char) : null;
+  const u = userOf(s, r.who);
   const name = t ? first(nameOf(s, t)) : u && u.role !== "player" && !r.asPlayer ? "Máster" : r.whoName ? first(r.whoName) : (u ? first(u.name) : "Alguien");
   const color = (c && c.color) || (t && t.kind !== "pc" ? (t.kind === "npc" ? "#7d8fe0" : "#c4513f") : (u && u.role !== "player" ? "#9a7be0" : (u && u.color) || "#d6aa4e"));
   return { name: name || "Máster", color, foe: !!t && t.kind !== "pc" };
@@ -219,7 +224,7 @@ function pill(r, dm, pend) {
 }
 function reqRow(s, r, dm) {
   const q = r.req || {}, ans = (s.rolls || []).filter(x => x.link === r.id && x.status !== "void");
-  const name = id => { const c = s.characters.find(x => x.id === id); return c ? c.name.split(" ")[0] : "?"; };
+  const name = id => { const c = charById(s, id); return c ? c.name.split(" ")[0] : "?"; };
   const missing = (q.chars || []).filter(id => !ans.some(a => a.char === id));
   return `<div class="roll k-req ok" data-row="${r.id}" style="--who:#9a7be0"><div class="r1"><i class="ki">📣</i><span class="rt"><b class="rwho">Máster</b> pide <b>${esc(r.label)}</b>${q.dc && (dm || !q.hideDC) ? ` <em>CD ${q.dc}${q.hideDC ? " (oculta)" : ""}</em>` : ""}${q.adv ? `<sup class="${q.adv > 0 ? "adv" : "dis"}">${q.adv > 0 ? "▲" : "▼"}</sup>` : ""}</span></div>
     <div class="rqlist">${(q.chars || []).map(id => { const a = ans.find(x => x.char === id); if (!a) return `<span class="rqans wait">${esc(name(id))} …</span>`;
@@ -235,8 +240,8 @@ function rowHTML(s, r, dm, me, hasDamage, dmgRow) {
   const canDmg = r.kind === "attack" && !pend && r.status !== "void" && r.result !== "miss" && r.dmg && !hasDamage(r.id) && (dm || r.who === me.id) && !reactionPending(s, r.id);
   const rxWait = r.kind === "attack" && !hasDamage(r.id) && reactionPending(s, r.id);
   // Fuera de turno: tiradas libres de un jugador en pleno combate cuando no le toca
-  const cur = s.board && s.board.combat === "live" && s.board.turn ? s.tokens.find(t => t.id === s.board.turn) : null;
-  const offTurn = r.kind === "free" && cur && r.who && r.seq === s.board.seq && !(cur.owner && cur.owner === r.who) && (s.users.find(u => u.id === r.who) || {}).role === "player";
+  const cur = s.board && s.board.combat === "live" && s.board.turn ? tokOf(s, s.board.turn) : null;
+  const offTurn = r.kind === "free" && cur && r.who && r.seq === s.board.seq && !(cur.owner && cur.owner === r.who) && (userOf(s, r.who) || {}).role === "player";
   // Segunda línea: el desenlace (impacto, daño hecho, salvación…) y lo que falta por hacer
   const out = [];
   if (r.kind === "attack") {

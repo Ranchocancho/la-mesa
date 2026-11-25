@@ -38,6 +38,7 @@ const CELL = 4, BASE = "assets/kaykit/";
 const pref = (k, d) => { try { return localStorage.getItem(k) ?? d; } catch (e) { return d; } };
 const setPref = (k, v) => { try { localStorage.setItem(k, v); } catch (e) { /* nada */ } };
 const GRID = () => pref("lamesa:rejilla3d", "0") === "1", QUAL = () => pref("lamesa:calidad", "alta");
+const CAMTURN = () => { try { return localStorage.getItem("lamesa:camturno") !== "0"; } catch (e) { return true; } }; // Hito 92: cámara de combate que sigue el turno
 const DENS = () => +pref("lamesa:detalle", "1"); // Hito 85: detalles del suelo 0 sin, 1 normal, 2 muchos
 const DENS_TXT = ["Sin detalles en el suelo", "Detalles del suelo: normal", "Detalles del suelo: muchos"];
 const YS = 1.7; // unidades de la escena por metro de altura (3 m de risco ≈ algo más que un muro)
@@ -311,7 +312,29 @@ function namePlate(name, pct, txt, color, hl, pxH = 48, conds = []) {
   t.generateMipmaps = false; t.minFilter = THREE.LinearFilter; t.magFilter = THREE.LinearFilter; // sin mipmaps: no se emborrona
   const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, depthTest: false, transparent: true, sizeAttenuation: false }));
   // Ancla abajo en la fila de la placa (no en la de estados): la placa queda donde estaba y los estados cuelgan debajo, delante de la figura
-  s.scale.set(PLATE_H * Wu / U, PLATE_H * (U + CR) / U, 1); s.center.set(0.5, CR / (U + CR)); s.renderOrder = 9; s.userData.base = [s.scale.x, s.scale.y]; return s;
+  s.scale.set(PLATE_H * Wu / U, PLATE_H * (U + CR) / U, 1); s.center.set(0.5, CR / (U + CR)); s.renderOrder = 9; s.userData.base = [s.scale.x, s.scale.y]; s.userData.wU = w; return s;
+}
+// Hito 92: placa reducida (inicial y vida) para cuando hay muchas figuras juntas y las placas se pisarían.
+// Al pasar el ratón cerca, o si es su turno o está elegida, vuelve la placa entera.
+const initialOf = n => { const w = String(n || "?").replace(/\s*\(.*?\)/g, "").trim().split(/\s+/), num = w.length > 1 && /^\d+$/.test(w[w.length - 1]) ? w[w.length - 1] : ""; return ((w[0] || "?")[0] + num).toUpperCase(); };
+function chipPlate(name, pct, color, pxH = 48) {
+  const U = 150, k = pxH / U, Wu = 210, hasBar = pct != null;
+  const c = document.createElement("canvas"); c.width = Math.round(Wu * k); c.height = Math.round(U * k);
+  const g = c.getContext("2d"); g.setTransform(k, 0, 0, k, 0, 0);
+  g.shadowColor = "rgba(0,0,0,.7)"; g.shadowBlur = 8;
+  g.fillStyle = "rgba(12,9,7,.9)"; g.beginPath(); g.roundRect(8, 8, Wu - 16, U - 16, 30); g.fill(); g.shadowBlur = 0;
+  g.strokeStyle = color; g.lineWidth = 4; g.stroke();
+  g.fillStyle = "#fbf3df"; g.textAlign = "center"; g.textBaseline = "middle"; g.font = "700 60px Georgia, serif";
+  g.fillText(initialOf(name), Wu / 2, hasBar ? 56 : U / 2);
+  if (hasBar) {
+    const bx = 30, bw = Wu - 60, by = 98, bh = 24;
+    g.fillStyle = "#2a1411"; g.beginPath(); g.roundRect(bx, by, bw, bh, 8); g.fill();
+    const fw = bw * Math.max(0, Math.min(1, pct));
+    if (fw > 0) { g.fillStyle = pct > 0.5 ? "#7fb850" : pct > 0.25 ? "#d9ad3c" : "#e0583f"; g.beginPath(); g.roundRect(bx, by, Math.max(10, fw), bh, 8); g.fill(); }
+  }
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.generateMipmaps = false; t.minFilter = THREE.LinearFilter;
+  const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, depthTest: false, transparent: true, sizeAttenuation: false }));
+  s.scale.set(PLATE_H * Wu / U, PLATE_H, 1); s.center.set(0.5, 0); s.renderOrder = 8; s.userData.wU = Wu - 16; return s; // debajo de las placas enteras
 }
 function condTag(conds) {
   // Estados como iconos redondos en fila (como BG3 sobre la vida), con los turnos que les quedan
@@ -340,12 +363,13 @@ export function createBoard3D(host, opts) {
   // En la barra superior va la versión compacta: volumen vertical, ⌖ y ⬇ en cuadraditos, Órbita/Libre y Muros.
   // Niebla, música y luz (día/noche/interior) las decide el máster desde su pestaña.
   const camHTML = opts.controlsHost ? `<div class="cam3d compact" role="toolbar" aria-label="Cámara">
-      <span class="camsq"><button class="sq" data-cam="center" title="Centrar la cámara en la mesa" aria-label="Centrar">⌖</button><button class="sq" data-cam="top" title="Vista cenital (desde arriba)" aria-label="Cenital">⬇</button><button class="sq" data-cam="ruler" aria-pressed="false" title="Regla: arrastra de una casilla a otra para medir" aria-label="Regla">📏</button><button class="sq" data-cam="mute" title="Silenciar">${sound.muted ? "🔇" : "🔊"}</button></span>
+      <span class="camsq"><button class="sq" data-cam="center" title="Centrar la cámara en la mesa" aria-label="Centrar">⌖</button><button class="sq" data-cam="top" title="Vista cenital (desde arriba)" aria-label="Cenital">⬇</button><button class="sq" data-cam="follow" aria-pressed="${CAMTURN()}" title="Cámara de combate: al empezar cada turno, la cámara va a quien le toca y lo mira desde arriba (como en Baldur&#39;s Gate 3). Pulsa para activarla o quitarla." aria-label="Seguir el turno">🎥</button><button class="sq" data-cam="ruler" aria-pressed="false" title="Regla: arrastra de una casilla a otra para medir" aria-label="Regla">📏</button><button class="sq" data-cam="mute" title="Silenciar">${sound.muted ? "🔇" : "🔊"}</button></span>
       <span class="volv" title="Volumen"><input type="range" min="0" max="1" step="0.05" value="${sound.volume}" data-vol aria-label="Volumen" orient="vertical"></span>
       <span class="camst"><button class="btn small" data-cam="mode" aria-pressed="false" title="Cámara en órbita (pulsa para libre)">⟳</button><button class="btn small" data-cam="walls" aria-pressed="true" title="Muros bajos (pulsa para altos)">▁</button><button class="btn small" data-cam="grid" aria-pressed="${GRID()}" title="Cuadrícula sobre el suelo">▦</button><button class="btn small" data-cam="dress" aria-pressed="${DENS() > 0}" title="${DENS_TXT[DENS()]} (pulsa para cambiar)">🌿</button><button class="btn small" data-cam="quality" aria-pressed="${QUAL() === "alta"}" title="${QUAL() === "alta" ? "Calidad alta: reflejos y resplandor (pulsa para normal)" : "Calidad normal (pulsa para alta: resplandor del fuego y la magia)"}">✨</button></span>
     </div>` : `<div class="cam3d" role="toolbar" aria-label="Cámara">
       <button class="btn small" data-cam="center" title="Centrar la cámara en la mesa">⌖ Centrar</button>
       <button class="btn small" data-cam="top" title="Vista desde arriba">⬇ Cenital</button>
+      <button class="btn small" data-cam="follow" aria-pressed="${CAMTURN()}" title="Cámara de combate: al empezar cada turno, la cámara va a quien le toca y lo mira desde arriba (como en Baldur&#39;s Gate 3). Pulsa para activarla o quitarla.">🎥 Seguir turno</button>
       <button class="btn small" data-cam="ruler" aria-pressed="false" title="Regla: arrastra de una casilla a otra para medir">📏 Medir</button>
       <button class="btn small" data-cam="mode" aria-pressed="false" title="Órbita alrededor del centro o cámara libre">Órbita</button>
       <button class="btn small" data-cam="walls" aria-pressed="true" title="Muros bajos para ver mejor">Muros bajos</button>
@@ -421,6 +445,7 @@ export function createBoard3D(host, opts) {
     const k = b.dataset.cam;
     if (k === "center") { setFree(false); frame("persp"); }
     if (k === "top") frame("top");
+    if (k === "follow") { const on = !CAMTURN(); setPref("lamesa:camturno", on ? "1" : "0"); ctl.querySelectorAll('[data-cam="follow"]').forEach(x => x.setAttribute("aria-pressed", on)); toast(on ? "🎥 La cámara seguirá a quien le toca" : "🎥 La cámara ya no sigue los turnos"); if (on && G && G.combat === "live" && G.turn != null) flyToTurn(G.turn); return; }
     if (k === "mode") setFree(!free);
     if (k === "fog") { opts.setFog(!visionOn(G)); return; }
     if (k === "ruler") { measuring = !measuring; b.setAttribute("aria-pressed", measuring); renderer.domElement.style.cursor = measuring ? "crosshair" : ""; if (!measuring) drawRuler(null); return; }
@@ -986,9 +1011,17 @@ export function createBoard3D(host, opts) {
       if (plateKey !== rec.barKey) {
         if (rec.bar) { rec.root.remove(rec.bar); rec.bar.material.map.dispose(); rec.bar.material.dispose(); rec.bar = null; }
         rec.bar = namePlate(t.kind === "pc" ? shortName(d.name || t.name) : plateName(d.name || t.name), pctQ, hp ? (exact ? `${hp.cur} / ${hp.max}` : word) : "", t.kind === "pc" ? "#d6aa4e" : t.kind === "npc" ? "#7d8fe0" : "#b33a2e", hl, pxH, cl);
-        rec.root.add(rec.bar); rec.barKey = plateKey;
+        rec.root.add(rec.bar); rec.barKey = plateKey; rec.bar.visible = !rec.packed;
       }
       rec.bar.position.y = top;
+      // Hito 92: su placa reducida, por si hay que apretarla (la decide declutter() en el bucle de dibujo)
+      { const nm = t.kind === "pc" ? shortName(d.name || t.name) : plateName(d.name || t.name), col = t.kind === "pc" ? "#d6aa4e" : t.kind === "npc" ? "#7d8fe0" : "#b33a2e", ck = JSON.stringify([nm, pctQ, pxH, col]);
+        if (ck !== rec.chipKey) {
+          if (rec.chip) { rec.root.remove(rec.chip); rec.chip.material.map.dispose(); rec.chip.material.dispose(); }
+          rec.chip = chipPlate(nm, pctQ, col, pxH); rec.chip.visible = !!rec.packed; rec.root.add(rec.chip); rec.chipKey = ck;
+        }
+        rec.chip.position.y = top; rec.prio = selected === t.id ? 4 : d.isTurn ? 5 : t.kind === "pc" ? 1 : 0; rec.pxH = pxH;
+      }
       if (rec.tag) rec.tag.position.y = top + 1.9;
     }
   }
@@ -1006,6 +1039,9 @@ export function createBoard3D(host, opts) {
     if (disposed) return;
     const m = opts.model(); if (!m || !m.grid) return;
     const first = !G; G = m.grid;
+    // Hito 92: cambio de turno en combate → la cámara va a quien le toca (no al entrar en una partida ya empezada)
+    if (G.combat === "live" && G.turn != null) { if (camSeq !== undefined && camSeq !== G.seq) { const id = G.turn; setTimeout(() => { if (!disposed) flyToTurn(id); }, 150); } camSeq = G.seq; }
+    else camSeq = null;
     const sig = JSON.stringify([G.cols, G.rows, G.terrain, G.props, lowWalls]);
     if (sig !== lastSig) { lastSig = sig; queueBuild(G); if (first) frame("persp"); }
     applyAmbient(G.ambient || "interior"); setMotes();
@@ -1426,6 +1462,44 @@ export function createBoard3D(host, opts) {
     clearTimeout(resize.t); resize.t = setTimeout(() => { if (!disposed && G) sync(); }, 150); // placas nítidas al nuevo tamaño
   }
   const ro = new ResizeObserver(resize); ro.observe(host);
+  // Hito 92: placas por densidad. Si dos placas se pisan en pantalla, la de menos prioridad se queda en su inicial
+  // y su vida. Manda el turno, luego la figura elegida, luego los personajes; a igualdad, la más cercana a la cámara.
+  // Con el ratón cerca, la placa reducida vuelve a abrirse.
+  let mouse = null, packT = 0;
+  const _pv = new THREE.Vector3();
+  renderer.domElement.addEventListener("pointermove", e => { const r = renderer.domElement.getBoundingClientRect(), k = renderer.domElement.width / Math.max(1, r.width); mouse = { x: (e.clientX - r.left) * k, y: (e.clientY - r.top) * k }; });
+  renderer.domElement.addEventListener("pointerleave", () => { mouse = null; });
+  const shown = o => { for (let x = o; x; x = x.parent) if (!x.visible) return false; return true; };
+  function declutter() {
+    const W = renderer.domElement.width, H = renderer.domElement.height, items = [];
+    for (const rec of toks.values()) {
+      if (!rec.bar || !rec.chip || !shown(rec.root)) continue;
+      rec.bar.getWorldPosition(_pv); const dz = _pv.distanceTo(camera.position); _pv.project(camera);
+      if (_pv.z > 1) continue;
+      const x = (_pv.x + 1) / 2 * W, y = (1 - _pv.y) / 2 * H, ph = rec.pxH || 48, hw = (rec.bar.userData.wU || 330) * ph / 150 / 2;
+      const box = { l: x - hw, r: x + hw, t: y - ph, b: y };
+      const near = mouse && mouse.x > box.l - 8 && mouse.x < box.r + 8 && mouse.y > box.t - 16 && mouse.y < box.b + ph * 0.8;
+      items.push({ rec, box, prio: (rec.prio || 0) + (near ? 3 : 0), dz });
+    }
+    items.sort((a, b) => b.prio - a.prio || a.dz - b.dz);
+    const placed = [], hit = (a, b) => a.l < b.r - 4 && a.r > b.l + 4 && a.t < b.b - 3 && a.b > b.t + 3;
+    for (const it of items) {
+      const pack = it.prio < 4 && placed.some(p => hit(it.box, p));
+      if (!pack) placed.push(it.box);
+      if (pack !== !!it.rec.packed) { it.rec.packed = pack; it.rec.bar.visible = !pack; it.rec.chip.visible = pack; }
+    }
+  }
+  // Hito 92: al empezar el turno de alguien, la cámara se centra en su figura y la mira desde arriba (vista cenital).
+  // No lo hace con una criatura que no ves (delataría dónde está). Si mueves la cámara mientras va, se para.
+  let camSeq, camFly = null;
+  function flyToTurn(id) {
+    const rec = toks.get(id); if (!rec || !rec.root || !shown(rec.root) || !CAMTURN()) return;
+    const to = rec.target ? rec.target.clone() : rec.root.position.clone(); to.y = rec.root.position.y;
+    const h = (8 * CELL) / Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)); // unas 16 casillas de alto a la vista
+    camFly = { t: 0, ft: controls.target.clone(), fp: camera.position.clone(), tt: to, tp: to.clone().add(new THREE.Vector3(0, Math.min(controls.maxDistance * 0.95, h), 0.01)) };
+  }
+  renderer.domElement.addEventListener("pointerdown", () => { camFly = null; });
+  renderer.domElement.addEventListener("wheel", () => { camFly = null; }, { passive: true });
   const fwd = new THREE.Vector3(), side = new THREE.Vector3();
   renderer.setAnimationLoop(() => {
     if (!host.isConnected) return dispose();
@@ -1437,7 +1511,9 @@ export function createBoard3D(host, opts) {
       if (keys.has("d") || keys.has("arrowright")) mv.add(side); if (keys.has("a") || keys.has("arrowleft")) mv.sub(side);
       mv.multiplyScalar(s); controls.target.add(mv); camera.position.add(mv);
     }
+    if (camFly) { camFly.t = Math.min(1, camFly.t + dt / 0.9); const e = 1 - Math.pow(1 - camFly.t, 3); controls.target.lerpVectors(camFly.ft, camFly.tt, e); camera.position.lerpVectors(camFly.fp, camFly.tp, e); if (camFly.t >= 1) camFly = null; }
     controls.update();
+    packT += dt; if (packT > 0.15) { packT = 0; declutter(); }
     ticks.forEach(f => f(dt)); worldTicks.forEach(f => f(dt)); if (atmo) atmo.step(dt);
     if (fxList.length) fxList = fxList.filter(f => f(dt));
     // Luz de antorcha: una respiración lenta y suave (el parpadeo rápido hacía «bailar» los reflejos de las paredes)

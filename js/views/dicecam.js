@@ -111,9 +111,19 @@ function play(r, s) {
   const read = box.querySelector(".dc-read"), names = box.querySelector(".dc-names"), lst = box.querySelector(".dc-list");
   read.innerHTML = ""; names.innerHTML = ""; lst.innerHTML = "";
   box.classList.remove("nat20", "nat1", "read", "listing");
-  const st = document.getElementById("stage"), rc = st && st.getBoundingClientRect();
-  box.style.left = rc && rc.width > 300 ? `${rc.left + rc.width / 2}px` : "50%";
-  box.style.width = rc && rc.width > 300 ? `min(920px, ${Math.round(rc.width - 20)}px)` : "";
+  // Hito 92: con sitio, el tapete es pequeño y va arriba a la izquierda de la mesa, bajo la barra de turno, para no tapar
+  // la acción; en pantallas estrechas sigue subiendo desde abajo a todo lo ancho
+  const st = document.getElementById("stage"), rc = st && st.getBoundingClientRect(), side = !!(rc && rc.width > 640 && rc.height > 380);
+  box.classList.toggle("side", side);
+  if (side) {
+    const tb = st.querySelector(".topbar"), top = tb && tb.getBoundingClientRect().height ? tb.getBoundingClientRect().bottom : rc.top;
+    box.style.left = `${Math.round(rc.left + 10)}px`; box.style.top = `${Math.round(top + 10)}px`;
+    box.style.width = `${Math.round(Math.min(380, Math.max(300, rc.width * 0.3)))}px`;
+  } else {
+    box.style.top = "";
+    box.style.left = rc && rc.width > 300 ? `${rc.left + rc.width / 2}px` : "50%";
+    box.style.width = rc && rc.width > 300 ? `min(920px, ${Math.round(rc.width - 20)}px)` : "";
+  }
   box.classList.add("on");
   cur = { r, lined: false, read: false };
   clearTimeout(box._safe); box._safe = setTimeout(() => finish(false), 11000); // pase lo que pase, no se queda abierto
