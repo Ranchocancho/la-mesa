@@ -1160,3 +1160,7 @@ Quedan para probar (QUIZÁ): la tensión de combate (E4), las huellas (L1) y las
 - **Lo preparado (I6)**: junto a «Empezar sesión», el máster ve las escenas preparadas para la próxima sesión (con enlace) y cuántos eventos tiene pendientes.
 - **Cabecera (I7)**: la del máster vuelve a caber en una fila (en pantallas de menos de 1700 px se oculta el nombre junto al avatar).
 - **Actualizar escenas de ejemplo**: botón para el máster en Inicio. Añade a las escenas de ejemplo de la campaña las piezas nuevas (lingotes, noray, farol de pared…), sin tocar lo que haya cambiado el máster ni poner nada en casillas ocupadas. Se puede pulsar más veces: no duplica nada.
+
+## Hito 105 — Arreglo: la pantalla negra al abrir una región o un lugar en el Lore
+
+- La tabla de «Presencia de los dioses» usaba la clase `pres`, que ya era la de la pantalla de presentación (fija y a pantalla completa, en negro). Al abrir una región, o un lugar con presencia, tapaba toda la página. Ahora usa `lpres`.

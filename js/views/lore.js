@@ -173,9 +173,9 @@ function bindTimeline() {
 function presenceHTML(s, x, dm, kind) {
   const rows = presenceOf(s, x), gods = loreOf(s).filter(e => e.kind === "god" && canSee(s, e)), tot = rows.reduce((a, r) => a + r.pct, 0);
   if (!dm && !rows.length) return "";
-  const bar = rows.length ? `<div class="pres-bar">${rows.map(r => `<span style="flex:${r.pct}" title="${esc(r.god.name)} · ${r.pct} %"></span>`).join("")}${tot < 100 ? `<span class="none" style="flex:${100 - tot}" title="Sin culto · ${100 - tot} %"></span>` : ""}</div>` : "";
+  const bar = rows.length ? `<div class="lpres-bar">${rows.map(r => `<span style="flex:${r.pct}" title="${esc(r.god.name)} · ${r.pct} %"></span>`).join("")}${tot < 100 ? `<span class="none" style="flex:${100 - tot}" title="Sin culto · ${100 - tot} %"></span>` : ""}</div>` : "";
   return `<h3 class="lsec">☀ Presencia de los dioses</h3>${bar}
-    <table class="pres">${rows.map(r => `<tr><td><a href="#lore/${r.god.id}">${esc(r.god.name)}</a></td><td>${dm ? `<input type="number" min="0" max="100" data-pres="${kind}|${r.god.id}" value="${r.pct}"> %` : `${r.pct} %`}</td></tr>`).join("")}
+    <table class="lpres">${rows.map(r => `<tr><td><a href="#lore/${r.god.id}">${esc(r.god.name)}</a></td><td>${dm ? `<input type="number" min="0" max="100" data-pres="${kind}|${r.god.id}" value="${r.pct}"> %` : `${r.pct} %`}</td></tr>`).join("")}
       <tr class="none"><td>Sin culto o no creyentes</td><td>${Math.max(0, 100 - tot)} %</td></tr></table>
     ${dm ? `<div class="row">${gods.filter(g => !rows.some(r => r.god.id === g.id)).length ? `<select data-presadd="${kind}"><option value="">+ Dios con presencia aquí…</option>${gods.filter(g => !rows.some(r => r.god.id === g.id)).map(g => `<option value="${g.id}">${esc(g.name)}</option>`).join("")}</select>` : gods.length ? "" : `<span class="note">Crea primero algún dios en Dioses.</span>`}${tot > 100 ? `<span class="note warn">Suma ${tot} %: pasa de 100.</span>` : ""}</div>` : ""}`;
 }
@@ -282,7 +282,7 @@ function godHTML(s, e, dm) {
   const fol = loreOf(s).filter(x => x.kind === "npc" && x.god === e.id && canSee(s, x));
   const where = [...regionsOf(s).filter(r => seeReg(s, r)).map(r => ({ id: "reg:" + r.id, name: "🗺 " + (r.name || "Región"), pct: +((r.presence || {})[e.id]) || 0 })),
     ...s.world.places.filter(p => dm || p.visible).map(p => ({ id: p.id, name: "📍 " + p.name, pct: +((p.presence || {})[e.id]) || 0 }))].filter(x => x.pct > 0).sort((a, b) => b.pct - a.pct);
-  return `<h3 class="lsec">☀ Presencia</h3>${where.length ? `<table class="pres">${where.map(x => `<tr><td><a href="#lore/${x.id}">${esc(x.name)}</a></td><td><span class="pbar"><i style="width:${x.pct}%"></i></span> ${x.pct} %</td></tr>`).join("")}</table>` : `<p class="note">${dm ? "Aún no tiene presencia en ningún lugar. Se reparte desde cada lugar o región (apartado «Presencia de los dioses»)." : "No sabéis dónde se le rinde culto."}</p>`}
+  return `<h3 class="lsec">☀ Presencia</h3>${where.length ? `<table class="lpres">${where.map(x => `<tr><td><a href="#lore/${x.id}">${esc(x.name)}</a></td><td><span class="pbar"><i style="width:${x.pct}%"></i></span> ${x.pct} %</td></tr>`).join("")}</table>` : `<p class="note">${dm ? "Aún no tiene presencia en ningún lugar. Se reparte desde cada lugar o región (apartado «Presencia de los dioses»)." : "No sabéis dónde se le rinde culto."}</p>`}
     ${fol.length ? `<h3 class="lsec">🙏 Fieles conocidos</h3><div class="lgrid">${fol.map(x => card(s, x)).join("")}</div>` : ""}`;
 }
 function battleHTML(s, e, dm) {
