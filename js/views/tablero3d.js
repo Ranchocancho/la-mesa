@@ -216,13 +216,56 @@ let GLOW = null;
 
 // ---------- Elementos procedurales ----------
 const mat = (color, extra = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.9, flatShading: true, ...extra });
-function tree() {
-  const g = new THREE.Group(), h = 0.85 + Math.random() * 0.35;
-  const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.4, 2, 7), mat(0x5a3d22)); trunk.position.y = 1; g.add(trunk);
-  const leaf = mat(new THREE.Color().setHSL(0.27 + Math.random() * 0.05, 0.45, 0.22 + Math.random() * 0.06));
-  const leaf2 = leaf.clone(); leaf2.color.offsetHSL(0.02, -0.05, 0.08); // Hito 96: la copa de arriba más clara (le da la luz)
-  [[1.9, 2.6, 2.2], [1.5, 2.2, 3.4], [1, 1.8, 4.5]].forEach(([r, hh, y], i) => { const m = new THREE.Mesh(new THREE.ConeGeometry(r, hh, 8), i ? leaf2 : leaf); m.position.y = y; g.add(m); });
-  g.scale.setScalar(h); g.rotation.y = Math.random() * 6;
+/* Hito 96b: árboles de verdad, no tres conos apilados. Dos especies (pino de pisos irregulares y frondoso de copa
+   en racimos), con la geometría algo deformada, color por vértice (oscuro abajo y por dentro, claro arriba, donde da
+   la luz) y todo decidido por la casilla: el mismo árbol sale siempre igual. */
+let TREEMAT = null;
+function treeMats() {
+  if (!TREEMAT) TREEMAT = { leaf: new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.92, flatShading: true }), bark: new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1, flatShading: true }) };
+  return TREEMAT;
+}
+function shade(geo, lo, hi, R, jit = 0.12, bias = 0) {
+  geo = geo.index ? geo.toNonIndexed() : geo;
+  const pos = geo.attributes.position, col = [], A = new THREE.Color(lo), B = new THREE.Color(hi), c = new THREE.Color();
+  geo.computeBoundingBox(); const y0 = geo.boundingBox.min.y, y1 = geo.boundingBox.max.y || 1;
+  const off = new Map();
+  for (let i = 0; i < pos.count; i++) {
+    const k = pos.getX(i).toFixed(2) + "," + pos.getY(i).toFixed(2) + "," + pos.getZ(i).toFixed(2);
+    if (!off.has(k)) off.set(k, [(R() - 0.5) * jit, (R() - 0.5) * jit, (R() - 0.5) * jit]);
+    const o = off.get(k); pos.setXYZ(i, pos.getX(i) + o[0], pos.getY(i) + o[1], pos.getZ(i) + o[2]);
+    const t = Math.min(1, Math.max(0, (pos.getY(i) - y0) / (y1 - y0) + bias + (R() - 0.5) * 0.15));
+    c.copy(A).lerp(B, t); col.push(c.r, c.g, c.b);
+  }
+  geo.setAttribute("color", new THREE.Float32BufferAttribute(col, 3)); geo.computeVertexNormals();
+  return geo;
+}
+function tree(seed = Math.random() * 1e4) {
+  let s0 = Math.floor(seed * 9301 + 49297) % 233280; const R = () => (s0 = (s0 * 9301 + 49297) % 233280) / 233280;
+  const g = new THREE.Group(), M = treeMats(), pine = R() < 0.55;
+  const hue = (pine ? 0.3 : 0.24) + R() * 0.05, lo = new THREE.Color().setHSL(hue, 0.5, 0.05), hi = new THREE.Color().setHSL(hue - 0.02, 0.5, pine ? 0.17 : 0.2);
+  const trunkH = pine ? 1.4 + R() * 0.6 : 2.2 + R() * 0.8;
+  const trunk = new THREE.Mesh(shade(new THREE.CylinderGeometry(0.16, 0.34, trunkH, 6, 2), 0x2e2016, 0x6a4a30, R, 0.06), M.bark);
+  trunk.position.y = trunkH / 2; trunk.rotation.z = (R() - 0.5) * 0.12; g.add(trunk);
+  if (pine) {
+    const tiers = 4 + Math.floor(R() * 2); let y = trunkH * 0.7, r = 1.7 + R() * 0.4;
+    for (let i = 0; i < tiers; i++) {
+      const hh = 1.4 + R() * 0.5, cone = new THREE.Mesh(shade(new THREE.ConeGeometry(r, hh, 7, 1), lo, hi, R, 0.22, -0.1), M.leaf);
+      cone.position.set((R() - 0.5) * 0.2, y + hh / 2, (R() - 0.5) * 0.2); cone.rotation.set((R() - 0.5) * 0.15, R() * 6, (R() - 0.5) * 0.15); g.add(cone);
+      y += hh * (0.5 + R() * 0.12); r *= 0.74 + R() * 0.08;
+    }
+  } else {
+    // rama que sale del tronco y copa en racimos
+    const br = new THREE.Mesh(shade(new THREE.CylinderGeometry(0.06, 0.12, 1.3, 5), 0x2e2016, 0x6a4a30, R, 0.03), M.bark);
+    br.position.set(0.3, trunkH * 0.75, 0); br.rotation.z = -0.8; g.add(br);
+    const n = 5 + Math.floor(R() * 3), top = trunkH + 0.6;
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * Math.PI * 2 + R() * 0.6, d = i === 0 ? 0 : 0.7 + R() * 0.6, sz = (i === 0 ? 1.35 : 0.85 + R() * 0.4);
+      const blob = new THREE.Mesh(shade(new THREE.IcosahedronGeometry(sz, 1), lo, hi, R, 0.18, i === 0 ? 0.15 : -0.05), M.leaf);
+      blob.position.set(Math.cos(a) * d, top + (i === 0 ? 0.7 : R() * 0.8), Math.sin(a) * d); blob.scale.y = 0.8 + R() * 0.2; g.add(blob);
+    }
+  }
+  g.traverse(o => { if (o.isMesh) o.castShadow = true; });
+  g.scale.setScalar(0.85 + R() * 0.35); g.rotation.y = R() * 6;
   return g;
 }
 function bush() { const m = new THREE.Mesh(new THREE.IcosahedronGeometry(1.1, 0), mat(0x3f5f2a)); m.scale.set(1.2, 0.7, 1.1); m.position.y = 0.6; m.rotation.y = Math.random() * 6; return m; }
@@ -723,7 +766,7 @@ export function createBoard3D(host, opts) {
       if (!propVisible(p, opts.dm)) continue;
       const x = cx(p.c), z = cz(p.r);
       let obj = null;
-      if (p.k === "arbol") obj = tree(); else if (p.k === "arbusto") obj = bush(); else if (p.k === "roca") obj = rock(); else if (p.k === "trampa") obj = trap();
+      if (p.k === "arbol") obj = tree(Math.abs(Math.sin(p.c * 12.9898 + p.r * 78.233) * 43758.5453) % 1 * 1e4); else if (p.k === "arbusto") obj = bush(); else if (p.k === "roca") obj = rock(); else if (p.k === "trampa") obj = trap();
       else if (p.k === "hoguera") obj = campfire();
       else if (PROC[p.k]) { obj = PROC[p.k](fire); if (!["telarana"].includes(p.k)) obj.rotation.y = (p.rot || 0) * Math.PI / 2; if (PROC_BIG.includes(p.k)) obj.scale.multiplyScalar(1.35); }
       else if (PROP3D[p.k]) {

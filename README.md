@@ -1080,3 +1080,9 @@ Para tenerlas en un mundo que ya existe: **Escenas → 🔄 Renovar escenas de e
 - **Muros bajos (A7)**: algo más altos, para que la sala se lea como sala.
 - **Bosque (A8)**: hierba menos saturada con manchas de tierra; los árboles hechos por código tienen la copa de arriba más clara.
 - **Peanas (A9)**: algo más pequeñas y con menos brillo propio.
+
+## Hito 97 — Árboles de verdad
+
+- Los árboles ya no son tres conos iguales apilados. Hay dos especies: un **pino** de 4–5 pisos irregulares, algo torcidos, y un **frondoso** con rama a la vista y copa en racimos.
+- Llevan la geometría algo deformada y color por vértice: oscuro abajo y por dentro, claro arriba, donde da la luz.
+- Cada casilla decide la especie, el tamaño, el tono y el giro, así que el mismo árbol sale siempre igual.
