@@ -158,3 +158,51 @@
 .rulpop ul{margin:0;padding-left:18px;font-size:13px;line-height:1.4}
 .rulpop li{margin:4px 0}
 .rul-on{color:#7fd88a}.rul-off{color:#e0907a}
+
+/* Hito 100: qué es cada estado, al pasar el ratón por la placa */
+.condtip{position:absolute;z-index:30;transform:translateX(-50%);max-width:300px;padding:8px 10px;border-radius:10px;background:rgba(14,10,8,.96);border:1px solid var(--linea,#5a4630);box-shadow:0 8px 24px rgba(0,0,0,.5);pointer-events:none;font-size:12.5px;line-height:1.35}
+.condtip>div{padding:4px 0 4px 10px;border-left:3px solid #e5533e;margin:3px 0}
+.condtip>div.ct-good{border-color:#6fd35a}.condtip>div.ct-focus{border-color:#6aa8ff}
+.condtip b{color:#f3e7c8}.condtip small{color:#c8b89a}.condtip span{display:block;color:#bfb09a;margin-top:2px}
+
+/* Hito 100b: iniciativa como en BG3: retratos pequeños que caben todos; el del turno, mayor y con nombre */
+.turnbar .tbchip.tbcard{flex:0 0 auto;flex-direction:column;align-items:center;gap:2px;padding:2px;border-radius:8px;opacity:.85;background:transparent;border:0;height:auto}
+.turnbar .tbchip.tbcard.now{flex-direction:row;gap:7px;opacity:1;background:rgba(214,170,78,.12);border:1px solid rgba(214,170,78,.55);padding:3px 9px 3px 3px;box-shadow:0 0 12px rgba(214,170,78,.25)}
+.turnbar .tbchip.tbcard.down{filter:grayscale(.8);opacity:.45}
+.tbcard .tbart{width:var(--av,40px);height:calc(var(--av,40px) * 1.18);border-radius:7px;background:var(--k,#555) center/cover no-repeat;position:relative;border:2px solid #b33a2e;box-sizing:border-box}
+.tbcard.pc .tbart{border-color:var(--oro)}.tbcard.npc .tbart{border-color:var(--arcano)}
+.tbcard.mine .tbart{box-shadow:0 0 0 1px rgba(214,170,78,.6)}
+.tbcard.now .tbart{width:calc(var(--av,40px) * 1.3 + 6px);height:calc((var(--av,40px) * 1.3 + 6px) * 1.18);box-shadow:0 0 10px rgba(214,170,78,.6)}
+.tbcard .tbart.sil{background-color:#e6d6b0;background-size:86%;background-position:center bottom}
+.tbcard .tbinfo{display:contents}
+.tbcard:not(.now) .tbinfo em{display:none}
+.tbcard.now .tbinfo{display:flex;flex-direction:column;justify-content:center;gap:3px;min-width:84px}
+.tbcard.now .tbinfo em{font-style:normal;font-family:var(--display);font-size:14px;color:#ffe6a6;white-space:nowrap}
+.tbcard .tbrow{display:flex;align-items:center;gap:4px;width:var(--av,40px)}
+.tbcard.now .tbrow{width:auto}
+.tbcard .tbrow .ihb{flex:1;position:static;width:auto;height:4px}
+.tbcard:not(.now) .tbini{display:none}
+.tbcard .tbconds{position:absolute;top:3px;right:3px;display:flex;gap:2px}
+.tbcard.now .tbconds{position:static}
+.tbcard .tbconds i{font-style:normal;font-size:0;width:7px;height:7px;border-radius:50%;background:#e5533e;border:1px solid #000;padding:0}
+.tbcard .tbconds i.good{background:#6fd35a}.tbcard .tbconds i.focus{background:#6aa8ff}.tbcard .tbconds i.more{background:#aaa}
+.tbcard.now .tbconds i{font-size:10px;width:17px;height:17px;display:grid;place-items:center;background:#15100d;border:2px solid #e5533e}
+.tbcard.now .tbconds i.good{border-color:#6fd35a}.tbcard.now .tbconds i.focus{border-color:#6aa8ff}
+.tbcard{position:relative}
+
+/* Hito 100: recursos del turno con nombre (antes «A» y «+») */
+.noweco i{width:auto!important;height:auto!important;border-radius:6px!important;padding:1px 7px;font-style:normal;font-size:11px;font-weight:700;line-height:17px;color:#111;display:inline-block;margin-right:4px}
+.noweco i.r-act{background:var(--act,#5fbf5a)}.noweco i.r-bonus{background:var(--bonus,#e0a040)}
+.noweco i.used{background:#3a332c!important;color:#8a7f70;text-decoration:line-through}
+.noweco em{font-size:12px}
+/* Hito 100: fuera de tu turno la barra se ve a medio tono (puedes prepararte), no apagada */
+.hotbar.wait .hbicons{opacity:.85;filter:none}
+.hotbar.wait .hbi.off{filter:saturate(.55) brightness(.85);cursor:help}
+
+/* Hito 100: los ajustes de vista se agrupan tras ⚙ */
+.cam3d.compact{position:relative}
+.cam3d.compact .campop{position:absolute;bottom:calc(100% + 8px);right:0;display:flex;align-items:center;gap:6px;padding:8px;border-radius:10px;background:rgba(14,10,8,.97);border:1px solid var(--linea,#5a4630);box-shadow:0 8px 24px rgba(0,0,0,.5);z-index:20}
+.cam3d.compact .campop[hidden]{display:none}
+.cam3d.compact .campop .camst{display:flex;gap:4px}
+.cam3d.compact .campop .volv input{writing-mode:horizontal-tb;width:90px}
+.turnbar .tbchip.tbcard .ihb{position:static!important;width:auto!important;left:auto!important;right:auto!important;bottom:auto!important}

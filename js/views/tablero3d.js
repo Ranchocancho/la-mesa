@@ -370,9 +370,13 @@ function giImg(k) {
   im.src = `assets/hud/${k}.svg`; return null;
 }
 // Placa sobre la figura, como en BG3: nombre, vida y debajo los estados en iconos pequeños con los turnos que les quedan
+// Hito 100: cada estado dice si ayuda (verde), perjudica (rojo) o es concentración (azul)
+const GOOD = new Set(["invisible", "esquivando", "destrabado", "bendecido", "molestar", "escudo", "furia", "insp_bardica"]);
+export const condPol = id => id === "concentracion" ? "focus" : GOOD.has(id) ? "good" : "bad";
+const POL_COL = { good: "#6fd35a", bad: "#e5533e", focus: "#6aa8ff" };
 function namePlate(name, pct, txt, color, hl, pxH = 48, conds = []) {
   const list = conds.map(cd => ({ e: estado(cd.id || cd), left: cd.left, lvl: cd.lvl })).filter(x => x.e && x.e.id !== "encima");
-  const U = 150, k = pxH / U, Wu = 600, CR = list.length ? 84 : 0;   // se diseña en unidades de 150 de alto y se escala al tamaño real
+  const U = 150, k = pxH / U, Wu = 600, CR = list.length && hl ? 90 : 0; // Hito 100b: los iconos, solo con la figura elegida o en su turno   // se diseña en unidades de 150 de alto y se escala al tamaño real
   const c = document.createElement("canvas"); c.width = Math.round(Wu * k); c.height = Math.round((U + CR) * k);
   const g = c.getContext("2d"); g.setTransform(k, 0, 0, k, 0, 0);
   const hasBar = pct != null;
@@ -397,18 +401,22 @@ function namePlate(name, pct, txt, color, hl, pxH = 48, conds = []) {
       g.fillStyle = "#fff"; g.fillText(txt, Wu / 2, by + bh / 2 + 2);
     }
   }
-  if (list.length) { // fila de estados bajo la placa
-    const D = 74, gap = 8, max = 6, shown = list.slice(0, max), n = shown.length + (list.length > max ? 1 : 0), x0i = (Wu - n * D - (n - 1) * gap) / 2, y = U + 6;
+  if (list.length && !hl) { // Hito 100b: en reposo, solo puntitos de color en la esquina de la placa (no tapan la figura)
+    list.slice(0, 5).forEach(({ e }, i) => { const cx0 = x0 + w - 26 - i * 28, cy0 = 24; g.fillStyle = POL_COL[condPol(e.id)]; g.beginPath(); g.arc(cx0, cy0, 10, 0, Math.PI * 2); g.fill(); g.lineWidth = 3; g.strokeStyle = "rgba(0,0,0,.85)"; g.stroke(); });
+  }
+  if (list.length && hl) { // Hito 100: chapas de estado legibles: disco oscuro, icono blanco y aro del color de su efecto
+    const D = 82, gap = 10, max = 4, shown = list.slice(0, max), n = shown.length + (list.length > max ? 1 : 0), x0i = (Wu - n * D - (n - 1) * gap) / 2, y = U + 2;
     shown.forEach(({ e, left, lvl }, i) => {
-      const x = x0i + i * (D + gap);
-      g.shadowColor = "rgba(0,0,0,.8)"; g.shadowBlur = 6; g.fillStyle = e.c; g.beginPath(); g.roundRect(x, y, D, D, 10); g.fill(); g.shadowBlur = 0;
-      g.lineWidth = 3; g.strokeStyle = "rgba(0,0,0,.75)"; g.stroke();
+      const x = x0i + i * (D + gap), cx0 = x + D / 2, cy0 = y + D / 2, pol = condPol(e.id);
+      g.shadowColor = "rgba(0,0,0,.85)"; g.shadowBlur = 8; g.fillStyle = "#15100d"; g.beginPath(); g.arc(cx0, cy0, D / 2 - 3, 0, Math.PI * 2); g.fill(); g.shadowBlur = 0;
+      g.lineWidth = 8; g.strokeStyle = POL_COL[pol]; g.stroke();
+      g.save(); g.beginPath(); g.arc(cx0, cy0, D / 2 - 9, 0, Math.PI * 2); g.clip(); g.fillStyle = e.c; g.globalAlpha = 0.35; g.fillRect(x, y, D, D); g.restore();
       const ic = COND[e.id] && giImg(COND[e.id]);
-      if (ic) { g.drawImage(ic, x + 7, y + 7, D - 14, D - 14); } else { g.font = "30px sans-serif"; g.textAlign = "center"; g.textBaseline = "middle"; g.fillStyle = "#fff"; g.fillText(e.i || "•", x + D / 2, y + D / 2 + 2); }
+      if (ic) { g.drawImage(ic, x + 15, y + 15, D - 30, D - 30); } else { g.font = "36px sans-serif"; g.textAlign = "center"; g.textBaseline = "middle"; g.fillStyle = "#fff"; g.fillText(e.i || "•", cx0, cy0 + 2); }
       const badge = left != null ? String(left) : lvl > 1 ? String(lvl) : "";
-      if (badge) { g.fillStyle = "#111"; g.beginPath(); g.arc(x + D - 6, y + D - 6, 14, 0, Math.PI * 2); g.fill(); g.font = "800 20px system-ui,sans-serif"; g.textAlign = "center"; g.textBaseline = "middle"; g.fillStyle = "#fff"; g.fillText(badge, x + D - 6, y + D - 5); }
+      if (badge) { g.fillStyle = "#000"; g.beginPath(); g.arc(x + D - 10, y + D - 10, 17, 0, Math.PI * 2); g.fill(); g.lineWidth = 3; g.strokeStyle = POL_COL[pol]; g.stroke(); g.font = "800 22px system-ui,sans-serif"; g.textAlign = "center"; g.textBaseline = "middle"; g.fillStyle = "#fff"; g.fillText(badge, x + D - 10, y + D - 9); }
     });
-    if (list.length > max) { const x = x0i + max * (D + gap); g.font = "800 28px system-ui,sans-serif"; g.textAlign = "center"; g.textBaseline = "middle"; g.lineWidth = 5; g.strokeStyle = "#000"; g.strokeText("+" + (list.length - max), x + D / 2, y + D / 2); g.fillStyle = "#fff"; g.fillText("+" + (list.length - max), x + D / 2, y + D / 2); }
+    if (list.length > max) { const x = x0i + max * (D + gap); g.fillStyle = "#15100d"; g.beginPath(); g.arc(x + D / 2, y + D / 2, D / 2 - 3, 0, Math.PI * 2); g.fill(); g.font = "800 30px system-ui,sans-serif"; g.textAlign = "center"; g.textBaseline = "middle"; g.fillStyle = "#fff"; g.fillText("+" + (list.length - max), x + D / 2, y + D / 2 + 1); }
   }
   const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
   t.generateMipmaps = false; t.minFilter = THREE.LinearFilter; t.magFilter = THREE.LinearFilter; // sin mipmaps: no se emborrona
@@ -465,9 +473,9 @@ export function createBoard3D(host, opts) {
   // En la barra superior va la versión compacta: volumen vertical, ⌖ y ⬇ en cuadraditos, Órbita/Libre y Muros.
   // Niebla, música y luz (día/noche/interior) las decide el máster desde su pestaña.
   const camHTML = opts.controlsHost ? `<div class="cam3d compact" role="toolbar" aria-label="Cámara">
-      <span class="camsq"><button class="sq" data-cam="center" title="Centrar la cámara en la mesa" aria-label="Centrar">⌖</button><button class="sq" data-cam="top" title="Vista cenital (desde arriba)" aria-label="Cenital">⬇</button><button class="sq" data-cam="follow" aria-pressed="${CAMTURN()}" title="Cámara de combate: al empezar cada turno, la cámara se centra en quien le toca, con tu mismo ángulo y zoom (como en Baldur&#39;s Gate 3). Pulsa para activarla o quitarla." aria-label="Seguir el turno">🎥</button><button class="sq" data-cam="ruler" aria-pressed="false" title="Regla: arrastra de una casilla a otra para medir" aria-label="Regla">📏</button><button class="sq" data-cam="mute" title="Silenciar">${sound.muted ? "🔇" : "🔊"}</button></span>
-      <span class="volv" title="Volumen"><input type="range" min="0" max="1" step="0.05" value="${sound.volume}" data-vol aria-label="Volumen" orient="vertical"></span>
-      <span class="camst"><button class="btn small" data-cam="mode" aria-pressed="false" title="Cámara en órbita (pulsa para libre)">⟳</button><button class="btn small" data-cam="walls" aria-pressed="true" title="Muros bajos (pulsa para altos)">▁</button><button class="btn small" data-cam="grid" aria-pressed="${GRID()}" title="Cuadrícula sobre el suelo">▦</button><button class="btn small" data-cam="dress" aria-pressed="${DENS() > 0}" title="${DENS_TXT[DENS()]} (pulsa para cambiar)">🌿</button><button class="btn small" data-cam="quality" aria-pressed="${QUAL() === "alta"}" title="${QUAL() === "alta" ? "Calidad alta: reflejos y resplandor (pulsa para normal)" : "Calidad normal (pulsa para alta: resplandor del fuego y la magia)"}">✨</button></span>
+      <span class="camsq"><button class="sq" data-cam="center" title="Centrar la cámara en la mesa" aria-label="Centrar">⌖</button><button class="sq" data-cam="top" title="Vista cenital (desde arriba)" aria-label="Cenital">⬇</button><button class="sq" data-cam="follow" aria-pressed="${CAMTURN()}" title="Cámara de combate: al empezar cada turno, la cámara se centra en quien le toca, con tu mismo ángulo y zoom (como en Baldur&#39;s Gate 3). Pulsa para activarla o quitarla." aria-label="Seguir el turno">🎥</button><button class="sq" data-cam="ruler" aria-pressed="false" title="Regla: arrastra de una casilla a otra para medir" aria-label="Regla">📏</button><button class="sq" data-cam="mute" title="Silenciar">${sound.muted ? "🔇" : "🔊"}</button><button class="sq" data-cam="more" aria-expanded="false" title="Vista: órbita, muros, cuadrícula, detalles, calidad y volumen" aria-label="Opciones de vista">⚙</button></span>
+      <span class="campop" hidden><span class="volv" title="Volumen"><input type="range" min="0" max="1" step="0.05" value="${sound.volume}" data-vol aria-label="Volumen" orient="vertical"></span>
+      <span class="camst"><button class="btn small" data-cam="mode" aria-pressed="false" title="Cámara en órbita (pulsa para libre)">⟳</button><button class="btn small" data-cam="walls" aria-pressed="true" title="Muros bajos (pulsa para altos)">▁</button><button class="btn small" data-cam="grid" aria-pressed="${GRID()}" title="Cuadrícula sobre el suelo">▦</button><button class="btn small" data-cam="dress" aria-pressed="${DENS() > 0}" title="${DENS_TXT[DENS()]} (pulsa para cambiar)">🌿</button><button class="btn small" data-cam="quality" aria-pressed="${QUAL() === "alta"}" title="${QUAL() === "alta" ? "Calidad alta: reflejos y resplandor (pulsa para normal)" : "Calidad normal (pulsa para alta: resplandor del fuego y la magia)"}">✨</button></span></span>
     </div>` : `<div class="cam3d" role="toolbar" aria-label="Cámara">
       <button class="btn small" data-cam="center" title="Centrar la cámara en la mesa">⌖ Centrar</button>
       <button class="btn small" data-cam="top" title="Vista desde arriba">⬇ Cenital</button>
@@ -486,6 +494,7 @@ export function createBoard3D(host, opts) {
   host.innerHTML = `${opts.controlsHost ? "" : camHTML}<div class="dragtip" hidden></div><div class="loading3d">Montando la mesa…</div>`;
   if (opts.controlsHost) opts.controlsHost.innerHTML = camHTML;
   const tip = host.querySelector(".dragtip"), loadingEl = host.querySelector(".loading3d");
+  const condTip = document.createElement("div"); condTip.className = "condtip"; condTip.hidden = true; host.appendChild(condTip); let condTipKey = "";
   const renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
   renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -545,6 +554,7 @@ export function createBoard3D(host, opts) {
   }
   ctl.querySelectorAll("[data-cam]").forEach(b => b.onclick = () => {
     const k = b.dataset.cam;
+    if (k === "more") { const pop = ctl.querySelector(".campop"); if (pop) { pop.hidden = !pop.hidden; b.setAttribute("aria-expanded", !pop.hidden); } return; } // Hito 100: ajustes de vista agrupados
     if (k === "center") { setFree(false); frame("persp"); }
     if (k === "top") frame("top");
     if (k === "follow") { const on = !CAMTURN(); setPref("lamesa:camturno", on ? "1" : "0"); ctl.querySelectorAll('[data-cam="follow"]').forEach(x => x.setAttribute("aria-pressed", on)); toast(on ? "🎥 La cámara seguirá a quien le toca" : "🎥 La cámara ya no sigue los turnos"); if (on && G && G.combat === "live" && G.turn != null) flyToTurn(G.turn); return; }
@@ -808,6 +818,13 @@ export function createBoard3D(host, opts) {
         const gl = await load(path); if (my !== build) return;
         if (!gl) continue;
         obj = gl.scene.clone(true); obj.scale.setScalar(scale);
+        // Hito 100: una escalera que no lleva a otra planta ni a otra escena salva un desnivel del propio mapa:
+        // se ajusta a esa altura (se gira a mano, como siempre; antes salía siempre del tamaño de una planta entera)
+        if (p.k === "escaleras" && p.toFloor == null && !p.to) {
+          const here = elevAt(g, p.c, p.r), up = [[0, -1, 0], [1, 0, -Math.PI / 2], [0, 1, Math.PI], [-1, 0, Math.PI / 2]].map(([dc, dr, rot]) => ({ d: elevAt(g, p.c + dc, p.r + dr) - here, rot, wall: isWallIn(g, p.c + dc, p.r + dr) })).filter(x => !x.wall).sort((a, b) => b.d - a.d)[0];
+          const bb = new THREE.Box3().setFromObject(obj), hgt = Math.max(0.1, bb.max.y - bb.min.y), want = up && up.d > 0 ? up.d * YS : 0.9;
+          obj.scale.y *= Math.min(1.2, want / hgt);
+        }
         if (standing) {
           // pie de hierro de tres patas con la antorcha arriba
           const st = new THREE.Group(), iron = new THREE.MeshStandardMaterial({ color: 0x2e2a26, metalness: 0.6, roughness: 0.5 });
@@ -1096,6 +1113,16 @@ export function createBoard3D(host, opts) {
       const conds = t.conds || [], S0 = store.get(), condKey = JSON.stringify(conds) + conds.map(cd => cd.dur ? leftOf(S0, cd) : "").join(",");
       if (condKey !== rec.condKey) {
         rec.condKey = condKey;
+        { // Hito 100: «¡Derribado!» al ganar un estado y «Ya no: …» al perderlo (no al montar la mesa)
+          const now = conds.map(cd => cd.id || cd).filter(x => x !== "encima");
+          if (rec.condIds && rec.root && fxReady && rec.root.visible) {
+            const top = rec.root.position.clone(); top.y += (rec.h || 4) + 2.6;
+            const gained = now.filter(x => !rec.condIds.includes(x)), lost = rec.condIds.filter(x => !now.includes(x));
+            gained.slice(0, 2).forEach((x, i) => { const e = estado(x); if (e) setTimeout(() => { if (!disposed) fxList.push(floatText(scene, top.clone().setY(top.y + i * 1.6), "¡" + e.n + "!", POL_COL[condPol(x)], false, 1.1)); }, 250 + i * 700); });
+            lost.slice(0, 2).forEach((x, i) => { const e = estado(x); if (e) setTimeout(() => { if (!disposed) fxList.push(floatText(scene, top.clone().setY(top.y + i * 1.6), "Ya no: " + e.n, "#d8d0c0", false, 0.9)); }, 250 + (gained.length + i) * 700); });
+          }
+          rec.condIds = now;
+        }
         (rec.rings || []).forEach(o => rec.root.remove(o)); rec.rings = [];
         // Un solo anillo fino del color del primer estado (los iconos van encima de la figura)
         { const e = conds.map(cd => estado(cd.id || cd)).find(x => x && x.id !== "encima"); if (e) { const ring = new THREE.Mesh(new THREE.TorusGeometry(1.7, 0.06, 8, 48), new THREE.MeshStandardMaterial({ color: e.c, emissive: e.c, emissiveIntensity: 0.4, roughness: 0.4 })); ring.rotation.x = Math.PI / 2; ring.position.y = 0.1; rec.root.add(ring); rec.rings.push(ring); } }
@@ -1117,7 +1144,7 @@ export function createBoard3D(host, opts) {
       const pctQ = hp ? (exact ? hp.cur / Math.max(1, hp.max) : (r => r > 0.75 ? 1 : r > 0.5 ? 0.7 : r > 0.25 ? 0.45 : r > 0 ? 0.18 : 0)(hp.cur / Math.max(1, hp.max))) : null;
       const word = hp && !exact ? (pctQ >= 1 ? "Ileso" : pctQ >= 0.7 ? "Herido" : pctQ >= 0.45 ? "Malherido" : pctQ > 0 ? "Al borde" : "Fuera de combate") : "";
       const pxH = Math.max(28, Math.min(160, Math.round(PLATE_H * camera.projectionMatrix.elements[5] / 2 * renderer.domElement.height))); // píxeles reales de la placa
-      const cl = (t.conds || []).map(cd => cd.dur ? { ...cd, left: leftOf(store.get(), cd) } : cd);
+      const cl = (t.conds || []).map(cd => cd.dur ? { ...cd, left: leftOf(store.get(), cd) } : cd); rec.cl = cl;
       const plateKey = JSON.stringify([d.name || t.name, pctQ, exact && hp && hp.cur, exact && hp && hp.max, hl, word, pxH, cl, giVer]);
       if (plateKey !== rec.barKey) {
         if (rec.bar) { rec.root.remove(rec.bar); rec.bar.material.map.dispose(); rec.bar.material.dispose(); rec.bar = null; }
@@ -1590,9 +1617,19 @@ export function createBoard3D(host, opts) {
       const x = (_pv.x + 1) / 2 * W, y = (1 - _pv.y) / 2 * H, ph = rec.pxH || 48, hw = (rec.bar.userData.wU || 330) * ph / 150 / 2;
       const box = { l: x - hw, r: x + hw, t: y - ph, b: y };
       const near = mouse && mouse.x > box.l - 8 && mouse.x < box.r + 8 && mouse.y > box.t - 16 && mouse.y < box.b + ph * 0.8;
-      items.push({ rec, box, prio: (rec.prio || 0) + (near ? 3 : 0), dz });
+      items.push({ rec, box, prio: (rec.prio || 0) + (near ? 3 : 0), dz, near: near && !rec.packed });
     }
     items.sort((a, b) => b.prio - a.prio || a.dz - b.dz);
+    { // Hito 100: al pasar el ratón por los estados de una placa, qué es cada uno y cuánto le queda
+      const it = items.find(x => x.near && x.rec.cl && x.rec.cl.some(cd => (cd.id || cd) !== "encima"));
+      const key = it ? JSON.stringify(it.rec.cl) + "|" + it.rec.barKey : "";
+      if (key !== condTipKey) {
+        condTipKey = key;
+        if (!it) condTip.hidden = true;
+        else { condTip.innerHTML = it.rec.cl.map(cd => ({ e: estado(cd.id || cd), cd })).filter(x => x.e && x.e.id !== "encima").map(({ e, cd }) => `<div class="ct-${condPol(e.id)}"><b>${e.i || ""} ${e.n}${cd.lvl > 1 ? " " + cd.lvl : ""}</b>${cd.left != null ? ` <small>· ${cd.left} ${cd.left === 1 ? "turno" : "turnos"}</small>` : ""}<span>${e.t}</span></div>`).join(""); condTip.hidden = false; }
+      }
+      if (it) { const r = renderer.domElement.getBoundingClientRect(), k = r.width / Math.max(1, W); condTip.style.left = Math.round((it.box.l + it.box.r) / 2 * k) + "px"; condTip.style.top = Math.round((it.box.b + (it.rec.pxH || 48) * (it.rec.bar && it.rec.bar.center.y > 0 ? 0.75 : 0)) * k + 8) + "px"; }
+    }
     const placed = [], hit = (a, b) => a.l < b.r - 4 && a.r > b.l + 4 && a.t < b.b - 3 && a.b > b.t + 3;
     for (const it of items) {
       const pack = it.prio < 4 && placed.some(p => hit(it.box, p));

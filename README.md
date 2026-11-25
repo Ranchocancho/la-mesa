@@ -1119,3 +1119,19 @@ Quedan para probar (QUIZÁ): la tensión de combate (E4), las huellas (L1) y las
 ## Hito 99 — Arreglo de la pestaña Táctica
 
 - Si el máster elegía una escalera, un pozo o una trampa, su ficha se quedaba fija en la pestaña Táctica aunque luego pinchara en una criatura. Ahora, al elegir una criatura se cierra la ficha del objeto, y al elegir un objeto deja de mostrarse la criatura.
+
+## Hito 100 — Paquete A: la mesa en juego
+
+- **Estados legibles (H1)**: en la placa, cada estado es una chapa redonda con el icono en blanco y un aro de color (verde ayuda, rojo perjudica, azul concentración), con los turnos que le quedan. Salen como mucho 4 y «+n». Al pasar el ratón por debajo de la placa, un aviso dice qué es cada uno, qué hace y cuánto le queda.
+- **Aviso al cambiar (H3)**: al ganar un estado sale «¡Derribado!» sobre la figura; al perderlo, «Ya no: Derribado».
+- **Iniciativa en tarjetas**: la tira de arriba reparte el ancho en tarjetas con el retrato (o la silueta), el nombre, la iniciativa, la vida y hasta 3 estados. La del turno es más grande y brilla.
+- **Recursos del turno (H5)**: «Acción» y «Adicional» con su nombre y su color, tachados cuando se gastan (antes «A» y «+»).
+- **Barra de acciones fuera de tu turno (H4)**: se ve a medio tono, no apagada, para que puedas preparar el turno.
+- **Barra de la cámara (H6)**: órbita, muros, cuadrícula, detalles, calidad y volumen se agrupan tras ⚙.
+- **Escaleras**: si no llevan a otra planta ni a otra escena, se ajustan a la altura del desnivel que salvan.
+
+## Hito 101 — Estados e iniciativa como en BG3
+
+- **Iniciativa**: vuelve a caber entera. Retratos pequeños (o silueta) que se encogen según cuántos haya; el del turno es mayor y lleva nombre, vida y sus estados. Los demás llevan la vida debajo y los estados como puntitos de color (verde ayuda, rojo perjudica, azul concentración).
+- **Estados en la placa**: ya no hay fila de iconos que tape la figura. En reposo salen como puntitos de color en la esquina de la placa. Los iconos con sus turnos salen al elegir la figura o en su turno. Al pasar el ratón por la placa, un aviso dice qué es cada estado, qué hace y cuánto le queda.
+- Los avisos «¡Aturdido!» y «Ya no: …» salen más espaciados cuando llegan varios a la vez.

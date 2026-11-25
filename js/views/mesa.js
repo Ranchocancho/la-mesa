@@ -14,8 +14,8 @@ import { createBoard, healthWord, moveCost } from "./tablero.js";
 import { travelTo, hpOf, charOf, order } from "../core/mesa.js";
 import { changeHP as applyHP, deathSave } from "../core/salud.js";
 import { $, $$, esc, pickFile, toast } from "../core/ui.js";
-import { putImage, readImageFile } from "../core/images.js";
-import { SILUETAS } from "../data/siluetas.js";
+import { putImage, readImageFile, getImage } from "../core/images.js";
+import { SILUETAS, siluetaFor, siluetaURL } from "../data/siluetas.js";
 import { ESTADOS, estado, etiqueta } from "../data/estados.js";
 import { floatAt } from "./flotantes.js";
 import { diceAnim } from "../core/dados.js";
@@ -362,7 +362,7 @@ export function mountTactical(host, opts = {}) {
     const s = S(), dm = isDM(s), N = nowState(s, me(), dm), box = $(".tb-now", host);
     const html = `<div class="nowhead">${esc(N.head)}${N.next ? `<small> · después: ${esc(N.next)}${N.nextMine ? " (tú)" : ""}</small>` : ""}</div>
       <div class="nowtask"${N.tip && N.tip !== N.text ? ` title="${esc(N.tip)}"` : ""}>${N.who ? `<b class="nowwho">${esc(N.who)}</b>` : ""}<span>${esc(N.text)}</span></div>
-      ${N.eco || N.acts.length ? `<div class="nowrow">${N.eco ? `<span class="noweco"><i class="${N.eco.act ? "used" : ""}" title="Acción">A</i><i class="${N.eco.bonus ? "used" : ""}" title="Acción adicional">+</i><em title="Movimiento">👣 ${esc(N.eco.mov)}</em></span>` : ""}${N.acts.map((a, i) => `<button class="btn small${a.gold ? " gold" : ""}" data-now="${i}">${esc(a.label)}</button>`).join("")}</div>` : ""}`;
+      ${N.eco || N.acts.length ? `<div class="nowrow">${N.eco ? `<span class="noweco"><i class="r-act ${N.eco.act ? "used" : ""}" title="Acción${N.eco.act ? " (gastada)" : " (disponible)"}">Acción</i><i class="r-bonus ${N.eco.bonus ? "used" : ""}" title="Acción adicional${N.eco.bonus ? " (gastada)" : " (disponible)"}">Adicional</i><em title="Movimiento gastado / total">👣 ${esc(N.eco.mov)}</em></span>` : ""}${N.acts.map((a, i) => `<button class="btn small${a.gold ? " gold" : ""}" data-now="${i}">${esc(a.label)}</button>`).join("")}</div>` : ""}`;
     box.className = `tb-now ${N.tone || ""}${N.mine ? " me" : ""}`;
     if (html !== nowSig) {
       nowSig = html; box.innerHTML = html;
@@ -401,11 +401,21 @@ export function mountTactical(host, opts = {}) {
   // La tira se encoge para que quepan todos, sin barra de desplazamiento
   function fitStrip() {
     const n = tb.querySelectorAll(".tbchip").length; if (!n) return;
-    const w = tb.clientWidth - 24, nowW = tb.querySelector(".tbchip.now") ? 120 : 0;
-    const av = Math.max(16, Math.min(32, Math.floor((w - nowW) / Math.max(1, n) - 10)));
+    const w = tb.clientWidth - 24, nowW = tb.querySelector(".tbchip.now") ? 150 : 0;
+    const av = Math.max(18, Math.min(44, Math.floor((w - nowW) / Math.max(1, n) - 12))); // Hito 100b: retratos que caben todos
     tb.style.setProperty("--av", av + "px"); tb.classList.toggle("tight", av < 24);
   }
   if (window.ResizeObserver) new ResizeObserver(() => fitStrip()).observe(tb);
+  // Hito 100: la iniciativa en tarjetas que reparten el ancho: retrato, nombre, vida y estados
+  const shortNm = nm => (w => w.length > 1 && /^(hermano|hermana|sir|lady|lord|fray|sor|don|doña)$/i.test(w[0]) ? w[1] : w.slice(0, 2).join(" "))(String(nm).replace(/\s*\(.*?\)/g, "").trim().split(/\s+/));
+  const cardArt = (t, c) => {
+    const art = (c && c.portrait) || t.img;
+    if (art) return `<span class="tbart" data-img="${esc(art)}" style="--k:${(c || t).color || "#777"}"></span>`;
+    const sil = siluetaURL(t.icon || (c ? siluetaFor(`${c.cls} ${c.species}`) : siluetaFor(t.name)));
+    return `<span class="tbart sil" style="--k:${(c || t).color || "#777"};background-image:url('${sil}')"></span>`;
+  };
+  const GOODC = new Set(["invisible", "esquivando", "destrabado", "bendecido", "molestar", "escudo", "furia", "insp_bardica"]);
+  const condRow = cds => cds.length ? `<span class="tbconds">${cds.slice(0, 3).map(cd => { const e = estado(cd.id); return `<i class="${cd.id === "concentracion" ? "focus" : GOODC.has(cd.id) ? "good" : "bad"}">${e.i || "•"}</i>`; }).join("")}${cds.length > 3 ? `<i class="more">+${cds.length - 3}</i>` : ""}</span>` : "";
   function drawTurnBar() {
     const s = S(), ph = phase(s), cur = current(s), dm = isDM(s);
     drawNow();
@@ -431,13 +441,14 @@ export function mountTactical(host, opts = {}) {
       const cds = (t.conds || []).filter(cd => estado(cd.id)), ini = t.init != null && ph === "live" ? t.init : null;
       const hpRow = `<span class="tbrow">${ini != null ? `<b class="tbini" title="Iniciativa">${ini}</b>` : ""}${h ? `<span class="ihb ${shown <= 0.25 ? "low" : shown <= 0.5 ? "mid" : ""}">${ghost != null && ghost > Math.round(shown * 100) ? `<em class="ghost" style="--from:${ghost}%;--to:${Math.round(shown * 100)}%"></em>` : ""}<span style="width:${Math.round(shown * 100)}%"></span></span>` : ""}</span>`;
       const cdRow = ""; // los estados no van en la tira (la rompían): están en la placa de la figura, en la barra y en Táctica
-      return `<span class="tbchip ${t.kind}${now ? " now" : ""}${h && h.cur <= 0 ? " down" : ""}${t.owner && t.owner === me() ? " mine" : ""}${fx}" data-tsel="${t.id}" title="${esc(nm)}${ini != null ? ` · iniciativa ${ini}` : ""}${h ? ` · ${exact ? `${h.cur}/${h.max} PG` : healthWord(h.cur, h.max)}` : ""}${cds.length ? " · " + cds.map(cd => estado(cd.id).n).join(", ") : ""}${esc(lastTip)}">${badge}
-        <span class="tbav" style="--k:${(c || t).color || "#777"}">${esc(initials(nm))}</span>
-        ${now ? `<span class="tbnow"><em>${esc((w => w.length > 1 && /^(hermano|hermana|sir|lady|lord|fray|sor|don|doña)$/i.test(w[0]) ? w[1] : w[0])(String(nm).replace(/\s*\(.*?\)/g, "").trim().split(/\s+/)))}</em>${hpRow}${cdRow}</span>` : hpRow + cdRow}</span>`;
+      return `<span class="tbchip tbcard ${t.kind}${now ? " now" : ""}${h && h.cur <= 0 ? " down" : ""}${t.owner && t.owner === me() ? " mine" : ""}${fx}" data-tsel="${t.id}" title="${esc(nm)}${ini != null ? ` · iniciativa ${ini}` : ""}${h ? ` · ${exact ? `${h.cur}/${h.max} PG` : healthWord(h.cur, h.max)}` : ""}${cds.length ? " · " + cds.map(cd => estado(cd.id).n).join(", ") : ""}${esc(lastTip)}">${badge}
+        ${cardArt(t, c)}
+        <span class="tbinfo"><em>${esc(shortNm(nm))}</em>${hpRow}${condRow(cds)}</span></span>`;
     };
     const stripHTML = seq.map(chip).join("") || `<span class="tbidle">Esperando iniciativas…</span>`;
     if (stripHTML !== lastStrip) {
       lastStrip = stripHTML; tb.innerHTML = stripHTML;
+      $$("[data-img]", tb).forEach(async b => { const url = await getImage(b.dataset.img); if (url && b.isConnected) { b.style.backgroundImage = `url('${url}')`; b.classList.add("ok"); } });
       $$("[data-tsel]", tb).forEach(x => x.onclick = () => selectTok(x.dataset.tsel));
       fitStrip();
     }
