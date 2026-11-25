@@ -1149,3 +1149,14 @@ Quedan para probar (QUIZÁ): la tensión de combate (E4), las huellas (L1) y las
 ## Hito 103 — La botonera de la cámara vuelve a como estaba
 
 - Se quita el botón ⚙ del Hito 100: desplazaba la barra y lo que desplegaba no se veía. Órbita, muros, cuadrícula, detalles, calidad y volumen vuelven a estar a la vista, como antes.
+
+## Hito 104 — Paquete C: página de inicio
+
+- **«Anteriormente…» (I1)**: ya no se estira con la columna del grupo. Es una tarjeta de altura fija con el mapa de fondo, y se lee entera también en la vista del máster.
+- **Avatares (I2)**: llevan el retrato del personaje si lo tiene; si no, las iniciales salen en blanco con sombra.
+- **Grupo del máster (I3)**: lista compacta. Cambiar el papel o sacar a alguien del mundo está en el menú «⋯» de cada uno.
+- **Sesiones anteriores (I4)**: salen plegadas, con título y fecha, y se abren al pulsar. Ya no se repite el texto del «Anteriormente…».
+- **Tu personaje (I5)**: el jugador ve una tarjeta con su retrato, clase y nivel, una barra de PG, si puede subir de nivel, si tiene inspiración, los susurros del máster y un enlace a su ficha.
+- **Lo preparado (I6)**: junto a «Empezar sesión», el máster ve las escenas preparadas para la próxima sesión (con enlace) y cuántos eventos tiene pendientes.
+- **Cabecera (I7)**: la del máster vuelve a caber en una fila (en pantallas de menos de 1700 px se oculta el nombre junto al avatar).
+- **Actualizar escenas de ejemplo**: botón para el máster en Inicio. Añade a las escenas de ejemplo de la campaña las piezas nuevas (lingotes, noray, farol de pared…), sin tocar lo que haya cambiado el máster ni poner nada en casillas ocupadas. Se puede pulsar más veces: no duplica nada.

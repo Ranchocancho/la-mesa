@@ -7,6 +7,9 @@ import { getImage } from "../core/images.js";
 import { exampleMap } from "../data/worldmap.js";
 import { $, $$, esc, avatar, toast, pickFile } from "../core/ui.js";
 import { exportBackup, readBackup, restoreBackup, lastBackup } from "../core/copia.js";
+import { exampleScenes } from "../data/escenas.js";
+import { loreOf } from "../core/lore.js";
+import { whispersFor } from "../core/tiempolibre.js";
 
 let el = null, editing = null;
 
@@ -35,10 +38,11 @@ function draw() {
     <section class="livebox ${live ? "on" : ""}">
       ${live ? `<div><b>${esc(sessionName(live))}</b><span>${live.test ? "Solo la veis el administrador y los másteres" : "Todo el grupo está invitado"}</span></div>
         <a class="btn gold" href="#partida">${dm ? "Ir a la partida" : "Unirse a la partida"}</a>`
-      : dm ? `<div><b>Sesión ${nextNumber(state)}</b><span>Al empezar, todos verán el «Anteriormente…».</span></div>
+      : dm ? `<div><b>Sesión ${nextNumber(state)}</b><span>Al empezar, todos verán el «Anteriormente…».</span>${prepSummary(state)}</div>
         <div class="row"><button class="btn gold" id="start">Empezar sesión</button><button class="btn" id="starttest">Sesión de pruebas</button></div>`
       : `<div><b>Sin partida</b><span>Te avisaremos aquí cuando el máster empiece.</span></div>`}
     </section>
+    ${!dm ? myCharCard(state, me) : ""}
     <div class="lobby">
       <section class="recap" id="recapbg">
         <div class="in">
@@ -61,7 +65,10 @@ function draw() {
         ${dm ? `<h2 class="sec" style="margin-top:20px">Copia de seguridad</h2>
           <p class="note" style="margin:0 0 8px">Descarga todo el mundo en un archivo (lugares, lore, fichas, escenas, crónica e imágenes). Guárdalo en tu ordenador o en la nube. ${backupAge()}</p>
           <div class="row"><button class="btn gold small" id="bkdown">⬇ Descargar copia</button><button class="btn small" id="bkup">⬆ Restaurar una copia</button></div>
-          <div id="bkbox"></div>` : ""}
+          <div id="bkbox"></div>
+          <h2 class="sec" style="margin-top:20px">Escenas de ejemplo</h2>
+          <p class="note" style="margin:0 0 8px">Añade a tus escenas de ejemplo las piezas nuevas que hayan salido (lingotes, noray, farol de pared…). No toca nada de lo que hayas cambiado tú y no pone nada encima de una casilla ocupada.</p>
+          <div class="row"><button class="btn small" id="exupd">⟳ Actualizar escenas de ejemplo</button></div>` : ""}
       </section>
     </div>
     <section style="margin-top:24px"><h2 class="sec">Sesiones anteriores</h2>
@@ -69,7 +76,7 @@ function draw() {
           <label class="field">Título<input id="etitle" value="${esc(x.title)}"></label>
           <label class="field" style="margin-top:8px">Resumen<textarea id="erecap" rows="5">${esc(x.recap)}</textarea></label>
           <div class="row" style="margin-top:8px"><button class="btn gold small" id="esave">Guardar</button><button class="btn small" id="ecancel">Cancelar</button></div></div>`
-        : `<div class="sess"><div class="head"><b>Sesión ${x.n} · ${esc(x.title)}</b><small>${esc(x.date || "")}</small>${dm ? `<button class="btn small" data-edit="${x.id}">Editar</button>` : ""}</div><p>${esc(x.recap)}</p></div>`).join("") || `<p class="empty">Aún no habéis jugado ninguna sesión.</p>`}</div>
+        : `<details class="sess"><summary class="head"><b>Sesión ${x.n} · ${esc(x.title)}</b><small>${esc(x.date || "")}</small>${dm ? `<button class="btn small" data-edit="${x.id}">Editar</button>` : ""}</summary><p>${esc(x.recap)}</p></details>`).join("") || `<p class="empty">Aún no habéis jugado ninguna sesión.</p>`}</div>
     </section>
   </div>`;
   drawParty();
@@ -121,8 +128,41 @@ function draw() {
       };
     } catch (e) { box.innerHTML = `<p class="warn">${esc(e.message)}</p>`; }
   });
+  on("exupd", () => { const n = updateExamples(); toast(n.props ? `Añadidas ${n.props} piezas nuevas en ${n.scenes} escenas.` : "Tus escenas de ejemplo ya tienen todas las piezas nuevas."); });
+  fillAvatars();
   const rs = $("#reset");
   if (rs) rs.onclick = () => { if (rs.dataset.sure) { store.reset(); toast("Mundo de ejemplo restablecido"); } else { rs.dataset.sure = "1"; rs.textContent = "Pulsa otra vez para confirmar"; } };
+}
+
+/* ---------- Hito 104: inicio más útil ---------- */
+// Retratos de los personajes en los avatares (en vez de iniciales que no se leían)
+async function fillAvatars() { for (const b of $$("[data-avimg]", el)) { const u = await getImage(b.dataset.avimg); if (u && b.isConnected) { b.style.background = `#2a1f15 url('${u}') center/cover`; b.textContent = ""; } } }
+function prepSummary(s) {
+  const chaps = loreOf(s).filter(e => e.kind === "chapter" && !e.session), ev = loreOf(s).filter(e => e.kind === "event" && e.status === "pendiente");
+  if (!chaps.length && !ev.length) return `<span class="prep">Nada preparado todavía · <a href="#lore/s:chapter">Preparar sesión</a></span>`;
+  return `<span class="prep">${chaps.length ? `📂 ${chaps.length} ${chaps.length === 1 ? "escena preparada" : "escenas preparadas"}: ${chaps.slice(0, 3).map(c => `<a href="#lore/${c.id}">${esc(c.name)}</a>`).join(", ")}${chaps.length > 3 ? "…" : ""}` : ""}${chaps.length && ev.length ? " · " : ""}${ev.length ? `⚡ ${ev.length} ${ev.length === 1 ? "evento pendiente" : "eventos pendientes"}` : ""}</span>`;
+}
+function myCharCard(s, me) {
+  const c = s.characters.find(x => x.owner === me.id); if (!c) return "";
+  const hp = c.hp || {}, up = (c.lvlGrant || 0) > (c.level || 1), wh = whispersFor(s).filter(w => w.to === me.id && !w.read).length;
+  return `<section class="mychar"><span class="av big"${c.portrait ? ` data-avimg="${esc(c.portrait)}"` : ""} style="background:radial-gradient(circle at 35% 30%, ${c.color || "#888"}, #2a1f15 130%)">${esc((c.name || "?").split(/\s+/).slice(0, 2).map(w => w[0]).join("").toUpperCase())}</span>
+    <div class="mcmain"><b>${esc(c.name)}</b><span>${esc(c.cls || "")} ${c.level || 1}${c.species ? " · " + esc(c.species) : ""}</span>
+      ${hp.max ? `<span class="mchp"><i style="width:${Math.max(0, Math.min(100, Math.round((hp.cur || 0) / hp.max * 100)))}%"></i><em>${hp.cur ?? hp.max} / ${hp.max} PG</em></span>` : ""}</div>
+    <div class="mcchips">${up ? `<a class="chip gold" href="#personajes">⬆ Puedes subir a nivel ${c.lvlGrant}</a>` : ""}${c.inspiration ? `<span class="chip">✨ Inspiración</span>` : ""}${wh ? `<a class="chip" href="#personajes">✉ ${wh} ${wh === 1 ? "susurro" : "susurros"} del máster</a>` : ""}<a class="btn small" href="#personajes">Ver mi ficha</a></div></section>`;
+}
+/** Añade a las escenas de ejemplo de la campaña las piezas nuevas de los ejemplos (Hito 97b en adelante). */
+function updateExamples() {
+  const E = exampleScenes(), res = { props: 0, scenes: 0 };
+  store.commit("scenes", st => {
+    (st.scenes || []).forEach(sc => {
+      const ex = E.find(x => x.name === sc.name); if (!ex) return;
+      const busy = new Set([...(sc.props || []), ...(sc.tokens || [])].map(p => p.c + "," + p.r));
+      const add = ex.props.filter(p => String(p.id || "").startsWith("x") && !(sc.props || []).some(q => q.id === p.id || (q.k === p.k && q.c === p.c && q.r === p.r)) && !busy.has(p.c + "," + p.r));
+      if (!add.length) return;
+      sc.props = [...(sc.props || []), ...add.map(p => ({ ...p }))]; res.props += add.length; res.scenes++;
+    });
+  });
+  return res;
 }
 
 function backupAge() {
@@ -144,7 +184,9 @@ function drawParty() {
       ? `<select class="btn small" data-role="${u.id}" aria-label="Papel de ${esc(u.name)}"><option value="player" ${u.role === "player" ? "selected" : ""}>Jugador</option><option value="dm" ${u.role === "dm" ? "selected" : ""}>Máster</option></select><button class="btn small danger" data-kick="${u.id}" title="Sacar del mundo">✕</button>`
       : `<span>${esc(ROLE[u.role] || "Jugador")}</span>`;
     const sub = ch ? `${esc(ch.name)} · ${esc(ch.cls)} ${ch.level}${u.role !== "player" ? ` · ${esc(ROLE[u.role])}` : ""}` : u.role === "player" ? "Sin personaje asignado" : esc(ROLE[u.role]);
-    return `<div class="pc">${avatar(ch && u.role === "player" ? ch : u, 44)}<div><b>${esc(u.name)}</b><span>${sub}</span>${admin && u.email ? `<small class="pcmail">${esc(u.email)}</small>` : ""}</div><div class="pcend">${role}${status(u.id)}</div></div>`;
+    const av = avatar(ch && u.role === "player" ? ch : u, 40), avp = ch && ch.portrait ? av.replace('<span class="av"', `<span class="av" data-avimg="${esc(ch.portrait)}"`) : av;
+    const menu = admin && u.role !== "admin" && u.id !== myId ? `<details class="pcmenu"><summary title="Cambiar papel o sacar del mundo" aria-label="Opciones">⋯</summary><div>${role}</div></details>` : `<span class="pcrole">${esc(ROLE[u.role] || "Jugador")}</span>`;
+    return `<div class="pc compact">${avp}<div><b>${esc(u.name)}</b><span>${sub}</span>${admin && u.email ? `<small class="pcmail">${esc(u.email)}</small>` : ""}</div><div class="pcend">${status(u.id)}${menu}</div></div>`;
   });
   let assign = "";
   // El administrador y los másteres también pueden llevar su propio personaje (Hito 78)
@@ -156,6 +198,7 @@ function drawParty() {
         <select class="btn small" data-char="${c.id}" aria-label="Jugador de ${esc(c.name)}"><option value="">Sin jugador</option>${owners.map(p => `<option value="${p.id}" ${c.owner === p.id ? "selected" : ""}>${esc(p.name)}${p.role !== "player" ? ` (${ROLE[p.role].toLowerCase()})` : ""}</option>`).join("")}</select></label>`).join("")}`;
   }
   box.innerHTML = rows.join("") + (players.length || !dm ? "" : `<p class="empty">Aún no se ha unido ningún jugador. Mándales el enlace de invitación.</p>`) + assign;
+  fillAvatars();
   $$("[data-role]", box).forEach(sel => sel.onchange = () => store.commit("place", s => {
     const u = s.users.find(x => x.id === sel.dataset.role); u.role = sel.value;
     s.dms = s.users.filter(x => x.role === "dm").map(x => x.id);

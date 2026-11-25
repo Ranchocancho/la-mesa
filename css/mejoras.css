@@ -227,3 +227,30 @@
 .note.warn{color:#e0907a}
 .lties select,.lties input,.lside input,.lside select,.lside textarea,.pres input,select[data-presadd],.tledit input[data-tlname]{background:#1b1511;color:#f0e6d2;border:1px solid var(--linea,#4a3a2a);border-radius:7px;padding:4px 8px;font:inherit;font-size:13px}
 .lside textarea{resize:vertical}
+
+/* Hito 104: inicio */
+.lobby{align-items:start}
+.recap{min-height:260px;max-height:340px}
+.av{color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.9),0 0 4px rgba(0,0,0,.6)}
+.pc.compact{padding:8px 10px;gap:10px}
+.pc.compact .pcend{display:flex;align-items:center;gap:8px}
+.pcmenu{position:relative}
+.pcmenu summary{list-style:none;cursor:pointer;width:28px;height:28px;border-radius:8px;display:grid;place-items:center;border:1px solid var(--linea);font-size:18px;line-height:1}
+.pcmenu summary::-webkit-details-marker{display:none}
+.pcmenu>div{position:absolute;right:0;top:32px;z-index:10;display:flex;gap:6px;padding:8px;border-radius:10px;background:#16110d;border:1px solid var(--linea);box-shadow:0 8px 20px rgba(0,0,0,.5)}
+.pcrole{font-size:12px;color:var(--tenue)}
+.livebox .prep{display:block;margin-top:6px;font-size:13px;color:#d8c8a8}.livebox .prep a{color:var(--oro)}
+.mychar{display:flex;align-items:center;gap:16px;margin:0 0 18px;padding:14px 16px;border-radius:12px;border:1px solid var(--linea);background:rgba(255,255,255,.03)}
+.mychar .av.big{width:64px;height:64px;font-size:20px}
+.mychar .mcmain{display:flex;flex-direction:column;gap:3px;min-width:220px}
+.mychar .mcmain b{font-family:var(--display);font-size:20px}.mychar .mcmain>span{color:var(--tenue);font-size:13px}
+.mchp{position:relative;display:block;height:18px;border-radius:6px;background:#2a1411;overflow:hidden;max-width:260px}
+.mchp i{display:block;height:100%;background:linear-gradient(#8cc45c,#3f6b22)}.mchp em{position:absolute;inset:0;display:grid;place-items:center;font-style:normal;font-size:12px;font-weight:700;color:#fff;text-shadow:0 1px 2px #000}
+.mcchips{display:flex;gap:8px;flex-wrap:wrap;margin-left:auto;align-items:center}
+.mcchips .chip{padding:4px 10px;border-radius:999px;border:1px solid var(--linea);font-size:13px;text-decoration:none;color:inherit}.mcchips .chip.gold{border-color:var(--oro);color:var(--oro)}
+details.sess summary{cursor:pointer;list-style:none}details.sess summary::-webkit-details-marker{display:none}
+details.sess summary b::before{content:"▸ ";color:var(--oro)}details.sess[open] summary b::before{content:"▾ "}
+details.sess p{margin-top:8px}
+/* I7: la cabecera del máster en una fila */
+@media (max-width:1700px){.top .me>div{display:none}.top .viewas{font-size:0}.top .viewas select{font-size:12.5px}.nav a{padding-left:7px;padding-right:7px}}
+.pc .av{font-size:14px;font-weight:800;text-shadow:0 0 3px #000,0 1px 2px #000,0 0 6px rgba(0,0,0,.8)}
