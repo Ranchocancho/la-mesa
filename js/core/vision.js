@@ -20,7 +20,7 @@ export const LIGHT_ITEMS = {
 /** Objetos de escenografía que dan luz. Hoguera: como una antorcha (regla de campaña). */
 // Hito 90: el pilar con antorcha alumbra como una antorcha y el farol como una lámpara (SRD).
 // El SRD no define braseros: aquí alumbran como una antorcha (regla de campaña).
-const PROP_LIGHT = { antorcha: LIGHT_ITEMS.antorcha, velas: LIGHT_ITEMS.vela, hoguera: LIGHT_ITEMS.antorcha, pilarantorcha: LIGHT_ITEMS.antorcha, farol: LIGHT_ITEMS.lampara, brasero: LIGHT_ITEMS.antorcha };
+const PROP_LIGHT = { farolpared: LIGHT_ITEMS.lampara, antorcha: LIGHT_ITEMS.antorcha, velas: LIGHT_ITEMS.vela, hoguera: LIGHT_ITEMS.antorcha, pilarantorcha: LIGHT_ITEMS.antorcha, farol: LIGHT_ITEMS.lampara, brasero: LIGHT_ITEMS.antorcha };
 export const LEVELS = { bright: "☀️ Luz brillante", dim: "◐ Luz tenue", dark: "● Oscuridad" };
 /** Luz de la escena: la que elija el máster; si no, de noche hay oscuridad y si no, luz brillante. */
 export const ambientLevel = g => g && LEVELS[g.light] ? g.light : g && (g.ambient === "noche" || g.ambient === "oscuro") ? "dark" : g && g.ambient === "penumbra" ? "dim" : "bright";
@@ -56,6 +56,14 @@ export function sightLine(grid) {
   };
 }
 
+/** Hito 108: las fuentes de luz de la escena, para dibujarlas en el plano 2D: [{ c, r, b, d, color }] (radios en casillas). */
+const LIGHT_COLOR = { orbe: "#7ab8ff", circulo: "#b77cff", cristales: "#9fe0ff", velas: "#ffd59a", farol: "#ffcf8a", farolillos: "#ffc070", farolpared: "#ffcf8a", forja: "#ff8a40", granhoguera: "#ff9a40", hoguera: "#ffa04a", brasero: "#ffa04a" };
+export function lightSources(grid, tokens = []) {
+  const out = [];
+  for (const p of grid.props || []) { const x = PROP_LIGHT[p.k] || ((PROPS[p.k] || {}).light ? { b: Math.ceil(PROPS[p.k].light / 2), d: PROPS[p.k].light } : null); if (x) out.push({ c: p.c, r: p.r, b: x.b, d: x.d, color: LIGHT_COLOR[p.k] || "#ffb060", k: p.k }); }
+  for (const t of tokens) { const x = LIGHT_ITEMS[t.light]; if (x && !t.hidden) out.push({ c: t.c, r: t.r, b: x.b, d: x.d, color: t.light === "luz" ? "#fff4d8" : "#ffb868", tok: t.id }); }
+  return out;
+}
 /** Nivel de luz de cada casilla: 2 brillante, 1 tenue, 0 oscuridad. */
 export function lightMap(grid, tokens = []) {
   const amb = { bright: 2, dim: 1, dark: 0 }[ambientLevel(grid)];

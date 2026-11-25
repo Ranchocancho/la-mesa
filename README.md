@@ -1178,3 +1178,11 @@ Cada pieza del catálogo se ha fotografiado sola en la mesa 3D y se han rehecho 
 - **Trampa «red que cae»**: es la red recogida en el suelo con sus pesos (antes, una placa que disparada se veía negra).
 - **Rehechas**: vagoneta de mina (con carga y raíles), estantería (librería de pie; el modelo de pared salía tumbado), calavera (montón de calaveras), gran hoguera (pira con aro de piedras), tótem, montón de paja, montículo de nieve, grieta, cuervos y manglar.
 - **Retocadas**: el árbol gigante es el doble de alto que uno normal, y el botín pequeño (gemas, llaves, mapas, cartas, armas, pociones, libros, lingotes…) sale 1,6 veces más grande, porque desde la cámara normal casi no se veía.
+
+## Hito 108 — Plano 2D al estilo de Foundry VTT (1.ª parte: suelo y luz)
+
+- **Suelo pintado** (nuevo `js/views/plano2d.js`): el plano ya no son casillas sueltas. Cada terreno lleva su textura; los naturales (hierba, barro, ceniza, cueva, agua…) se derraman sobre sus vecinos con bordes irregulares y difuminados, y los construidos (losas, madera, adoquín, muelle…) quedan nítidos. El agua profunda es más oscura. Al pie de los muros hay una sombra suave, y los muros llevan su canto iluminado. Se pinta una vez en un lienzo y solo se rehace si cambia el terreno.
+- **Luz y sombras, como en Foundry**: la escena se oscurece según su ambiente (interior, penumbra, noche, oscuridad) y cada luz la «abre» con su radio de luz brillante y su radio de luz tenue (los del SRD), con el borde suave. La luz se corta en los muros y en las puertas cerradas: se calcula el polígono de visibilidad de cada luz, como hace Foundry. Encima, el color de cada luz (cálido en antorchas y hogueras, azul en el orbe, violeta en el círculo ritual), y las antorchas, hogueras y braseros parpadean.
+- **Botón 💡**: en la partida, la luz está encendida por defecto; en el editor, apagada (para pintar con todo a la vista). Cada uno lo cambia con 💡, y se recuerda. El máster ve la oscuridad más suave que los jugadores, para no perderse en su propio mapa.
+- El farol de pared alumbra como una lámpara (SRD).
+- En la partida ya no se dibujan las rayas de terreno difícil (siguen en el editor).

@@ -254,3 +254,9 @@ details.sess p{margin-top:8px}
 /* I7: la cabecera del máster en una fila */
 @media (max-width:1700px){.top .me>div{display:none}.top .viewas{font-size:0}.top .viewas select{font-size:12.5px}.nav a{padding-left:7px;padding-right:7px}}
 .pc .av{font-size:14px;font-weight:800;text-shadow:0 0 3px #000,0 1px 2px #000,0 0 6px rgba(0,0,0,.8)}
+
+/* Hito 108: plano 2D estilo Foundry */
+.board foreignObject.glow2d canvas{mix-blend-mode:screen}
+.board foreignObject.glow2d canvas.flick{animation:flick2d 2.4s infinite}
+@keyframes flick2d{0%{opacity:.9}12%{opacity:.78}20%{opacity:.95}33%{opacity:.82}47%{opacity:1}60%{opacity:.86}71%{opacity:.94}85%{opacity:.8}100%{opacity:.9}}
+.boardzoom [data-luz][aria-pressed="true"]{background:rgba(214,170,78,.25);border-color:var(--oro)}

@@ -14,6 +14,7 @@ import { store } from "../core/store.js";
 import { leftOf } from "../core/duraciones.js";
 import { TERRAIN, TERRAIN_CATS, PROPS, PROP_CATS, REGIONS, inRegion, isDoor, isWallT, propVisible } from "../data/mapas.js";
 import { terrainURL } from "./texturas.js";
+import { floorCanvas, floorSig, lightCanvases, lightSig } from "./plano2d.js";
 import { generateDungeon, generateRegion, addRelief } from "../core/generador.js";
 import { sound } from "../core/sonido.js";
 import { pathTo, moveHint } from "../core/movimiento.js";
@@ -51,7 +52,7 @@ export function createBoard(host, opts) {
   host.classList.add("board");
   host.innerHTML = `<svg class="boardsvg" aria-label="Tablero"><defs></defs><g class="world"></g><g class="ruler"></g><g class="fxl"></g></svg><div class="bvig" aria-hidden="true"></div>
     ${opts.edit ? `<div class="mapeditor" role="toolbar" aria-label="Editor de mapas"></div>` : ""}
-    <div class="boardzoom"><button data-z="1.25" aria-label="Acercar">+</button><button data-z="0.8" aria-label="Alejar">−</button><button data-z="fit" aria-label="Encajar">⤢</button>${opts.edit ? "" : `<button data-ruler aria-pressed="false" title="Medir distancias: arrastra de una casilla a otra" aria-label="Regla">📏</button>`}</div>
+    <div class="boardzoom"><button data-z="1.25" aria-label="Acercar">+</button><button data-z="0.8" aria-label="Alejar">−</button><button data-z="fit" aria-label="Encajar">⤢</button><button data-luz aria-pressed="false" title="Luz y sombras (como en Foundry): oscuridad de la escena, luces que se cortan en los muros" aria-label="Luz">💡</button>${opts.edit ? "" : `<button data-ruler aria-pressed="false" title="Medir distancias: arrastra de una casilla a otra" aria-label="Regla">📏</button>`}</div>
     <div class="dragtip" hidden></div>`;
   const svg = host.querySelector("svg"), world = svg.querySelector(".world"), defs = svg.querySelector("defs"), tip = host.querySelector(".dragtip");
   const fxl = svg.querySelector(".fxl"), rulerG = svg.querySelector(".ruler");
@@ -166,6 +167,26 @@ export function createBoard(host, opts) {
     });
   }
 
+  /* ---------- Hito 108: suelo pintado y luz (estilo Foundry), en lienzos que no se rehacen en cada dibujo ---------- */
+  const NSX = "http://www.w3.org/2000/svg";
+  const mkFO = cls => { const fo = document.createElementNS(NSX, "foreignObject"); fo.setAttribute("class", cls); fo.style.pointerEvents = "none"; const cv = document.createElement("canvas"); cv.style.cssText = "width:100%;height:100%;display:block;pointer-events:none"; fo.appendChild(cv); return { fo, cv }; };
+  const FLOOR = mkFO("floor2d"), DARKL = mkFO("dark2d"), GLOWL = mkFO("glow2d");
+  let floorKey = "", lightKey = "";
+  const LUZ = () => { try { const v = localStorage.getItem("lamesa:luz2d" + (opts.edit ? ":ed" : "")); return v == null ? !opts.edit : v === "1"; } catch (e) { return !opts.edit; } };
+  function paintPlano(grid, tokens) {
+    const P = Math.max(20, Math.min(56, Math.floor(4096 / Math.max(grid.cols, grid.rows))));
+    const fk = floorSig(grid) + "|" + P;
+    if (fk !== floorKey) { floorKey = fk; const c = floorCanvas(grid, P); FLOOR.cv.width = c.width; FLOOR.cv.height = c.height; FLOOR.cv.getContext("2d").drawImage(c, 0, 0); }
+    [FLOOR, DARKL, GLOWL].forEach(L => { L.fo.setAttribute("x", 4); L.fo.setAttribute("y", 4); L.fo.setAttribute("width", grid.cols * T); L.fo.setAttribute("height", grid.rows * T); });
+    const on = LUZ(), lk = on ? lightSig(grid, tokens, opts.dm) : "off";
+    if (lk !== lightKey) {
+      lightKey = lk; const Lc = on ? lightCanvases(grid, tokens, 16, { dm: opts.dm && !opts.asPlayer }) : null;
+      [[DARKL, Lc && Lc.dark], [GLOWL, Lc && Lc.glow]].forEach(([L, c]) => { if (c) { L.cv.width = c.width; L.cv.height = c.height; L.cv.getContext("2d").drawImage(c, 0, 0); L.fo.style.display = ""; } else L.fo.style.display = "none"; });
+      GLOWL.cv.classList.toggle("flick", !!(Lc && Lc.flicker));
+    }
+  }
+
+  { const lb = host.querySelector("[data-luz]"); if (lb) { lb.setAttribute("aria-pressed", LUZ()); lb.onclick = () => { const on = !LUZ(); try { localStorage.setItem("lamesa:luz2d" + (opts.edit ? ":ed" : ""), on ? "1" : "0"); } catch (e) {} lb.setAttribute("aria-pressed", on); lightKey = "?"; render(); }; } }
   /* ---------- Dibujo ---------- */
   const usedPatterns = new Set();
   function pattern(k) {
@@ -187,7 +208,10 @@ export function createBoard(host, opts) {
     if (!vb) fit();
     const t = grid.terrain || {}, wallAt = (c, r) => c < 0 || r < 0 || c >= grid.cols || r >= grid.rows ? false : isWallT(t[key(c, r)]);
     let cells = "", walls = "", dif = "";
+    paintPlano(grid, tokens);
     for (let r = 0; r < grid.rows; r++) for (let c = 0; c < grid.cols; c++) {
+      if (!opts.edit) continue; // fuera del editor el terreno ya está en el lienzo del suelo
+      { const ty0 = TERRAIN[t[key(c, r)]]; if (ty0 && ty0.dif) { const [x0, y0] = center(c, r); dif += `<rect x="${x0 - S}" y="${y0 - S}" width="${T}" height="${T}" fill="url(#difh)"/>`; } continue; }
       const [x, y] = center(c, r), k = t[key(c, r)], ty = TERRAIN[k];
       if (ty && ty.wall) {
         if (ty.void) { walls += `<rect x="${x - S}" y="${y - S}" width="${T}" height="${T}" fill="#0a0908"/>`; continue; }
@@ -253,7 +277,8 @@ export function createBoard(host, opts) {
     // Apuntar (BG3): alcance del arma o conjuro y, sobre cada criatura, cómo sería el golpe
     TG = opts.targeting ? opts.targeting() : null;
     const tgt = targetSvg(TG, tokens, grid, fog);
-    world.innerHTML = `<g class="cells">${cells}</g><g>${dif}</g>${relief.under}<g filter="url(#wsh)">${walls}</g>${grid2}${hzSvg(grid)}${relief.over}${start}<g class="props">${props}</g><g class="fog">${fogSvg}</g><g class="reach">${reach}</g><g class="trange">${tgt.under}</g><g class="tmpl"></g><g class="toks">${toks}</g><g class="tmarks">${tgt.over}</g><g class="aim">${aimSvg}</g><g class="ghost"></g>`;
+    world.innerHTML = `<g class="floorslot"></g><g>${dif}</g>${relief.under}${grid2}${hzSvg(grid)}${relief.over}${start}<g class="props">${props}</g><g class="lightslot"></g><g class="fog">${fogSvg}</g><g class="reach">${reach}</g><g class="trange">${tgt.under}</g><g class="tmpl"></g><g class="toks">${toks}</g><g class="tmarks">${tgt.over}</g><g class="aim">${aimSvg}</g><g class="ghost"></g>`;
+    world.querySelector(".floorslot").appendChild(FLOOR.fo); { const ls = world.querySelector(".lightslot"); ls.appendChild(DARKL.fo); ls.appendChild(GLOWL.fo); }
     if (TG && TG.kind === "tmpl") drawTmpl();
     ghost();
   }
