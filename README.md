@@ -1170,3 +1170,11 @@ Quedan para probar (QUIZÁ): la tensión de combate (E4), las huellas (L1) y las
 - **La mesa de juego**: la mesa de madera es más grande y tiene cinco puestos, como si os sentarais de verdad: cuatro jugadores (dos abajo y uno a cada lado) y el máster en la cabecera. En cada puesto hay hojas de personaje, un lápiz y algún dado; el máster tiene sus hojas de notas en abanico. Todo está tumbado sobre la mesa para no tapar la vista del tablero, y sale siempre igual para la misma escena (nuevo `js/views/mesajuego3d.js`).
 - **Fondos según el entorno**: alrededor de la mesa ya no sale siempre un bosque. Hay volcán (montañas con resplandor en la cumbre), costa (mar hasta el horizonte, barcos y un faro), ciudad (tejados y alguna ventana encendida de noche), pantano (árboles muertos y retorcidos), cementerio (colinas con cruces) o bosque. En interiores y cuevas, nada: el vacío oscuro funciona. La forja del volcán ya no sale rodeada de árboles.
 - **De noche se ven**: detrás de las siluetas hay una franja de horizonte más clara y, de noche, una luna baja, para que se recorten contra el cielo.
+
+## Hito 107 — Auditoría de calidad de las piezas 3D
+
+Cada pieza del catálogo se ha fotografiado sola en la mesa 3D y se han rehecho las que no se entendían:
+- **Costa**: la barca es una barca de remos de verdad (casco curvo, borda, bancos, remos); las redes están tendidas en su bastidor con boyas; el mástil lleva verga, vela recogida y cabos (la vela cuadrada se veía como un cuadrado negro).
+- **Trampa «red que cae»**: es la red recogida en el suelo con sus pesos (antes, una placa que disparada se veía negra).
+- **Rehechas**: vagoneta de mina (con carga y raíles), estantería (librería de pie; el modelo de pared salía tumbado), calavera (montón de calaveras), gran hoguera (pira con aro de piedras), tótem, montón de paja, montículo de nieve, grieta, cuervos y manglar.
+- **Retocadas**: el árbol gigante es el doble de alto que uno normal, y el botín pequeño (gemas, llaves, mapas, cartas, armas, pociones, libros, lingotes…) sale 1,6 veces más grande, porque desde la cámara normal casi no se veía.

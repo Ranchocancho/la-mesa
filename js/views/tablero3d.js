@@ -63,11 +63,12 @@ export function miniFor(t, ch) {
 const PROP3D = {
   mesa: ["dungeon/table_medium", 2], mesalarga: ["dungeon/table_long_decorated_A", 1.6], silla: ["dungeon/chair", 1.9], barril: ["dungeon/barrel_large", 1.45],
   caja: ["dungeon/crates_stacked", 1.45], cofre: ["dungeon/chest", 1.7], columna: ["dungeon/pillar_decorated", 1.6], cama: ["dungeon/bed_decorated", 1.45],
-  calavera: ["dungeon/rubble_large", 0.6], tonel: ["dungeon/keg", 1.45], baul: ["dungeon/trunk_large_A", 1.7], escaleras: ["dungeon/stairs", 0.8], rampa: ["dungeon/stairs", 0.8],
+  tonel: ["dungeon/keg", 1.45], baul: ["dungeon/trunk_large_A", 1.7], escaleras: ["dungeon/stairs", 0.8], rampa: ["dungeon/stairs", 0.8],
   velas: ["dungeon/candle_triple", 2.2], antorcha: ["dungeon/torch_mounted", 2.2, "wall"], estandarte: ["dungeon/banner_red", 1.5, "wall"], puerta: ["dungeon/wall_doorway", 1, "door"],
-  puertallave: ["dungeon/wall_doorway", 1, "door"], puertasecreta: ["dungeon/wall_doorway", 1, "door"], rastrillo: ["dungeon/wall_doorway", 1, "door"], puertarunas: ["dungeon/wall_doorway", 1, "door"],
-  estanteria: ["dungeon/shelf_large", 1.6]
+  puertallave: ["dungeon/wall_doorway", 1, "door"], puertasecreta: ["dungeon/wall_doorway", 1, "door"], rastrillo: ["dungeon/wall_doorway", 1, "door"], puertarunas: ["dungeon/wall_doorway", 1, "door"]
+  // Hito 107: la estantería y la calavera son ahora piezas hechas por código (el modelo salía tumbado / eran cascotes)
 };
+const PROC_TINY = ["lingotes", "gema", "llave", "mapa", "carta", "armasuelo", "escudo", "pocion", "pergamino", "joyas", "bolsa", "libro", "grimorio", "reliquia", "nota"]; // Hito 107: el botín pequeño apenas se veía
 const PROC_BIG = ["altar", "sarcofago", "estatua", "pozo", "brasero", "arbolmuerto", "setas", "cristales", "obsidiana"]; // piezas hechas por código que también se quedaban cortas
 const WALL_TALL = 1.6; // muros altos: 6,4 unidades ≈ 2,4 m (antes 1,5 m, más bajos que las figuras)
 // Texturas de terreno como materiales 3D (con relieve sacado de la propia imagen); una por tipo
@@ -806,7 +807,7 @@ export function createBoard3D(host, opts) {
       let obj = null;
       if (p.k === "arbol") obj = tree(Math.abs(Math.sin(p.c * 12.9898 + p.r * 78.233) * 43758.5453) % 1 * 1e4); else if (p.k === "arbusto") obj = bush(Math.abs(Math.sin(p.c * 39.3468 + p.r * 11.135) * 24634.6345) % 1 * 1e4); else if (p.k === "roca") obj = rock(); else if (p.k === "trampa") obj = trap();
       else if (p.k === "hoguera") obj = campfire();
-      else if (PROC[p.k]) { obj = PROC[p.k](fire); if (!["telarana"].includes(p.k)) obj.rotation.y = (p.rot || 0) * Math.PI / 2; if (PROC_BIG.includes(p.k)) obj.scale.multiplyScalar(1.35); }
+      else if (PROC[p.k]) { obj = PROC[p.k](fire); if (!["telarana"].includes(p.k)) obj.rotation.y = (p.rot || 0) * Math.PI / 2; if (PROC_BIG.includes(p.k)) obj.scale.multiplyScalar(1.35); if (PROC_TINY.includes(p.k)) obj.scale.multiplyScalar(1.6); }
       if (obj && PROC[p.k] && (PROPS[p.k] || {}).wall) { // Hito 97b: piezas de pared hechas por código (farol, carteles)
         const dirs = [[0, -1, 0], [1, 0, -Math.PI / 2], [0, 1, Math.PI], [-1, 0, Math.PI / 2]].filter(([dc, dr]) => isWallIn(g, p.c + dc, p.r + dr));
         const [dc, dr, rot] = dirs[0] || [0, -1, 0]; obj.rotation.set(0, rot, 0); obj.position.set(dc * (CELL / 2 - 0.05), (wh < 1 ? -0.9 : 0), dr * (CELL / 2 - 0.05));

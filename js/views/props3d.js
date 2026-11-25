@@ -51,7 +51,14 @@ Object.assign(PROC, {
   // Enano
   forja(fire) { const g = new THREE.Group(); g.add(M(box(2.6, 1.3, 2), darkStone(), 0, 0.65)); g.add(M(box(2.2, 0.08, 1.6), glowMat(0xff6a1a, 0xff3a00), 0, 1.33)); g.add(M(cyl(0.45, 0.6, 2.2, 6), stone(), 0.7, 2.4, -0.5)); const f = fire(0.8); f.position.set(0, 1.35, 0); g.add(f); g.userData.light = { y: 2, power: 1.3 }; return g; },
   yunque() { const g = new THREE.Group(); g.add(M(cyl(0.45, 0.55, 0.7, 8), darkWood(), 0, 0.35)); g.add(M(box(1.2, 0.3, 0.5), iron(), 0, 0.85)); const hn = M(new THREE.ConeGeometry(0.22, 0.6, 6), iron(), 0.8, 0.9, 0); hn.rotation.z = -Math.PI / 2; g.add(hn); return g; },
-  vagoneta() { const g = new THREE.Group(); g.add(M(box(1.6, 0.9, 2.2), iron(), 0, 0.85)); g.add(M(box(1.4, 0.25, 2), mat(0x4a4038), 0, 1.25)); [[-0.85, -0.7], [0.85, -0.7], [-0.85, 0.7], [0.85, 0.7]].forEach(([x, z]) => { const w = M(cyl(0.3, 0.3, 0.15, 10), darkStone(), x, 0.3, z); w.rotation.z = Math.PI / 2; g.add(w); }); return g; },
+  vagoneta() { /* Hito 107: vagoneta de mina de madera con flejes, carga de mineral y raíles (antes, una caja negra) */
+    const g = new THREE.Group(), wd = mat(0x6a4a2c), ir = iron(), ore = mat(0x5a5048), glint = mat(0xc89a3a, { metalness: 0.7, roughness: 0.35 });
+    [-0.75, 0.75].forEach(x => { const r = M(box(0.12, 0.1, 3.4), ir, x, 0.05); g.add(r); }); for (let z = -1.4; z <= 1.4; z += 0.7) g.add(M(box(1.9, 0.08, 0.25), mat(0x4a3420), 0, 0.02, z));
+    const body = M(new THREE.CylinderGeometry(1.15, 0.85, 1, 4, 1), wd, 0, 1.05); body.rotation.y = Math.PI / 4; body.scale.set(1, 1, 1.35); g.add(body);
+    [0.7, 1.4].forEach(y => { const b = M(new THREE.CylinderGeometry(y > 1 ? 1.17 : 1.02, y > 1 ? 1.17 : 1.02, 0.08, 4, 1, true), ir, 0, y); b.rotation.y = Math.PI / 4; b.scale.set(1, 1, 1.35); g.add(b); });
+    for (let i = 0; i < 7; i++) { const o = M(new THREE.DodecahedronGeometry(0.28 + R() * 0.12, 0), i % 3 ? ore : glint, (R() - 0.5) * 0.9, 1.55 + R() * 0.15, (R() - 0.5) * 1.3); g.add(o); }
+    [[-0.75, -0.75], [0.75, -0.75], [-0.75, 0.75], [0.75, 0.75]].forEach(([x, z]) => { const w = M(cyl(0.32, 0.32, 0.14, 12), ir, x, 0.38, z); w.rotation.z = Math.PI / 2; g.add(w); });
+    return g; },
   puntal() { const g = new THREE.Group(); [-1.2, 1.2].forEach(x => g.add(M(box(0.35, 3.4, 0.35), wood(), x, 1.7))); g.add(M(box(2.9, 0.35, 0.4), wood(), 0, 3.4)); return g; },
   ancestro() { const g = PROC.estatua(); g.add(M(new THREE.ConeGeometry(0.42, 0.9, 7), stone(), 0, 2.55)); g.add(M(box(1.2, 0.18, 0.18), stone(), 0, 2, 0.45)); return g; },
   mesapiedra() { const g = new THREE.Group(); g.add(M(box(2.8, 0.25, 1.5), stone(), 0, 1)); [-1, 1].forEach(x => g.add(M(box(0.4, 0.9, 1.1), darkStone(), x, 0.45))); return g; },
@@ -105,12 +112,37 @@ Object.assign(PROC, {
   geiser() { const g = new THREE.Group(); g.add(M(cyl(0.6, 1, 0.5, 8), mat(0x6a5a4a), 0, 0.25)); const m = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.3, depthWrite: false }); for (let i = 0; i < 5; i++) g.add(M(new THREE.SphereGeometry(0.4 + i * 0.15, 8, 6), m, (R() - 0.5) * 0.4, 0.8 + i * 0.6, (R() - 0.5) * 0.4)); return g; },
   obsidiana() { const g = new THREE.Group(), m = mat(0x3a3446, { roughness: 0.18, metalness: 0.5, emissive: 0x2a1240, emissiveIntensity: 0.7 }); /* Hito 96: brillo violáceo, no negro puro */ [[0, 1, 0, 1.2], [0.7, 0.6, 0.5, 0.7]].forEach(([x, y, z, s]) => { const r = M(new THREE.OctahedronGeometry(s, 0), m, x, y, z); r.scale.y = 1.6; r.rotation.y = R() * 3; g.add(r); }); return g; },
   // Costa
-  barca() { const g = new THREE.Group(); const h = M(new THREE.CylinderGeometry(0.9, 0.6, 3, 8, 1, false, 0, Math.PI), wood(), 0, 0.5); h.rotation.set(Math.PI / 2, 0, Math.PI); g.add(h); g.add(M(box(1.5, 0.08, 0.3), darkWood(), 0, 0.6)); return g; },
-  redes() { const g = new THREE.Group(); const m = M(new THREE.SphereGeometry(1, 8, 4, 0, Math.PI * 2, 0, Math.PI / 2), mat(0x8a7a5a, { wireframe: true }), 0, 0); m.scale.y = 0.3; g.add(m); return g; },
+  barca() { /* Hito 107: una barca de remos de verdad (antes, un medio cilindro que parecía un madero) */
+    const g = new THREE.Group(), hullM = new THREE.MeshStandardMaterial({ color: 0x7a5232, roughness: 0.85, flatShading: true, side: THREE.DoubleSide }), inM = mat(0x5a3a22), dw = darkWood();
+    const hull = M(new THREE.SphereGeometry(1, 18, 8, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2), hullM, 0, 0.62); hull.scale.set(1.85, 0.62, 0.8); g.add(hull);
+    const rim = M(new THREE.TorusGeometry(1, 0.07, 6, 28), dw, 0, 0.62); rim.rotation.x = Math.PI / 2; rim.scale.set(1.85, 0.8, 1); g.add(rim);
+    const floor = M(new THREE.CircleGeometry(1, 18), inM, 0, 0.18); floor.rotation.x = -Math.PI / 2; floor.scale.set(1.45, 0.55, 1); g.add(floor);
+    [-0.7, 0.55].forEach(x => g.add(M(box(0.32, 0.08, 1.45), dw, x, 0.5)));
+    const stripe = M(new THREE.TorusGeometry(1, 0.05, 4, 28), mat(0x2a5a7a), 0, 0.42); stripe.rotation.x = Math.PI / 2; stripe.scale.set(1.78, 0.77, 1); g.add(stripe);
+    [-1, 1].forEach(sd => { const oar = new THREE.Group(); oar.add(M(cyl(0.04, 0.04, 2.8, 5), wood(), 0, 0)); oar.add(M(box(0.03, 0.7, 0.22), wood(), 0, -1.6)); oar.rotation.set(Math.PI / 2 - 0.25, 0, sd * 0.35); oar.position.set(-0.1, 0.55, sd * 0.55); oar.rotateZ(sd * 1.2); g.add(oar); });
+    return g; },
+  redes() { /* Hito 107: redes de pesca tendidas en su bastidor, con boyas (antes, una media esfera de alambre) */
+    const g = new THREE.Group(), dw = darkWood(), net = new THREE.MeshStandardMaterial({ map: netTex(), alphaTest: 0.35, transparent: true, side: THREE.DoubleSide, roughness: 1 });
+    [-1.2, 1.2].forEach(x => g.add(M(cyl(0.07, 0.09, 2.2, 6), dw, x, 1.1))); g.add(M(cyl(0.05, 0.05, 2.7, 6), dw, 0, 2.15)); g.children[2].rotation.z = Math.PI / 2;
+    const hang = M(new THREE.PlaneGeometry(2.4, 1.7, 8, 6), net, 0, 1.3); const pp = hang.geometry.attributes.position; for (let i = 0; i < pp.count; i++) pp.setZ(i, Math.sin(pp.getX(i) * 2.2) * 0.08 + (0.85 - pp.getY(i)) * 0.06); hang.geometry.computeVertexNormals(); g.add(hang);
+    const pile = M(new THREE.SphereGeometry(0.8, 10, 6, 0, Math.PI * 2, 0, Math.PI / 2), net, 0.5, 0, 1); pile.scale.set(1.2, 0.35, 0.9); g.add(pile);
+    [[0.1, 0.1, 1.2, 0xe0703a], [0.9, 0.1, 0.8, 0xf0e6d0], [-0.3, 0.1, 0.7, 0xe0703a]].forEach(([x, y, z, c]) => g.add(M(new THREE.SphereGeometry(0.13, 8, 6), mat(c), x, y + 0.05, z)));
+    return g; },
   ancla() { const g = new THREE.Group(), m = iron(); g.add(M(cyl(0.08, 0.08, 1.8, 6), m, 0, 0.9)); const a = M(new THREE.TorusGeometry(0.6, 0.08, 6, 12, Math.PI), m, 0, 0.6); a.rotation.z = Math.PI; g.add(a); g.add(M(new THREE.TorusGeometry(0.2, 0.05, 6, 10), m, 0, 1.9)); g.rotation.z = 0.5; g.position.y = 0.3; return g; },
-  mastil() { const g = new THREE.Group(); g.add(M(cyl(0.18, 0.25, 6, 8), wood(), 0, 3)); g.add(M(box(2.8, 0.15, 0.15), darkWood(), 0, 4.8)); const v = M(box(2.4, 2.4, 0.04), mat(0xe8e0cc), 0, 3.5, 0.2); g.add(v); return g; },
+  mastil() { /* Hito 107: mástil con verga, vela recogida y cabos (antes, una vela cuadrada que se veía como un cuadrado negro) */
+    const g = new THREE.Group(), dw = darkWood(), rope = mat(0xb89a6a), sail = mat(0xe8e0cc);
+    g.add(M(box(0.8, 0.3, 0.8), dw, 0, 0.15)); g.add(M(cyl(0.16, 0.24, 6.4, 8), wood(), 0, 3.3));
+    const yard = M(cyl(0.08, 0.08, 3.2, 6), dw, 0, 5); yard.rotation.z = Math.PI / 2; g.add(yard);
+    const furl = M(cyl(0.22, 0.22, 2.8, 8), sail, 0, 4.78); furl.rotation.z = Math.PI / 2; g.add(furl);
+    [-1.5, 1.5].forEach(x => { const r = M(cyl(0.02, 0.02, 5.2, 4), rope, x * 0.5, 2.5, 0); r.rotation.z = -x * 0.19; g.add(r); });
+    g.add(M(cyl(0.2, 0.2, 0.25, 8), dw, 0, 6.55));
+    return g; },
   // Trampas del SRD (las ocultas parecen una losa; la estatua y la roca se ven)
-  aguja() { return PROC.trampaoculta(); }, dardos() { return PROC.trampaoculta(); }, red() { return PROC.trampaoculta(); }, techo() { return PROC.trampaoculta(); },
+  aguja() { return PROC.trampaoculta(); }, dardos() { return PROC.trampaoculta(); }, red() { /* Hito 107: la red que cae, recogida en el suelo con sus pesos (antes, una placa que se veía como un cuadrado negro) */
+    const g = new THREE.Group(), net = new THREE.MeshStandardMaterial({ map: netTex(), alphaTest: 0.35, transparent: true, side: THREE.DoubleSide, roughness: 1 });
+    const n = M(new THREE.PlaneGeometry(3, 3, 6, 6), net, 0, 0.06); n.rotation.x = -Math.PI / 2; const pp = n.geometry.attributes.position; for (let i = 0; i < pp.count; i++) pp.setZ(i, (Math.sin(pp.getX(i) * 3) + Math.cos(pp.getY(i) * 2.5)) * 0.05); g.add(n);
+    [[-1.4, -1.4], [1.4, -1.4], [-1.4, 1.4], [1.4, 1.4]].forEach(([x, z]) => g.add(M(new THREE.SphereGeometry(0.14, 8, 6), iron(), x, 0.12, z)));
+    return g; }, techo() { return PROC.trampaoculta(); },
   rocarodante() { const g = new THREE.Group(); g.add(M(new THREE.DodecahedronGeometry(1.4, 1), stone(), 0, 1.4)); return g; },
   estatuafuego() { const g = PROC.estatua(); const mz = M(new THREE.ConeGeometry(0.25, 0.6, 6), glowMat(0xff6a1a, 0xff3a00), 0, 3.1, 0.45); mz.rotation.x = Math.PI / 2; g.add(mz); return g; }
 });
@@ -491,6 +523,12 @@ Object.assign(PROC, {
   }
 });
 
+let NET = null;
+function netTex() { // malla de cuerda para las redes
+  if (NET) return NET; const c = document.createElement("canvas"); c.width = c.height = 64; const x = c.getContext("2d");
+  x.strokeStyle = "#cdb58a"; x.lineWidth = 2.2; for (let i = -64; i < 128; i += 10) { x.beginPath(); x.moveTo(i, 0); x.lineTo(i + 64, 64); x.stroke(); x.beginPath(); x.moveTo(i + 64, 0); x.lineTo(i, 64); x.stroke(); }
+  NET = new THREE.CanvasTexture(c); NET.wrapS = NET.wrapT = THREE.RepeatWrapping; NET.repeat.set(3, 2); NET.colorSpace = THREE.SRGBColorSpace; return NET;
+}
 // Hito 97b (fase 4): piezas nuevas
 Object.assign(PROC, {
   lingotes() { const g = new THREE.Group(), gm = mat(0xc89a3a, { metalness: 0.75, roughness: 0.35, emissive: 0x2a1800 }), im = iron();
@@ -534,4 +572,70 @@ Object.assign(PROC, {
     [[-0.38, 1.78, 0xe8dcc0, 0.1], [0.36, 1.66, 0xd8c8a0, -0.08], [0.02, 1.4, 0xf0e6cc, 0.04]].forEach(([x, y, c, r]) => { const p = M(box(0.6, 0.72, 0.02), mat(c), x, y, 0.1); p.rotation.z = r; g.add(p); g.add(M(new THREE.SphereGeometry(0.04, 5, 4), iron(), x, y + 0.32, 0.12)); });
     g.add(M(box(0.34, 0.06, 0.01), mat(0x7a2a1a), 0.02, 1.52, 0.115));
     return g; }
+});
+
+// Hito 107: auditoría de calidad. Se rehacen las piezas que no se entendían al verlas solas en la mesa.
+Object.assign(PROC, {
+  estanteria() { // librería de pie con baldas, libros y frascos (el modelo de pared salía tumbado en el suelo)
+    const g = new THREE.Group(), dw = darkWood(), w = wood();
+    g.add(M(box(2.6, 3.6, 0.12), dw, 0, 1.8, -0.45)); [-1.25, 1.25].forEach(x => g.add(M(box(0.12, 3.6, 0.9), dw, x, 1.8)));
+    [0.1, 1.0, 1.9, 2.8, 3.6].forEach(y => g.add(M(box(2.5, 0.1, 0.9), w, 0, y)));
+    const cols = [0x7a2a1a, 0x2a4a6a, 0x3a5a2a, 0x6a4a1a, 0x4a2a4a, 0x8a6a3a];
+    [0.15, 1.05, 1.95].forEach((y, row) => { let x = -1.1; while (x < 1.05) { const wb = 0.12 + R() * 0.1, h = 0.55 + R() * 0.25; if (R() < 0.12) { x += 0.2; continue; } const b = M(box(wb, h, 0.55), mat(cols[Math.floor(R() * cols.length)]), x + wb / 2, y + h / 2 + 0.05, 0.05); b.rotation.z = R() < 0.1 ? 0.25 : 0; g.add(b); x += wb + 0.02; } });
+    [[-0.7, 2.85], [0.2, 2.85], [0.8, 2.85]].forEach(([x, y]) => g.add(M(new THREE.CylinderGeometry(0.14, 0.18, 0.45, 8), mat(0x6a9a8a, { roughness: 0.2, metalness: 0.1 }), x, y + 0.27, 0)));
+    return g; },
+  calavera() { // montón de calaveras y huesos (antes, unos cascotes que no se reconocían)
+    const g = new THREE.Group(), bone = mat(0xe0d6bc), dark = mat(0x1a1612);
+    const skull = (x, y, z, r) => { const s = new THREE.Group(); s.add(M(new THREE.SphereGeometry(0.42, 10, 8), bone, 0, 0.42)); s.add(M(box(0.42, 0.22, 0.32), bone, 0, 0.16, 0.18));
+      [-0.14, 0.14].forEach(ex => s.add(M(new THREE.SphereGeometry(0.1, 8, 6), dark, ex, 0.42, 0.36))); s.add(M(new THREE.ConeGeometry(0.05, 0.1, 3), dark, 0, 0.27, 0.4)); s.position.set(x, y, z); s.rotation.y = r; g.add(s); };
+    skull(0, 0, 0.3, 0.2); skull(-0.6, 0, -0.2, -0.5); skull(0.6, 0, -0.1, 0.6); skull(0, 0.55, -0.15, 0.1);
+    for (let i = 0; i < 6; i++) { const b = M(cyl(0.06, 0.06, 1.1, 5), bone, (R() - 0.5) * 1.8, 0.07, (R() - 0.5) * 1.6); b.rotation.set(Math.PI / 2, R() * 3, 0); g.add(b); }
+    return g; },
+  granhoguera(fire) { // pira de troncos cruzados con piedras alrededor y un fuego grande
+    const g = new THREE.Group(), dw = darkWood(), st = darkStone();
+    for (let i = 0; i < 10; i++) { const a = i / 10 * Math.PI * 2; g.add(M(new THREE.DodecahedronGeometry(0.32, 0), st, Math.cos(a) * 1.5, 0.2, Math.sin(a) * 1.5)); }
+    for (let i = 0; i < 8; i++) { const a = i / 8 * Math.PI * 2, l = M(cyl(0.16, 0.2, 2.6, 6), dw); l.position.set(Math.cos(a) * 0.45, 0.8, Math.sin(a) * 0.45); l.rotation.set(Math.sin(a) * 0.6, 0, -Math.cos(a) * 0.6); g.add(l); }
+    g.add(M(new THREE.CylinderGeometry(1.1, 1.2, 0.12, 12), mat(0x2a2220), 0, 0.06));
+    if (fire) { const f = fire(2.2); f.position.y = 0.6; g.add(f); }
+    g.userData.glow = { color: 0xff8a3a, power: 1.6, y: 2 };
+    return g; },
+  totem() { // tótem tallado de tres caras pintadas
+    const g = new THREE.Group(), w = mat(0x7a5230), paint = [0xb0402a, 0x2a6a8a, 0xd8a83a];
+    [0.6, 1.6, 2.6].forEach((y, i) => { g.add(M(cyl(0.5, 0.55, 1, 8), w, 0, y)); g.add(M(box(0.7, 0.18, 0.12), mat(paint[i]), 0, y + 0.15, 0.48)); [-0.18, 0.18].forEach(x => g.add(M(box(0.14, 0.14, 0.1), mat(0x1a1410), x, y + 0.32, 0.5))); { const nose = M(new THREE.ConeGeometry(0.1, 0.3, 4), w, 0, y - 0.05, 0.6); nose.rotation.x = Math.PI / 2; g.add(nose); } });
+    [-1, 1].forEach(s => { const wing = M(box(1.1, 0.12, 0.5), mat(paint[1]), s * 0.85, 3.1, 0); wing.rotation.z = s * 0.25; g.add(wing); });
+    g.add(M(new THREE.ConeGeometry(0.55, 0.6, 8), mat(paint[0]), 0, 3.4));
+    return g; },
+  montonpaja() { // almiar: montón de paja con hebras y un palo
+    const g = new THREE.Group(), hay = mat(0xd8b860), hay2 = mat(0xc0a048);
+    const m = M(new THREE.ConeGeometry(1.4, 2.4, 10, 3), hay, 0, 1.2); const pp = m.geometry.attributes.position; for (let i = 0; i < pp.count; i++) { const k = 1 + (R() - 0.5) * 0.12; pp.setX(i, pp.getX(i) * k); pp.setZ(i, pp.getZ(i) * k); } m.geometry.computeVertexNormals(); g.add(m);
+    for (let i = 0; i < 14; i++) { const s = M(cyl(0.02, 0.02, 0.6, 3), hay2, (R() - 0.5) * 2.4, 0.05, (R() - 0.5) * 2.4); s.rotation.set(Math.PI / 2, R() * 3, 0); g.add(s); }
+    g.add(M(cyl(0.05, 0.05, 1.2, 5), darkWood(), 0, 2.7));
+    return g; },
+  monticulo() { // montículo de nieve irregular con alguna piedra asomando
+    const g = new THREE.Group(), snow = mat(0xeef2f6, { roughness: 0.8 });
+    [[0, 0, 1.3, 0.5], [0.8, 0.3, 0.8, 0.4], [-0.7, -0.4, 0.9, 0.35]].forEach(([x, z, r, h]) => { const s = M(new THREE.SphereGeometry(r, 10, 6, 0, Math.PI * 2, 0, Math.PI / 2), snow, x, 0, z); s.scale.y = h; g.add(s); });
+    g.add(M(new THREE.DodecahedronGeometry(0.3, 0), darkStone(), 0.4, 0.35, -0.5));
+    return g; },
+  grieta() { // grieta en el suelo con bordes partidos (antes, rombos negros)
+    const g = new THREE.Group(), dark = mat(0x0a0806), lip = darkStone();
+    let x = -1.6, z = 0; for (let i = 0; i < 8; i++) { const nx = x + 0.4 + R() * 0.15, nz = z + (R() - 0.5) * 0.7, w = 0.18 + Math.sin(i / 7 * Math.PI) * 0.25;
+      const seg = M(box(Math.hypot(nx - x, nz - z) + 0.05, 0.03, w), dark, (x + nx) / 2, 0.02, (z + nz) / 2); seg.rotation.y = -Math.atan2(nz - z, nx - x); g.add(seg);
+      [-1, 1].forEach(sd => { const c = M(new THREE.DodecahedronGeometry(0.1 + R() * 0.08, 0), lip, (x + nx) / 2, 0.05, (z + nz) / 2 + sd * (w / 2 + 0.05)); c.scale.y = 0.5; g.add(c); });
+      x = nx; z = nz; }
+    return g; },
+  cuervos() { // tres cuervos posados, con pico y cola
+    const g = new THREE.Group(), blk = mat(0x15151a), beak = mat(0x3a3530);
+    for (let i = 0; i < 3; i++) { const b = new THREE.Group(); b.add(M(new THREE.SphereGeometry(0.22, 8, 6), blk, 0, 0.3, 0)); b.children[0].scale.set(1, 0.85, 1.5);
+      b.add(M(new THREE.SphereGeometry(0.13, 8, 6), blk, 0, 0.5, 0.26)); { const bk = M(new THREE.ConeGeometry(0.05, 0.18, 4), beak, 0, 0.48, 0.42); bk.rotation.x = Math.PI / 2; b.add(bk); }
+      b.add(M(box(0.16, 0.04, 0.3), blk, 0, 0.32, -0.38)); [-0.07, 0.07].forEach(x => b.add(M(cyl(0.015, 0.015, 0.18, 3), beak, x, 0.09, 0)));
+      b.position.set((i - 1) * 0.8 + (R() - 0.5) * 0.3, 0, (R() - 0.5) * 0.8); b.rotation.y = R() * 6; g.add(b); }
+    return g; },
+  manglar() { // mangle: tronco sobre raíces en arco y copa ancha
+    const g = new THREE.Group(), w = mat(0x5a4a34), leaf = mat(0x3e6a32);
+    for (let i = 0; i < 6; i++) { const a = i / 6 * Math.PI * 2, pts = [new THREE.Vector3(Math.cos(a) * 1.2, 0, Math.sin(a) * 1.2), new THREE.Vector3(Math.cos(a) * 0.8, 0.9, Math.sin(a) * 0.8), new THREE.Vector3(Math.cos(a) * 0.15, 1.3, Math.sin(a) * 0.15)];
+      g.add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 8, 0.07, 5), w)); }
+    g.add(M(cyl(0.18, 0.24, 2.4, 6), w, 0, 2.4));
+    [[0, 3.8, 0, 1.4], [0.8, 3.5, 0.3, 0.9], [-0.7, 3.6, -0.3, 1], [0.2, 4.3, -0.4, 0.8]].forEach(([x, y, z, r]) => { const c = M(new THREE.IcosahedronGeometry(r, 0), leaf, x, y, z); c.scale.y = 0.6; g.add(c); });
+    return g; },
+  arbolgigante() { const g = treeShape(0x6a4a2c, 0x2e5a2a, 1.8, 0.7); g.scale.multiplyScalar(1.9); g.rotation.y = R() * 6; return g; } // ahora sí, el doble de alto que un árbol normal
 });
