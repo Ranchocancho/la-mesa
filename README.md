@@ -1060,3 +1060,11 @@ Para tenerlas en un mundo que ya existe: **Escenas → 🔄 Renovar escenas de e
 - **Mundo (H-01)**: el documento de un mundo solo lo leen sus miembros y quien tiene invitación con su correo. Si alguien sin invitación abre el enlace, se le dice que la pida.
 - **Fichas ocultas (H-04)**: los jugadores solo reciben las fichas visibles (`hidden == false`); las ocultas no llegan a su navegador. Al abrir el mundo, el máster añade el campo a las fichas antiguas que no lo tienen.
 - **Hay que publicar `firestore.rules` en la consola de Firebase.** Después, el máster debe abrir cada mundo una vez para que las fichas antiguas sigan viéndose.
+
+## Hito 95 — Fase 2: reglas de combate
+
+- **Atravesar criaturas (regla 2024)**: puedes pasar por el espacio de un aliado, de alguien incapacitado, de una criatura Diminuta o de una que te saque dos tamaños (o tú a ella). El espacio de otra criatura cuenta como terreno difícil y no puedes acabar en él.
+- **Áreas que no atraviesan muros**: las esferas, conos, líneas, cubos y emanaciones solo alcanzan las casillas con línea recta libre desde su punto de origen. Los muros y las puertas cerradas las cortan.
+- **Acercarse y atacar con aviso**: la figura busca primero una casilla que no provoque ataques de oportunidad. Si no la hay, la vista previa lo avisa (⚠AO) y hace falta un segundo clic para atacar igualmente.
+- **Textos de criaturas completos**: 34 efectos de «Fallo» que se cortaban a media frase ya salen completos.
+- **📜 Reglas de esta mesa**: botón en la barra de la mesa con las reglas de campaña (y si están activadas), lo que se juega como en BG3 y las reglas 2024 que la mesa aplica sola.

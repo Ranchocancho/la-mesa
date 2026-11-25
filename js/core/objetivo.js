@@ -6,7 +6,9 @@
 //  - las áreas de los conjuros se colocan con una plantilla que sigue al cursor y marca a quién alcanza.
 import { inRange, cover, modifiers, gap, dist, eco, phase, hasCond } from "./turnos.js";
 import { acOf, attacksOf } from "./combate.js";
-import { reachMap } from "./movimiento.js";
+import { reachMap, pathTo } from "./movimiento.js";
+import { sightLine } from "./vision.js";
+import { TERRAIN } from "../data/mapas.js";
 import { savePlan } from "./salud.js";
 import { hpOf } from "./mesa.js";
 import { damageTraits } from "./defensas.js";
@@ -53,7 +55,7 @@ export function dmgVs(s, t, range, dtype) {
 export function chipText(g, odds = true) {
   const ok = g.state === "ok" || g.state === "long";
   if (!ok) return g.state === "cover" ? "🛡 cobertura total" : `fuera · ${String(g.far || "").replace(".", ",")} m`;
-  return [g.approach ? `🦶${String(g.approach.cost).replace(".", ",")} m` : "", odds && g.pct != null ? `${g.pct}%` : "", g.save || "", odds && g.fail != null ? `falla ${g.fail}%` : "",
+  return [g.approach ? `🦶${String(g.approach.cost).replace(".", ",")} m${g.approach.oa && g.approach.oa.length ? " ⚠AO" : ""}` : "", odds && g.pct != null ? `${g.pct}%` : "", g.save || "", odds && g.fail != null ? `falla ${g.fail}%` : "",
     g.dmg ? `${g.dmg[0]}–${g.dmg[1]}` : "", g.trait === "resiste" ? "½" : g.trait === "inmune" ? "inmune" : g.trait === "vulnerable" ? "×2" : "", g.kill === 2 ? "☠ cae" : g.kill === 1 ? "☠?" : "",
     g.state === "long" ? "largo" : "", g.adv > 0 ? "▲" : g.adv < 0 ? "▼" : "", g.picked ? "✓" : ""].filter(Boolean).join(" · ");
 }
@@ -64,8 +66,11 @@ export function attackPreview(s, a, w, t, { approach = true } = {}) {
   // BG3: si no llegas pero puedes acercarte andando (sin correr), te acercas y atacas
   if (st === "out" && approach && isMelee(rng) && phase(s) === "live" && s.board.turn === a.id) {
     const R = reachMap(s, a, {});
+    // Hito 95: entre las casillas buenas, antes las que no provocan ataques de oportunidad; luego, la más cercana
     if (R) { let best = null; R.cells.forEach((x, k) => { if (!x.cost || x.occ || x.dash) return; const [c, r] = k.split(",").map(Number), p = { ...a, c, r };
-      if (inRange({ ...rng, l: rng.n }, p, t) === "ok" && (!best || x.cost < best.cost)) best = { c, r, cost: x.cost }; });
+      if (inRange({ ...rng, l: rng.n }, p, t) !== "ok") return;
+      const oa = oaThreatsAt(s, a, pathTo(R, c, r)).map(o => s.tokens.find(k2 => k2.id === o.id)).filter(Boolean).map(k2 => k2.name || "Un enemigo");
+      if (!best || oa.length < best.oa.length || (oa.length === best.oa.length && x.cost < best.cost)) best = { c, r, cost: x.cost, oa }; });
       if (best) { appr = best; from = { ...a, c: best.c, r: best.r }; st = "ok"; } }
   }
   if (st === "out") return { state: "out", far: Math.round(gap(a, t) * 15) / 10 };
@@ -77,7 +82,7 @@ export function attackPreview(s, a, w, t, { approach = true } = {}) {
   const ac = acOf(s, t) + (cov.bonus || 0);
   const pct = Math.round(hitChance(w.atk - exn, ac, mods.net, extra) * 100);
   const D = dmgVs(s, t, dmgRange(w.expr), w.type);
-  return { state: st, pct, adv: mods.net, why: [...mods.adv.map(x => "▲ " + x), ...mods.dis.map(x => "▼ " + x), ...(D && D.trait ? [`${D.trait === "resiste" ? "Resiste" : D.trait === "inmune" ? "Inmune a" : "Vulnerable a"} ese daño`] : []), ...(D && D.kill ? [D.kill === 2 ? "☠ Con este golpe cae seguro" : "☠ Puede caer con este golpe"] : [])],
+  return { state: st, pct, adv: mods.net, why: [...(appr && appr.oa.length ? [`⚠ Al acercarte provocas ataque de oportunidad: ${appr.oa.join(", ")}`] : []), ...mods.adv.map(x => "▲ " + x), ...mods.dis.map(x => "▼ " + x), ...(D && D.trait ? [`${D.trait === "resiste" ? "Resiste" : D.trait === "inmune" ? "Inmune a" : "Vulnerable a"} ese daño`] : []), ...(D && D.kill ? [D.kill === 2 ? "☠ Con este golpe cae seguro" : "☠ Puede caer con este golpe"] : [])],
     cov: cov.txt || "", dmg: D ? D.dmg : dmgRange(w.expr), trait: D ? D.trait : "", kill: D ? D.kill : 0, crit: mods.autoCrit, approach: appr };
 }
 
@@ -107,6 +112,11 @@ export function templateCells(g, origin, aim, area) {
       if (W ? p <= W / 2 + 0.05 : p <= t / 2 + 0.3) add(c, r);
     }
   }
+  // Hito 95 (regla 2024): el área solo llega donde hay línea recta sin cobertura total desde su punto de origen.
+  // Los muros y las puertas cerradas la cortan.
+  const from = /esfera|cilindro|cubo/.test(sh) ? aim : origin, see = sightLine(g);
+  const T = g.terrain || {}, isWall = k => !!(TERRAIN[T[k]] && TERRAIN[T[k]].wall);
+  for (const k of [...out]) { const [c, r] = k.split(",").map(Number); if (isWall(k) || !see(from, { c, r })) out.delete(k); }
   return out;
 }
 /** Criaturas dentro de la plantilla. */

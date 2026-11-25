@@ -58,7 +58,7 @@ let hudOpen = !(window.matchMedia && window.matchMedia("(max-width: 900px)").mat
 
 export function mountTactical(host, opts = {}) {
   host.innerHTML = `<div class="tactical"><div class="boardwrap"></div><aside class="sidecol"><div class="sidetabs" role="tablist"><button role="tab" data-side="ini">Iniciativa</button><button role="tab" data-side="tir">🎲 Tiradas</button></div><div class="initcol" aria-label="Iniciativa"></div><div class="rollcol" hidden></div></aside><div class="hud"></div>
-    <div class="topbar"><div class="tb-now" aria-live="polite"></div><div class="turnbar"></div><div class="tb-right"><div class="tb-ctl"></div><button class="btn small" id="v3d" title="Cambiar entre la mesa en 3D y el plano en 2D"></button><button class="btn small" id="vcol" title="Colores del movimiento, el alcance, los objetivos y las áreas">🎨</button></div></div><div class="editbadge" hidden>✏️ El máster está retocando la mesa…</div><div class="turnbanner" hidden></div><div class="taskcall" hidden></div></div>`;
+    <div class="topbar"><div class="tb-now" aria-live="polite"></div><div class="turnbar"></div><div class="tb-right"><div class="tb-ctl"></div><button class="btn small" id="v3d" title="Cambiar entre la mesa en 3D y el plano en 2D"></button><button class="btn small" id="vrul" title="Reglas de esta mesa: lo que se juega distinto del manual">📜</button><button class="btn small" id="vcol" title="Colores del movimiento, el alcance, los objetivos y las áreas">🎨</button></div></div><div class="editbadge" hidden>✏️ El máster está retocando la mesa…</div><div class="turnbanner" hidden></div><div class="taskcall" hidden></div></div>`;
   // Controles de la mesa (cámara, 2D/3D, colores): pueden ir en la barra de abajo de la página (opts.ctlHost)
   const TBR = $(".tb-right", host);
   if (opts.ctlHost) { opts.ctlHost.innerHTML = ""; opts.ctlHost.appendChild(TBR); }
@@ -73,6 +73,7 @@ export function mountTactical(host, opts = {}) {
   const actHost = opts.actHost || null; let actSig = "", npcId = null, npcPick = null, hotbar = null;
   // Seleccionar una figura (desde la mesa, la iniciativa o la tira): se abre su consulta abajo
   // El jugador ha elegido arma o conjuro en su ficha: tocar una figura la usa como objetivo
+  let oaOk = null, oaOkAt = 0;
   function aimAt(id) {
     const A = armedNow(), st = S(), dm = isDM(st); if (!A) return false;
     if (A.kind === "atk") {
@@ -81,6 +82,8 @@ export function mountTactical(host, opts = {}) {
       if (dm && a.kind === "pc") return false;
       const tt = st.tokens.find(t => t.id === id), pv = tt && attackPreview(st, a, w, tt);
       // Como en BG3: si no llegas pero puedes acercarte andando, la figura se acerca (pagando su movimiento) y ataca
+      // Hito 95: si acercarte provoca ataques de oportunidad, avisa y pide un segundo clic para confirmar
+      if (pv && pv.approach && pv.approach.oa.length) { const kk = a.id + ">" + id; if (oaOk !== kk || Date.now() - oaOkAt > 5000) { oaOk = kk; oaOkAt = Date.now(); toast(`⚠ Al acercarte provocas ataque de oportunidad de ${pv.approach.oa.join(", ")}. Pulsa otra vez para atacar igualmente.`); return true; } oaOk = null; }
       if (pv && pv.approach) { bopts.mutate("token", m => { const k = m.tokens.find(x => x.id === a.id); if (k) { k.c = pv.approach.c; k.r = pv.approach.r; } }); toast(`Te acercas ${metres(pv.approach.cost / 1.5)} y atacas.`); }
       sel = id; const r = attack(A.tok, id, w, dm ? atkAdv : null, A.use || "act"); if (r) { const left = eco(S(), a).atkLeft; if (A.use === "bonus" || !(left > 0)) arm(null); atkAdv = null; } actSig = ""; drawHud(); return true;
     }
@@ -658,10 +661,37 @@ export function mountTactical(host, opts = {}) {
   const onKey = e => { if (!host.isConnected) return document.removeEventListener("keydown", onKey); if (e.key === "Escape" && armedNow()) { arm(null); actSig = ""; drawHud(); } };
   document.addEventListener("keydown", onKey);
   host.addEventListener("contextmenu", e => { if (armedNow() && e.target.closest(".boardwrap")) { e.preventDefault(); arm(null); actSig = ""; drawHud(); } });
+  // Hito 95: «Reglas de esta mesa», lo que se juega distinto del manual o que la mesa aplica sola
+  $("#vrul", TBR).onclick = e => {
+    e.stopPropagation();
+    let pop = $(".rulpop", host); if (pop) { pop.remove(); return; }
+    $$(".colpop", host).forEach(x => x.remove());
+    const s = S(), on = v => v ? "<b class=\"rul-on\">activada</b>" : "<b class=\"rul-off\">desactivada</b>";
+    pop = document.createElement("div"); pop.className = "colpop rulpop"; $(".tactical", host).appendChild(pop);
+    pop.innerHTML = `<h4>📜 Reglas de esta mesa</h4>
+      <p class="rul-k">Reglas de campaña (las cambia el máster en 🎨)</p>
+      <ul>
+        <li><b>Dos conjuros con espacio por turno (BG3)</b>: ${on(s.bg3Spells !== false)}. ${s.bg3Spells !== false ? "Uno con la acción y otro con la acción adicional." : "Regla 2024: un solo espacio de conjuro por turno; el otro conjuro tiene que ser un truco."}</li>
+        <li><b>Ver el % de impacto</b>: ${on(s.showOdds !== false)}. ${s.showOdds !== false ? "Los jugadores ven la probabilidad de acertar antes de atacar." : "Solo el máster ve las probabilidades."}</li>
+      </ul>
+      <p class="rul-k">Siempre, como en Baldur's Gate 3</p>
+      <ul>
+        <li><b>Acercarse y atacar</b>: si tu objetivo está a tiro andando, la figura se acerca sola y ataca. Si al acercarte provocas un ataque de oportunidad, te avisa y tienes que pulsar otra vez.</li>
+        <li><b>Turno por recursos</b>: acción, acción adicional, movimiento y reacción, cada uno a la vista.</li>
+      </ul>
+      <p class="rul-k">Reglas 2024 que la mesa aplica sola</p>
+      <ul>
+        <li><b>Levantarse</b> estando derribado cuesta la mitad de tu velocidad.</li>
+        <li><b>Atravesar criaturas</b>: puedes pasar por el espacio de un aliado, de alguien incapacitado, de una criatura Diminuta o de una que te saque dos tamaños. Ese espacio cuenta como terreno difícil y no puedes acabar el movimiento en él.</li>
+        <li><b>Áreas de efecto</b>: no atraviesan muros ni puertas cerradas.</li>
+        <li><b>Movimiento</b>: cada casilla cuesta 1,5 m, también en diagonal; el terreno difícil y arrastrarse cuestan el doble.</li>
+      </ul>`;
+  };
   // Colores de la mesa (cada jugador, en su navegador)
   $("#vcol", TBR).onclick = e => {
     e.stopPropagation();
-    let pop = $(".colpop", host); if (pop) { pop.remove(); return; }
+    $$(".rulpop", host).forEach(x => x.remove());
+    let pop = $(".colpop:not(.rulpop)", host); if (pop) { pop.remove(); return; }
     pop = document.createElement("div"); pop.className = "colpop"; $(".tactical", host).appendChild(pop);
     const draw = () => { const c = colors(), s = S();
       pop.innerHTML = `<h4>🎨 Colores de la mesa</h4>${COLOR_KEYS.map(([k, n, d]) => `<label title="${esc(d)}">${n}<input type="color" data-col="${k}" value="${c[k]}"></label>`).join("")}

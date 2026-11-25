@@ -151,3 +151,10 @@
 @media (max-width: 760px) {
   #overlay .pill, .travelask, .verbar { max-width: calc(100vw - 20px); }
 }
+
+/* Hito 95: Reglas de esta mesa */
+.rulpop{width:340px;max-height:70vh;overflow:auto}
+.rulpop .rul-k{margin:10px 0 4px;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--oro,#d9b25a);opacity:.85}
+.rulpop ul{margin:0;padding-left:18px;font-size:13px;line-height:1.4}
+.rulpop li{margin:4px 0}
+.rul-on{color:#7fd88a}.rul-off{color:#e0907a}

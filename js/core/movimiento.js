@@ -1,7 +1,7 @@
 // Movimiento por turnos con las reglas 2024: se mide siempre desde la casilla donde empezaste el turno,
 // cada casilla cuesta 1,5 m (diagonales incluidas), el terreno difícil cuesta el doble, arrastrarse derribado
-// también; no se atraviesan muros, objetos macizos, puertas cerradas ni enemigos (sí a los aliados, sin acabar
-// encima). Más allá de tu velocidad solo llegas Corriendo, que gasta tu acción.
+// también; no se atraviesan muros, objetos macizos ni puertas cerradas. Las criaturas, según la regla 2024 (ver foeAt):
+// su espacio es terreno difícil y nunca acabas encima. Más allá de tu velocidad solo llegas Corriendo, que gasta tu acción.
 import { TERRAIN, PROPS, isDoor } from "../data/mapas.js";
 import { eco, speedOf, hasCond } from "./turnos.js";
 import { climbExtra, elevAt, altOf, topOfTok } from "./alturas.js";
@@ -24,7 +24,15 @@ export function reachMap(s, t, { dm = false } = {}) {
   const T = g.terrain || {}, pc = t.kind === "pc";
   const wall = (c, r) => c < 0 || r < 0 || c >= g.cols || r >= g.rows || !!(TERRAIN[T[key(c, r)]] && TERRAIN[T[key(c, r)]].wall);
   const blocked = (c, r) => wall(c, r) || (g.props || []).some(p => p.c === c && p.r === r && ((PROPS[p.k] || {}).block || (isDoor(p) && !p.open && !dm)));
-  const foeAt = (c, r) => s.tokens.some(k => k.id !== t.id && k.c === c && k.r === r && !k.hidden && (k.kind === "pc") !== pc && !(k.conds || []).some(x => ["muerto", "inconsciente"].includes(x.id)));
+  // Hito 95 (regla 2024): atraviesas a un aliado, a quien está incapacitado, a una criatura Diminuta o a una que te saca
+  // dos tamaños (o tú a ella). Cualquier otra te cierra el paso. El espacio de otra criatura cuenta como terreno difícil.
+  const cat = k => { const z = +k.size || 1; return z <= 0.55 ? 0 : z <= 0.85 ? 1 : z <= 1.2 ? 2 : z <= 1.9 ? 3 : z <= 2.6 ? 4 : 5; };
+  const INCAP = ["incapacitado", "inconsciente", "paralizado", "petrificado", "aturdido", "muerto"];
+  const alive = k => !(k.conds || []).some(x => x.id === "muerto");
+  const crowd = (c, r) => s.tokens.filter(k => k.id !== t.id && k.c === c && k.r === r && (dm || !k.hidden));
+  const foeAt = (c, r) => crowd(c, r).some(k => (k.kind === "pc") !== pc && !(k.conds || []).some(x => INCAP.includes(x.id))
+    && cat(k) > 0 && Math.abs(cat(k) - cat(t)) < 2);
+  const inCrowd = (c, r) => crowd(c, r).some(alive);
   // Trepa sin coste extra quien tiene velocidad trepando o vuela (SRD «Trepar» y «Volar»)
   const spd = String(t.speed || "") + " " + String(((s.characters.find(x => x.id === t.char) || {}).speeds) || "");
   const climber = /trep|vol|climb|fly/i.test(spd) || altOf(t) > 0;
@@ -40,7 +48,7 @@ export function reachMap(s, t, { dm = false } = {}) {
       const nc = c + dc, nr = r + dr;
       if (blocked(nc, nr) || foeAt(nc, nr)) continue;
       if (dc && dr && (blocked(c + dc, r) && blocked(c, r + dr))) continue; // no se cuelan esquinas entre muros
-      const dif = !!(TERRAIN[T[key(nc, nr)]] && TERRAIN[T[key(nc, nr)]].dif);
+      const dif = !!(TERRAIN[T[key(nc, nr)]] && TERRAIN[T[key(nc, nr)]].dif) || inCrowd(nc, nr);
       const up = climbExtra(g, { c, r }, { c: nc, r: nr }, { dif, climber }) + (c === t.c && r === t.r && !climber ? topOfTok(g, t) : 0); // bajar del objeto al que estás subido
       const step = 1.5 * (dif ? 2 : 1) * (prone ? 2 : 1) + up, nCost = Math.round((cost + step) * 10) / 10;
       if (nCost > max + 0.01) continue;
