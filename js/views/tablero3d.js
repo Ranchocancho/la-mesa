@@ -363,13 +363,13 @@ export function createBoard3D(host, opts) {
   // En la barra superior va la versión compacta: volumen vertical, ⌖ y ⬇ en cuadraditos, Órbita/Libre y Muros.
   // Niebla, música y luz (día/noche/interior) las decide el máster desde su pestaña.
   const camHTML = opts.controlsHost ? `<div class="cam3d compact" role="toolbar" aria-label="Cámara">
-      <span class="camsq"><button class="sq" data-cam="center" title="Centrar la cámara en la mesa" aria-label="Centrar">⌖</button><button class="sq" data-cam="top" title="Vista cenital (desde arriba)" aria-label="Cenital">⬇</button><button class="sq" data-cam="follow" aria-pressed="${CAMTURN()}" title="Cámara de combate: al empezar cada turno, la cámara va a quien le toca y lo mira desde arriba (como en Baldur&#39;s Gate 3). Pulsa para activarla o quitarla." aria-label="Seguir el turno">🎥</button><button class="sq" data-cam="ruler" aria-pressed="false" title="Regla: arrastra de una casilla a otra para medir" aria-label="Regla">📏</button><button class="sq" data-cam="mute" title="Silenciar">${sound.muted ? "🔇" : "🔊"}</button></span>
+      <span class="camsq"><button class="sq" data-cam="center" title="Centrar la cámara en la mesa" aria-label="Centrar">⌖</button><button class="sq" data-cam="top" title="Vista cenital (desde arriba)" aria-label="Cenital">⬇</button><button class="sq" data-cam="follow" aria-pressed="${CAMTURN()}" title="Cámara de combate: al empezar cada turno, la cámara se centra en quien le toca, con tu mismo ángulo y zoom (como en Baldur&#39;s Gate 3). Pulsa para activarla o quitarla." aria-label="Seguir el turno">🎥</button><button class="sq" data-cam="ruler" aria-pressed="false" title="Regla: arrastra de una casilla a otra para medir" aria-label="Regla">📏</button><button class="sq" data-cam="mute" title="Silenciar">${sound.muted ? "🔇" : "🔊"}</button></span>
       <span class="volv" title="Volumen"><input type="range" min="0" max="1" step="0.05" value="${sound.volume}" data-vol aria-label="Volumen" orient="vertical"></span>
       <span class="camst"><button class="btn small" data-cam="mode" aria-pressed="false" title="Cámara en órbita (pulsa para libre)">⟳</button><button class="btn small" data-cam="walls" aria-pressed="true" title="Muros bajos (pulsa para altos)">▁</button><button class="btn small" data-cam="grid" aria-pressed="${GRID()}" title="Cuadrícula sobre el suelo">▦</button><button class="btn small" data-cam="dress" aria-pressed="${DENS() > 0}" title="${DENS_TXT[DENS()]} (pulsa para cambiar)">🌿</button><button class="btn small" data-cam="quality" aria-pressed="${QUAL() === "alta"}" title="${QUAL() === "alta" ? "Calidad alta: reflejos y resplandor (pulsa para normal)" : "Calidad normal (pulsa para alta: resplandor del fuego y la magia)"}">✨</button></span>
     </div>` : `<div class="cam3d" role="toolbar" aria-label="Cámara">
       <button class="btn small" data-cam="center" title="Centrar la cámara en la mesa">⌖ Centrar</button>
       <button class="btn small" data-cam="top" title="Vista desde arriba">⬇ Cenital</button>
-      <button class="btn small" data-cam="follow" aria-pressed="${CAMTURN()}" title="Cámara de combate: al empezar cada turno, la cámara va a quien le toca y lo mira desde arriba (como en Baldur&#39;s Gate 3). Pulsa para activarla o quitarla.">🎥 Seguir turno</button>
+      <button class="btn small" data-cam="follow" aria-pressed="${CAMTURN()}" title="Cámara de combate: al empezar cada turno, la cámara se centra en quien le toca, con tu mismo ángulo y zoom (como en Baldur&#39;s Gate 3). Pulsa para activarla o quitarla.">🎥 Seguir turno</button>
       <button class="btn small" data-cam="ruler" aria-pressed="false" title="Regla: arrastra de una casilla a otra para medir">📏 Medir</button>
       <button class="btn small" data-cam="mode" aria-pressed="false" title="Órbita alrededor del centro o cámara libre">Órbita</button>
       <button class="btn small" data-cam="walls" aria-pressed="true" title="Muros bajos para ver mejor">Muros bajos</button>
@@ -1489,14 +1489,15 @@ export function createBoard3D(host, opts) {
       if (pack !== !!it.rec.packed) { it.rec.packed = pack; it.rec.bar.visible = !pack; it.rec.chip.visible = pack; }
     }
   }
-  // Hito 92: al empezar el turno de alguien, la cámara se centra en su figura y la mira desde arriba (vista cenital).
+  // Hito 92: al empezar el turno de alguien, la cámara se desliza hasta su figura y la deja en el centro, sin cambiar
+  // el ángulo ni la distancia que tenía cada uno (así nadie se pierde). Como la «cámara de combate» de BG3.
   // No lo hace con una criatura que no ves (delataría dónde está). Si mueves la cámara mientras va, se para.
   let camSeq, camFly = null;
   function flyToTurn(id) {
     const rec = toks.get(id); if (!rec || !rec.root || !shown(rec.root) || !CAMTURN()) return;
     const to = rec.target ? rec.target.clone() : rec.root.position.clone(); to.y = rec.root.position.y;
-    const h = (8 * CELL) / Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)); // unas 16 casillas de alto a la vista
-    camFly = { t: 0, ft: controls.target.clone(), fp: camera.position.clone(), tt: to, tp: to.clone().add(new THREE.Vector3(0, Math.min(controls.maxDistance * 0.95, h), 0.01)) };
+    const off = camera.position.clone().sub(controls.target); // mismo ángulo y misma distancia
+    camFly = { t: 0, ft: controls.target.clone(), fp: camera.position.clone(), tt: to, tp: to.clone().add(off) };
   }
   renderer.domElement.addEventListener("pointerdown", () => { camFly = null; });
   renderer.domElement.addEventListener("wheel", () => { camFly = null; }, { passive: true });
