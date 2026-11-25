@@ -1115,3 +1115,7 @@ El **tronco caído** lleva ahora musgo, corte claro en los extremos y una rama. 
 - E5 (calidad alta): hojas que caen en el bosque.
 
 Quedan para probar (QUIZÁ): la tensión de combate (E4), las huellas (L1) y las runas que laten al pasar el turno (L5).
+
+## Hito 99 — Arreglo de la pestaña Táctica
+
+- Si el máster elegía una escalera, un pozo o una trampa, su ficha se quedaba fija en la pestaña Táctica aunque luego pinchara en una criatura. Ahora, al elegir una criatura se cierra la ficha del objeto, y al elegir un objeto deja de mostrarse la criatura.

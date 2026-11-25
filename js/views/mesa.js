@@ -104,7 +104,7 @@ export function mountTactical(host, opts = {}) {
     }
     return false;
   }
-  function selectTok(id) { if (aimAt(id)) return; if (board && board.select) board.select(id); if (sel !== id) { sel = id; } hudOpen = true; if (isDM(S()) && (S().tokens.find(t => t.id === id) || {}).kind !== "pc") npcId = id; drawHud(); if (opts.onSelect) opts.onSelect(id); }
+  function selectTok(id) { if (aimAt(id)) return; if (board && board.select) board.select(id); if (id) selPropId = null; /* Hito 99: elegir una criatura cierra la ficha del objeto */ if (sel !== id) { sel = id; } hudOpen = true; if (isDM(S()) && (S().tokens.find(t => t.id === id) || {}).kind !== "pc") npcId = id; drawHud(); if (opts.onSelect) opts.onSelect(id); }
   let sel = null, selPropId = null, sceneId = store.get().board && (store.get().board.scene + "#" + floorIdx(store.get().board)), board = null;
   const S = () => store.get();
   const me = () => (currentUser(S()) || {}).id;
@@ -166,7 +166,7 @@ export function mountTactical(host, opts = {}) {
       traps.forEach(tr => triggerTrap(tr.p, [tr.t]));
       if (hzs.length) onEnter(hzs);
     },
-    onProp: p => { selPropId = p.id; hudOpen = true; drawHud(); },
+    onProp: p => { selPropId = p.id; sel = null; hudOpen = true; drawHud(); },
     // Hasta dónde puede llegar la ficha que tiene el turno (la suya o, para el máster, cualquiera)
     // Antes de soltar la figura: ¿este camino provoca ataques de oportunidad? (nombres, para avisar como en BG3)
     oaPreview: (id, path) => { const s = S(), t = s.tokens.find(k => k.id === id); if (!t || phase(s) !== "live" || s.board.turn !== id) return []; const hid = unseenFn(s, isDM(s)); return oaThreats(s, t, path).map(x => s.tokens.find(k => k.id === x)).filter(k => k && (isDM(s) || !hid(k))).map(k => nameOf(s, k)); },
@@ -175,7 +175,7 @@ export function mountTactical(host, opts = {}) {
     onSelectProp: id => { selPropId = id; if (id) hudOpen = true; drawHud(); },
     decorate: t => { const c = charOf(S(), t); return { ...(c ? { name: c.name, color: c.color, portrait: c.portrait } : t.portrait ? { portrait: t.portrait } : {}), isTurn: S().board.turn === t.id }; },
     hpOf: t => hpOf(S(), t),
-    onSelect: id => { if (id && aimAt(id)) return; sel = id; if (id && isDM(S()) && (S().tokens.find(t => t.id === id) || {}).kind !== "pc") npcId = id; drawHud(); if (opts.onSelect) opts.onSelect(id); },
+    onSelect: id => { if (id && aimAt(id)) return; sel = id; if (id) selPropId = null; if (id && isDM(S()) && (S().tokens.find(t => t.id === id) || {}).kind !== "pc") npcId = id; drawHud(); if (opts.onSelect) opts.onSelect(id); },
     charOf: t => charOf(S(), t),
     chars: () => S().characters,
     setFog: v => store.commit("board", st => { st.board.fog = v; }),
