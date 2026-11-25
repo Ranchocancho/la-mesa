@@ -199,12 +199,7 @@
 .hotbar.wait .hbicons{opacity:.85;filter:none}
 .hotbar.wait .hbi.off{filter:saturate(.55) brightness(.85);cursor:help}
 
-/* Hito 100: los ajustes de vista se agrupan tras ⚙ */
-.cam3d.compact{position:relative}
-.cam3d.compact .campop{position:absolute;bottom:calc(100% + 8px);right:0;display:flex;align-items:center;gap:6px;padding:8px;border-radius:10px;background:rgba(14,10,8,.97);border:1px solid var(--linea,#5a4630);box-shadow:0 8px 24px rgba(0,0,0,.5);z-index:20}
-.cam3d.compact .campop[hidden]{display:none}
-.cam3d.compact .campop .camst{display:flex;gap:4px}
-.cam3d.compact .campop .volv input{writing-mode:horizontal-tb;width:90px}
+
 .turnbar .tbchip.tbcard .ihb{position:static!important;width:auto!important;left:auto!important;right:auto!important;bottom:auto!important}
 
 /* Hito 102: Lore */

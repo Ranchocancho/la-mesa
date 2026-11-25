@@ -1145,3 +1145,7 @@ Quedan para probar (QUIZÁ): la tensión de combate (E4), las huellas (L1) y las
 - **Batallas**: bandos con nombre, formados por facciones y personajes, con una nota por bando; además, desenlace y consecuencias.
 - **Cronologías**: además de la «Historia del mundo», el máster puede crear cronologías con nombre (un tramo de la campaña, las luchas de una región…) y decidir en cuáles sale cada hito. Las batallas y los dioses con fecha («Orden») entran solos en la cronología.
 - **Notas del Lore**: desaparecen. Las que hubiera pasan solas a Mando › Notas de futuro, sin perder nada.
+
+## Hito 103 — La botonera de la cámara vuelve a como estaba
+
+- Se quita el botón ⚙ del Hito 100: desplazaba la barra y lo que desplegaba no se veía. Órbita, muros, cuadrícula, detalles, calidad y volumen vuelven a estar a la vista, como antes.
