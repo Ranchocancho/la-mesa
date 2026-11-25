@@ -28,6 +28,7 @@ import { makeEnvironment, makeBloom } from "./brillo3d.js";
 import { hazardEdges, HAZ_COLOR, coverOf, trapState, TRAP_LOOK } from "../core/marcas.js";
 import { enhanceFloor, fringeMaterial, fringeGeometries } from "./suelo3d.js";
 import { buildDressing } from "./detalles3d.js";
+import { buildTableDressing } from "./mesajuego3d.js";
 import { buildAtmosphere, envKindOf, ENV_TEMP, hourTemp, tint, climateZones } from "./atmosfera3d.js";
 import { toast } from "../core/ui.js";
 import { RES_TEXT, RES_COLOR, cells as cellDist } from "../core/golpes.js";
@@ -620,9 +621,11 @@ export function createBoard3D(host, opts) {
     const W = g.cols * CELL, H = g.rows * CELL;
     // Mesa de madera y marco del tablero
     const wood = woodTex(); wood.repeat.set(3, 3);
-    const table = new THREE.Mesh(new THREE.BoxGeometry(W + CELL * 8, 2.5, H + CELL * 8), new THREE.MeshStandardMaterial({ map: wood, roughness: 0.7 }));
+    const table = new THREE.Mesh(new THREE.BoxGeometry(W + CELL * 14, 2.5, H + CELL * 14), new THREE.MeshStandardMaterial({ map: wood, roughness: 0.7 }));
     // La mesa queda por debajo del lecho del agua y del fondo del abismo (si no, los tapaba)
     table.position.y = -3.6; table.receiveShadow = true; grp.add(table);
+    // Hito 106: los puestos de los jugadores y del máster alrededor del tablero
+    grp.add(buildTableDressing({ W, H, y: -3.6 + 1.25, margin: CELL * 7, seed: g.scene || g.name || "mesa" }));
     const frameMat = new THREE.MeshStandardMaterial({ color: 0x2b1d12, roughness: 0.6 });
     [[W + 1.6, 0.8, 0, -(H + 0.8) / 2], [W + 1.6, 0.8, 0, (H + 0.8) / 2], [0.8, H, -(W + 0.8) / 2, 0], [0.8, H, (W + 0.8) / 2, 0]].forEach(([w, d, x, z]) => {
       const f = new THREE.Mesh(new THREE.BoxGeometry(w, 3.3, d), frameMat); f.position.set(x, -1.7, z); f.receiveShadow = true; grp.add(f); });

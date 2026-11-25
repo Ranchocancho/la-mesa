@@ -1164,3 +1164,9 @@ Quedan para probar (QUIZÁ): la tensión de combate (E4), las huellas (L1) y las
 ## Hito 105 — Arreglo: la pantalla negra al abrir una región o un lugar en el Lore
 
 - La tabla de «Presencia de los dioses» usaba la clase `pres`, que ya era la de la pantalla de presentación (fija y a pantalla completa, en negro). Al abrir una región, o un lugar con presencia, tapaba toda la página. Ahora usa `lpres`.
+
+## Hito 106 — Paquete D: la mesa de juego y los fondos
+
+- **La mesa de juego**: la mesa de madera es más grande y tiene cinco puestos, como si os sentarais de verdad: cuatro jugadores (dos abajo y uno a cada lado) y el máster en la cabecera. En cada puesto hay hojas de personaje, un lápiz y algún dado; el máster tiene sus hojas de notas en abanico. Todo está tumbado sobre la mesa para no tapar la vista del tablero, y sale siempre igual para la misma escena (nuevo `js/views/mesajuego3d.js`).
+- **Fondos según el entorno**: alrededor de la mesa ya no sale siempre un bosque. Hay volcán (montañas con resplandor en la cumbre), costa (mar hasta el horizonte, barcos y un faro), ciudad (tejados y alguna ventana encendida de noche), pantano (árboles muertos y retorcidos), cementerio (colinas con cruces) o bosque. En interiores y cuevas, nada: el vacío oscuro funciona. La forja del volcán ya no sale rodeada de árboles.
+- **De noche se ven**: detrás de las siluetas hay una franja de horizonte más clara y, de noche, una luna baja, para que se recorten contra el cielo.

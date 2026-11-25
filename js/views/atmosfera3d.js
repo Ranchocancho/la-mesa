@@ -23,6 +23,26 @@ function shaftTex() {
   g.globalCompositeOperation = "destination-out"; g.fillStyle = h; g.fillRect(0, 0, 64, 128);
   return (SHAFT = new THREE.CanvasTexture(c));
 }
+/** Qué fondo poner alrededor de la mesa (null = ninguno: interiores y cuevas, donde el vacío oscuro funciona). */
+function backdropKind(g, floor, exterior) {
+  const T = g.terrain || {}, n = floor.length || 1, share = ks => floor.filter(([c, r]) => ks.includes(T[c + "," + r] || "piedra")).length / n;
+  const props = g.props || [], graves = props.filter(p => ["lapida", "cruz", "mausoleo", "tumbaabierta"].includes(p.k)).length;
+  const env = envKindOf(g);
+  if (env === "volcan") return "volcan";
+  if (env === "cueva" || env === "nieve" && !exterior) return null;
+  if (env === "costa" || share(["agua", "aguaprof", "muelle", "cubierta", "arena"]) > 0.3) return "coast";
+  if (share(["adoquin"]) > 0.2) return "city";
+  if (graves >= 3) return "grave";
+  if (share(["barro", "juncos", "musgo", "agua"]) > 0.25) return "swamp";
+  return exterior ? "forest" : null;
+}
+let BAND = null;
+function bandTex() { // franja de horizonte: clara abajo, se desvanece hacia arriba
+  if (BAND) return BAND;
+  const c = document.createElement("canvas"); c.width = 4; c.height = 128; const g = c.getContext("2d"), gr = g.createLinearGradient(0, 128, 0, 0);
+  gr.addColorStop(0, "rgba(255,255,255,0)"); gr.addColorStop(0.25, "rgba(255,255,255,.9)"); gr.addColorStop(0.45, "rgba(255,255,255,.55)"); gr.addColorStop(1, "rgba(255,255,255,0)");
+  g.fillStyle = gr; g.fillRect(0, 0, 4, 128); return (BAND = new THREE.CanvasTexture(c));
+}
 let MOON = null;
 function moonTex() { // una ventana con cruz, con los bordes suaves
   if (MOON) return MOON;
@@ -81,18 +101,56 @@ export function buildAtmosphere({ g, cx, cz, CELL, elevY, isWall, amb, high, see
     }
   }
 
-  // 3) Fondo lejano en exteriores: colinas y árboles en silueta alrededor de la mesa (la niebla los difumina)
-  if (exterior) {
+  // 3) Hito 106: fondo lejano según el entorno (antes, solo un bosque en exteriores). Con una franja de horizonte
+  //    clara detrás, para que las siluetas se recorten también de noche.
+  const kind = backdropKind(g, floor, exterior);
+  if (kind) {
     const W = g.cols * CELL, Hh = g.rows * CELL, R0 = Math.max(W, Hh) * 0.5 + 140;
-    const dark = new THREE.Color(amb === "dia" ? 0x5a6a58 : amb === "noche" ? 0x141a24 : 0x1e1a16);
-    const hillM = new THREE.MeshLambertMaterial({ color: dark, flatShading: true, fog: true }), treeM = new THREE.MeshLambertMaterial({ color: dark.clone().multiplyScalar(0.75), flatShading: true, fog: true });
-    for (let i = 0; i < 26; i++) {
-      const a = i / 26 * Math.PI * 2 + R() * 0.2, d = R0 + R() * 50, w = 30 + R() * 50, h = 10 + R() * 26;
-      const hill = new THREE.Mesh(new THREE.ConeGeometry(w * 1.6, h, 6), hillM); hill.position.set(Math.cos(a) * d, h / 2 - 14, Math.sin(a) * d); hill.rotation.y = R() * 6; hill.scale.z = 0.6; group.add(hill);
+    const HZ = { dia: 0xb8c8d0, noche: 0x31466e, penumbra: 0x5a4a3c, oscuro: 0x1e2232, interior: 0x3a2a1c }[amb] ?? 0x4a4038;
+    const horizon = kind === "volcan" ? 0x7a2a10 : HZ;
+    { const band = new THREE.Mesh(new THREE.CylinderGeometry(R0 + 70, R0 + 70, 120, 48, 1, true), new THREE.MeshBasicMaterial({ map: bandTex(), color: horizon, transparent: true, side: THREE.BackSide, depthWrite: false, fog: false }));
+      band.position.y = 30; band.renderOrder = -2; group.add(band); }
+    if (amb === "noche" || amb === "oscuro") { // luna baja, para que haya algo de luz detrás de las siluetas
+      const moon = new THREE.Sprite(new THREE.SpriteMaterial({ map: puffTex(), color: 0xc8d8ff, transparent: true, opacity: 0.55, depthWrite: false, fog: false }));
+      const a = R() * 6.28; moon.position.set(Math.cos(a) * (R0 + 60), 46, Math.sin(a) * (R0 + 60)); moon.scale.set(40, 40, 1); group.add(moon); }
+    const dark = new THREE.Color(amb === "dia" ? 0x5a6a58 : amb === "noche" ? 0x0c1018 : 0x141110);
+    const M = c => new THREE.MeshLambertMaterial({ color: c, flatShading: true, fog: true }), sil = M(dark), sil2 = M(dark.clone().multiplyScalar(0.75));
+    const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), P = new THREE.Vector3(), S = new THREE.Vector3();
+    const ring = (n, geo, mat, place) => { const im = new THREE.InstancedMesh(geo, mat, n); for (let i = 0; i < n; i++) { const [x, y, z, sx, sy, sz, ry] = place(i); im.setMatrixAt(i, m4.compose(P.set(x, y, z), q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), ry || 0), S.set(sx, sy, sz))); } group.add(im); return im; };
+    const at = (spread = 50) => { const a = R() * Math.PI * 2, d = R0 + R() * spread; return [Math.cos(a) * d, Math.sin(a) * d, a]; };
+    if (kind === "forest" || kind === "swamp" || kind === "grave") {
+      ring(26, new THREE.ConeGeometry(1, 1, 6), sil, () => { const [x, z] = at(50), w = 40 + R() * 60, h = kind === "swamp" ? 4 + R() * 8 : 10 + R() * 26; return [x, h / 2 - 14, z, w * 1.6, h, w, R() * 6]; });
     }
-    const trees = new THREE.InstancedMesh(new THREE.ConeGeometry(2.2, 9, 5), treeM, 90), m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), p = new THREE.Vector3(), s = new THREE.Vector3();
-    for (let i = 0; i < 90; i++) { const a = R() * Math.PI * 2, d = R0 - 40 + R() * 30, k = 1 + R() * 1.2; trees.setMatrixAt(i, m4.compose(p.set(Math.cos(a) * d, 4.5 * k - 9, Math.sin(a) * d), q.identity(), s.set(k, k, k))); }
-    group.add(trees);
+    if (kind === "forest") ring(90, new THREE.ConeGeometry(2.2, 9, 5), sil2, () => { const [x, z] = at(-30), k = 1 + R() * 1.2; return [x, 4.5 * k - 9, z, k, k, k]; });
+    if (kind === "swamp") { // árboles muertos y retorcidos
+      const tg = new THREE.CylinderGeometry(0.25, 0.6, 1, 5); ring(60, tg, sil2, () => { const [x, z] = at(-20), h = 8 + R() * 10; return [x, h / 2 - 9, z, 1.4, h, 1.4, R() * 6]; });
+      const bg2 = new THREE.CylinderGeometry(0.12, 0.25, 1, 4); bg2.rotateZ(1); ring(80, bg2, sil2, () => { const [x, z] = at(-20), h = 3 + R() * 4; return [x, 2 + R() * 6, z, 1, h, 1, R() * 6]; });
+    }
+    if (kind === "grave") { // colina con cruces y un árbol seco
+      const cr = new THREE.BoxGeometry(0.5, 3, 0.5), cb = new THREE.BoxGeometry(2, 0.5, 0.5); 
+      ring(40, cr, sil2, () => { const [x, z, a] = at(-25); return [x, -3 + R() * 2, z, 1, 1, 1, -a]; });
+      ring(40, cb, sil2, () => { const [x, z, a] = at(-25); return [x, -2.2 + R() * 2, z, 1, 1, 1, -a]; });
+    }
+    if (kind === "volcan") { // montañas con resplandor en la cumbre
+      ring(18, new THREE.ConeGeometry(1, 1, 7), sil, () => { const [x, z] = at(40), w = 50 + R() * 50, h = 30 + R() * 40; return [x, h / 2 - 14, z, w, h, w * 0.8, R() * 6]; });
+      const glow = new THREE.MeshBasicMaterial({ color: 0xff5a1a, transparent: true, opacity: 0.6, fog: false, blending: THREE.AdditiveBlending, depthWrite: false });
+      ring(8, new THREE.SphereGeometry(1, 8, 6), glow, () => { const [x, z] = at(20); return [x, 18 + R() * 14, z, 10, 4, 10]; });
+    }
+    if (kind === "coast") { // el mar hasta el horizonte, con barcos y un faro en silueta
+      const sea = new THREE.Mesh(new THREE.RingGeometry(R0 - 40, R0 + 160, 48), new THREE.MeshLambertMaterial({ color: amb === "dia" ? 0x3a6a80 : 0x0e1a28, fog: true })); sea.rotation.x = -Math.PI / 2; sea.position.y = -6; group.add(sea);
+      const hull = new THREE.BoxGeometry(14, 4, 4), mast = new THREE.BoxGeometry(0.6, 16, 0.6), sail = new THREE.ConeGeometry(4, 10, 3);
+      const ships = [...Array(5)].map(() => at(60));
+      ring(5, hull, sil2, i => [ships[i][0], -3, ships[i][1], 1, 1, 1, R() * 6]); ring(5, mast, sil2, i => [ships[i][0], 5, ships[i][1], 1, 1, 1]); ring(5, sail, sil2, i => [ships[i][0] + 1, 6, ships[i][1], 1, 1, 0.2, R() * 6]);
+      const [lx, lz] = at(10); const tower = new THREE.Mesh(new THREE.CylinderGeometry(2, 3.5, 26, 8), sil); tower.position.set(lx, 7, lz); group.add(tower);
+      const lamp = new THREE.Sprite(new THREE.SpriteMaterial({ map: puffTex(), color: 0xffd890, transparent: true, opacity: amb === "dia" ? 0.3 : 0.9, depthWrite: false, fog: false, blending: THREE.AdditiveBlending })); lamp.position.set(lx, 21, lz); lamp.scale.set(14, 14, 1); group.add(lamp);
+    }
+    if (kind === "city") { // tejados y chimeneas, con alguna ventana encendida
+      const box = new THREE.BoxGeometry(1, 1, 1), roof = new THREE.ConeGeometry(0.75, 1, 4);
+      const houses = [...Array(70)].map(() => { const [x, z, a] = at(30); return [x, z, a, 8 + R() * 8, 8 + R() * 14]; });
+      ring(70, box, sil, i => { const [x, z, a, w, h] = houses[i]; return [x, h / 2 - 8, z, w, h, w * 0.8, -a]; });
+      ring(70, roof, sil2, i => { const [x, z, a, w, h] = houses[i]; return [x, h - 8 + 3, z, w * 1.1, 6, w * 0.9, -a + Math.PI / 4]; });
+      if (amb !== "dia") { const win = new THREE.MeshBasicMaterial({ color: 0xffc070, fog: false }); ring(40, new THREE.PlaneGeometry(1.4, 1.8), win, i => { const [x, z, a, w, h] = houses[i]; const n = new THREE.Vector3(-x, 0, -z).normalize(); return [x + n.x * w * 0.42, h * 0.5 - 6, z + n.z * w * 0.42, 1, 1, 1, Math.atan2(n.x, n.z)]; }); }
+    }
   }
 
   // 4) Hito 97b (fase 4): vida alrededor de la luz y el fuego, hojas que caen y luz de luna
@@ -152,7 +210,7 @@ export function buildAtmosphere({ g, cx, cz, CELL, elevY, isWall, amb, high, see
   return {
     group, shroud,
     step: dt => steps.forEach(f => f(dt)),
-    dispose() { group.traverse(o => { if (o.geometry) o.geometry.dispose(); if (o.material && o.material.map !== PUFF && o.material.map !== SHAFT && o.material.map !== MOON) o.material.dispose(); }); }
+    dispose() { group.traverse(o => { if (o.geometry) o.geometry.dispose(); if (o.material && o.material.map !== PUFF && o.material.map !== SHAFT && o.material.map !== MOON && o.material.map !== BAND) o.material.dispose(); }); }
   };
 }
 
