@@ -1135,3 +1135,13 @@ Quedan para probar (QUIZÁ): la tensión de combate (E4), las huellas (L1) y las
 - **Iniciativa**: vuelve a caber entera. Retratos pequeños (o silueta) que se encogen según cuántos haya; el del turno es mayor y lleva nombre, vida y sus estados. Los demás llevan la vida debajo y los estados como puntitos de color (verde ayuda, rojo perjudica, azul concentración).
 - **Estados en la placa**: ya no hay fila de iconos que tape la figura. En reposo salen como puntitos de color en la esquina de la placa. Los iconos con sus turnos salen al elegir la figura o en su turno. Al pasar el ratón por la placa, un aviso dice qué es cada estado, qué hace y cuánto le queda.
 - Los avisos «¡Aturdido!» y «Ya no: …» salen más espaciados cuando llegan varios a la vez.
+
+## Hito 102 — Paquete B: Lore
+
+- **Orden nuevo**, en tres grupos: Lugares, Personajes, Facciones, Dioses y Eventos · Cronologías y Batallas · Galería, Preparar sesión y Sesiones.
+- **Lugares con regiones**: las regiones del mapa del mundo son el primer nivel (en la portada, en el árbol de la izquierda y con su propia página). Cada región muestra sus lugares y los personajes, facciones, eventos y batallas que hay en ellos. Las migas de pan llevan Lore › Mundo › Región › Ciudad › …
+- **Personajes**: se apuntan a una o varias facciones, con su rango o papel, y a un dios (Culto). Cada facción muestra sus miembros.
+- **Dioses**: ya no se ligan a un lugar. Cada lugar y cada región tiene una tabla de **Presencia** con el % de creencia por dios (lo que falta hasta 100 es «sin culto»), con una barra de reparto. Cada dios muestra dónde tiene presencia y sus fieles conocidos.
+- **Batallas**: bandos con nombre, formados por facciones y personajes, con una nota por bando; además, desenlace y consecuencias.
+- **Cronologías**: además de la «Historia del mundo», el máster puede crear cronologías con nombre (un tramo de la campaña, las luchas de una región…) y decidir en cuáles sale cada hito. Las batallas y los dioses con fecha («Orden») entran solos en la cronología.
+- **Notas del Lore**: desaparecen. Las que hubiera pasan solas a Mando › Notas de futuro, sin perder nada.

@@ -206,3 +206,29 @@
 .cam3d.compact .campop .camst{display:flex;gap:4px}
 .cam3d.compact .campop .volv input{writing-mode:horizontal-tb;width:90px}
 .turnbar .tbchip.tbcard .ihb{position:static!important;width:auto!important;left:auto!important;right:auto!important;bottom:auto!important}
+
+/* Hito 102: Lore */
+.lnav hr.lsep{border:0;border-top:1px solid var(--linea,#4a3a2a);margin:6px 8px;opacity:.6}
+.pres{border-collapse:collapse;margin:6px 0 8px;min-width:280px}
+.pres td{padding:4px 10px 4px 0;border-bottom:1px solid rgba(255,255,255,.06)}
+.pres td input{width:60px}.pres tr.none td{color:#9a8a76;font-style:italic}
+.pres-bar{display:flex;height:10px;border-radius:6px;overflow:hidden;max-width:520px;margin:4px 0 6px;background:#2a221a}
+.pres-bar span{background:#d6aa4e;border-right:2px solid #1a140f}.pres-bar span:nth-child(2){background:#7d8fe0}.pres-bar span:nth-child(3){background:#6f9a3d}.pres-bar span:nth-child(4){background:#c4708f}.pres-bar span:nth-child(5){background:#3f9a8c}
+.pres-bar span.none{background:#3a3028}
+.pbar{display:inline-block;width:90px;height:7px;border-radius:4px;background:#2a221a;vertical-align:middle;overflow:hidden}.pbar i{display:block;height:100%;background:#d6aa4e}
+.lties{display:flex;gap:28px;flex-wrap:wrap;margin:10px 0}.lties h4{margin:0 0 6px;font-family:var(--display);color:var(--oro,#d6aa4e)}
+.lties .lchip input{width:120px;margin-left:6px;font-size:12px;padding:2px 6px}
+.lsides{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px;margin:6px 0 12px}
+.lside{border:1px solid var(--linea,#4a3a2a);border-radius:10px;padding:10px;background:rgba(255,255,255,.02)}
+.lside header{display:flex;gap:6px;align-items:center;margin-bottom:6px}.lside header input{flex:1;font-family:var(--display);font-size:15px}
+.lside select,.lside textarea{width:100%;margin-top:6px}
+.tltabs{display:flex;gap:6px;flex-wrap:wrap;margin:4px 0 10px}
+.tltabs a{padding:5px 12px;border-radius:999px;border:1px solid var(--linea,#4a3a2a);text-decoration:none;color:inherit;font-size:13px}
+.tltabs a.on{background:rgba(214,170,78,.16);border-color:var(--oro,#d6aa4e);color:#ffe6a6}.tltabs a.hid{opacity:.7}
+.tledit{gap:10px;margin-bottom:10px}.tledit input[data-tlname]{font-family:var(--display);font-size:16px;min-width:240px}
+.tlmember{gap:12px;margin:10px 0;flex-wrap:wrap}.tlmember>span{color:#c8b89a}
+.tlcard .tlkind{display:block;font-style:normal;font-size:11px;color:#c8b89a;margin-bottom:2px}
+.lcard small.rank{display:block;color:#d6aa4e}
+.note.warn{color:#e0907a}
+.lties select,.lties input,.lside input,.lside select,.lside textarea,.pres input,select[data-presadd],.tledit input[data-tlname]{background:#1b1511;color:#f0e6d2;border:1px solid var(--linea,#4a3a2a);border-radius:7px;padding:4px 8px;font:inherit;font-size:13px}
+.lside textarea{resize:vertical}

@@ -8,8 +8,9 @@ export const LORE = {
   npc: { n: "Personaje", pl: "Personajes", icon: "👤", hint: "PNJ: quién es, qué quiere, qué sabe." },
   faction: { n: "Facción", pl: "Facciones", icon: "⚑", hint: "Gremios, órdenes, bandas, casas nobles…" },
   god: { n: "Dios", pl: "Dioses", icon: "☀", hint: "Deidades del mundo: dominio, símbolo, fieles y lo que piden." },
-  hist: { n: "Hito", pl: "Cronología", icon: "⏳", hint: "La historia del mundo, de la más antigua a hoy: fecha, lo que pasó y una ilustración." },
-  battle: { n: "Batalla", pl: "Batallas", icon: "⚔", hint: "Batallas y guerras: cuándo, quién luchó, quién ganó y qué quedó." },
+  hist: { n: "Hito", pl: "Cronologías", icon: "⏳", hint: "La historia del mundo, de la más antigua a hoy: fecha, lo que pasó y una ilustración." },
+  battle: { n: "Batalla", pl: "Batallas", icon: "⚔", hint: "Batallas y guerras: los bandos y quiénes los formaban, cómo fue, cómo acabó y qué consecuencias tuvo." },
+  tline: { n: "Cronología", pl: "Cronologías", icon: "🧭", hint: "Una línea temporal propia: un tramo de la campaña, las luchas de una región…" },
   event: { n: "Evento", pl: "Eventos", icon: "⚡", hint: "Situaciones preparadas que activas cuando quieras." },
   image: { n: "Imagen", pl: "Galería", icon: "🖼", hint: "Ilustraciones de lugares, personajes y escenas." },
   note: { n: "Nota", pl: "Notas", icon: "📝", hint: "Apuntes privados del máster." },
@@ -24,6 +25,13 @@ export const entry = (s, id) => loreOf(s).find(e => e.id === id) || null;
 export const placeOf = (s, id) => s.world.places.find(p => p.id === id) || null;
 /** Lo que un usuario puede ver: el máster todo; los jugadores, lo revelado (nunca notas ni preparación). */
 export const canSee = (s, e) => isDM(s) || (e.revealed && e.kind !== "note" && e.kind !== "chapter");
+/* Hito 102: dioses con presencia por lugar, PNJ con facciones y culto, cronologías con nombre */
+export const MAIN_TL = "mundo"; // la cronología de siempre: «Historia del mundo»
+export const tlinesOf = s => loreOf(s).filter(e => e.kind === "tline").sort((a, b) => (a.at || 0) - (b.at || 0));
+/** ¿Sale esta entrada en la cronología tl? (sin marcar = solo en la del mundo) */
+export const inTimeline = (e, tl) => (e.tl && e.tl.length ? e.tl : [MAIN_TL]).includes(tl);
+/** Presencia de los dioses en un lugar o región: [{ god, pct }] de mayor a menor (lo que falta hasta 100, sin culto). */
+export const presenceOf = (s, x) => Object.entries((x && x.presence) || {}).map(([god, pct]) => ({ god: entry(s, god), pct: +pct || 0 })).filter(r => r.god && r.pct > 0).sort((a, b) => b.pct - a.pct);
 
 /** Nombre de cualquier cosa enlazable: entrada de lore, lugar o escena táctica. */
 export function refName(s, id) {
@@ -56,10 +64,12 @@ export function newEntry(kind, extra = {}) {
   const id = uid(kind);
   store.commit("lore", s => {
     s.lore = s.lore || [];
-    const base = { id, kind, name: `${LORE[kind].n} nuevo`.replace("Imagen nuevo", "Imagen nueva").replace("Facción nuevo", "Facción nueva").replace("Nota nuevo", "Nota nueva").replace("Escena preparada nuevo", "Escena nueva").replace("Batalla nuevo", "Batalla nueva"),
+    const base = { id, kind, name: `${LORE[kind].n} nuevo`.replace("Imagen nuevo", "Imagen nueva").replace("Facción nuevo", "Facción nueva").replace("Nota nuevo", "Nota nueva").replace("Escena preparada nuevo", "Escena nueva").replace("Cronología nuevo", "Cronología nueva").replace("Batalla nuevo", "Batalla nueva"),
       place: null, summary: "", secret: "", revealed: false, img: null, links: [], at: Date.now() };
     if (kind === "event") Object.assign(base, { etype: "preparado", status: "pendiente", actions: "" });
     if (kind === "npc" || kind === "god" || kind === "battle") Object.assign(base, { role: "" });
+    if (kind === "battle") Object.assign(base, { sides: [{ name: "Bando 1", factions: [], npcs: [], note: "" }, { name: "Bando 2", factions: [], npcs: [], note: "" }], outcome: "", consequences: "" });
+    if (kind === "tline") Object.assign(base, { name: "Nueva cronología" });
     if (kind === "hist") { const t = loreOf(s).filter(e => e.kind === "hist"); Object.assign(base, { name: "Nuevo hito", date: "", era: t.length ? t[t.length - 1].era || "" : "", year: t.length ? Math.max(...t.map(e => +e.year || 0)) + 10 : 0 }); }
     if (kind === "chapter") Object.assign(base, { session: null, order: loreOf(s).filter(e => e.kind === "chapter").length });
     s.lore.push(Object.assign(base, extra));
@@ -93,7 +103,7 @@ export function showEntry(id, { to = null, imageOnly = false } = {}) {
 }
 /* ---------- Cronología ---------- */
 /** Hitos en orden (el «año» es solo para ordenar; lo que se lee es la fecha en texto). */
-export const timeline = (s, all = false) => loreOf(s).filter(e => e.kind === "hist" && (all || canSee(s, e)))
+export const timeline = (s, all = false, tl = MAIN_TL) => loreOf(s).filter(e => (e.kind === "hist" || ((e.kind === "battle" || e.kind === "god") && (e.year !== undefined && e.year !== "" && e.year !== null))) && inTimeline(e, tl) && (all || canSee(s, e)))
   .sort((a, b) => (+a.year || 0) - (+b.year || 0) || (a.at || 0) - (b.at || 0));
 /** El máster cuenta la historia en la mesa, hito a hito: lo que cuenta queda revelado. id null = quitarla. */
 export function tellTimeline(id) {
