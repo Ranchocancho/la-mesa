@@ -80,7 +80,9 @@ service cloud.firestore {
     }
 
     match /campaigns/{c} {
-      allow get: if signedIn();
+      // Hito 94: el mundo solo lo leen sus miembros y quien tiene invitación con su correo (para poder unirse)
+      allow get: if signedIn() && (request.auth.uid in resource.data.memberIds
+        || (request.auth.token.email_verified == true && exists(inviteFor(c))));
       allow list: if signedIn() && request.auth.uid in resource.data.memberIds;
       allow create: if signedIn()
         && request.resource.data.owner == request.auth.uid
@@ -134,11 +136,13 @@ service cloud.firestore {
         // Cualquier jugador puede terminar el turno (pasar al siguiente), sin tocar nada más de la mesa
         allow update: if isMember(c) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['turn', 'round', 'seq', 'starts', 'from']);
       }
+      // Hito 94: los jugadores solo reciben las fichas visibles (piden las de hidden == false)
       match /tokens/{t} {
-        allow read: if isMember(c);
+        allow read: if isEditor(c) || (isMember(c) && resource.data.hidden == false);
         allow create, delete: if isEditor(c);
         allow update: if isEditor(c) || (isMember(c) && resource.data.owner == request.auth.uid
-          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['c', 'r', 'init', 'conds', 'fx', 'eco', 'light']));
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['c', 'r', 'init', 'conds', 'fx', 'eco', 'light', 'hidden'])
+          && request.resource.data.get('hidden', false) == resource.data.get('hidden', false));
       }
       // Crónica: todos la leen; cada uno escribe y corrige sus notas; el máster puede corregir todas.
       match /chronicle/{e} {
@@ -164,12 +168,16 @@ service cloud.firestore {
         allow read, write: if isEditor(c);
       }
       // Imágenes: los jugadores también suben (por ejemplo, el retrato de su personaje).
+      // Hito 94: cada imagen es nueva (clave única) y lleva quién la subió; solo el máster cambia o borra las que ya existen.
       match /images/{k} {
         allow read: if isMember(c);
-        allow write: if isMember(c);
+        allow create: if isMember(c) && request.resource.data.by == request.auth.uid;
+        allow update, delete: if isEditor(c);
         match /c/{n} {
           allow read: if isMember(c);
-          allow write: if isMember(c);
+          allow create: if isMember(c)
+            && getAfter(/databases/$(database)/documents/campaigns/$(c)/images/$(k)).data.by == request.auth.uid;
+          allow update, delete: if isEditor(c);
         }
       }
       // Susurros: lo que el máster cuenta a un solo jugador (tiempo libre, saberes propios). Solo lo leen él y los másteres.

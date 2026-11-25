@@ -96,7 +96,7 @@ export async function openCampaign(cid) {
   cloud.status = "loading"; cloud.error = null; ping();
   let snap;
   try { snap = await fb.getDoc(fb.doc(db, "campaigns", cid)); }
-  catch (e) { cloud.error = "No se pudo abrir el mundo."; return toLobby(); }
+  catch (e) { cloud.error = e && e.code === "permission-denied" ? "No tienes invitación a ese mundo con este correo. Pídesela a quien lo dirige." : "No se pudo abrir el mundo."; return toLobby(); }
   if (!snap.exists()) { cloud.error = "Ese mundo no existe o el enlace está mal copiado."; return toLobby(); }
   const data = snap.data();
   if (!(data.memberIds || []).includes(cloud.user.uid)) {
@@ -171,7 +171,12 @@ function listen(cid) {
   unsubs.push(fb.onSnapshot(fb.doc(db, "campaigns", cid, "board", "live"), d => { cache.board = d.exists() ? d.data() : null; done("board"); }, fail));
   unsubs.push(fb.onSnapshot(col("rolls"), s => { cache.rolls = new Map(s.docs.map(d => [d.id, d.data()])); done("rolls"); }, fail));
   unsubs.push(fb.onSnapshot(col("chronicle"), s => { cache.chronicle = new Map(s.docs.map(d => [d.id, d.data()])); done("chronicle"); }, fail));
-  unsubs.push(fb.onSnapshot(col("tokens"), s => { cache.tokens = new Map(s.docs.map(d => [d.id, d.data()])); done("tokens"); }, fail));
+  // Hito 94: el jugador solo recibe las fichas visibles; las ocultas no llegan a su navegador
+  unsubs.push(fb.onSnapshot(dm ? col("tokens") : fb.query(col("tokens"), fb.where("hidden", "==", false)), s => {
+    cache.tokens = new Map(s.docs.map(d => [d.id, d.data()])); done("tokens");
+    // Las fichas antiguas no tienen el campo: el máster se lo pone, para que los jugadores las sigan recibiendo
+    if (dm) s.docs.forEach(d => { if (typeof d.data().hidden !== "boolean") fb.updateDoc(d.ref, { hidden: !!d.data().hidden }).catch(() => {}); });
+  }, fail));
   // Susurros: el máster los recibe todos; cada jugador, solo los suyos (las reglas no le dejan leer otros)
   unsubs.push(fb.onSnapshot(dm ? col("whispers") : fb.query(col("whispers"), fb.where("to", "==", cloud.user.uid)), s => { cache.whispers = new Map(s.docs.map(d => [d.id, d.data()])); done("whispers"); }, fail));
   // Notas privadas (Hito 74): el cuaderno y las notas de Lore de cada personaje. El máster las recibe todas; cada jugador, las suyas
@@ -263,7 +268,7 @@ function docsOf(s, dm) {
   if (s.board) out.set("board/live", s.board);
   (s.chronicle || []).forEach(e => { const { id, ...rest } = e; out.set("chronicle/" + id, rest); });
   (s.rolls || []).forEach(e => { const { id, ...rest } = e; out.set("rolls/" + id, rest); });
-  (s.tokens || []).forEach(t => { const { id, ...rest } = t; out.set("tokens/" + id, rest); });
+  (s.tokens || []).forEach(t => { const { id, ...rest } = t; out.set("tokens/" + id, { ...rest, hidden: !!rest.hidden }); });
   (s.whispers || []).forEach(w => { const { id, ...rest } = w; out.set("whispers/" + id, rest); });
   if (dm && s.freeTime) (s.freeTime.spots || []).forEach(x => out.set("secrets/ft-" + x.id, { secret: x.secret || "" }));
   if (dm) (s.world.regions || []).forEach(r => out.set("secrets/" + r.id, { secret: r.secret || "" }));
@@ -303,7 +308,8 @@ function push(state) {
     const j = JSON.stringify(v);
     if (last.get(k) !== j && allowed(k, v)) { ops.push(b => b.set(ref(k), clean(v), k === "C" ? { merge: true } : {})); keys.push(k); }
   }
-  for (const [k, j] of last) if (!all.has(k) && allowed(k, JSON.parse(j))) { ops.push(b => b.delete(ref(k))); keys.push(k); }
+  // Un jugador nunca borra fichas de la mesa: si una desaparece es que el máster la ha ocultado (Hito 94)
+  for (const [k, j] of last) if (!all.has(k) && allowed(k, JSON.parse(j)) && (cloud.isEditor || !k.startsWith("tokens/"))) { ops.push(b => b.delete(ref(k))); keys.push(k); }
   last = new Map([...all].map(([k, v]) => [k, JSON.stringify(v)]));
   // Un jugador escribe pocos documentos: uno a uno, para que si el servidor rechaza un cambio en su ficha
   // (las reglas solo le dejan lo de la Partida, sus notas, sus propuestas y la subida de nivel) no arrastre el resto.
@@ -333,7 +339,7 @@ async function putImageCloud(key, dataURL) {
   const parts = [];
   for (let i = 0; i < dataURL.length; i += CHUNK) parts.push(dataURL.slice(i, i + CHUNK));
   const batch = fb.writeBatch(db);
-  batch.set(fb.doc(db, "campaigns", cloud.cid, "images", key), { n: parts.length });
+  batch.set(fb.doc(db, "campaigns", cloud.cid, "images", key), { n: parts.length, by: cloud.user.uid });
   parts.forEach((d, i) => batch.set(fb.doc(db, "campaigns", cloud.cid, "images", key, "c", String(i)), { d }));
   await batch.commit();
 }

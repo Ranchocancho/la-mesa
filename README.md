@@ -1053,3 +1053,10 @@ Para tenerlas en un mundo que ya existe: **Escenas → 🔄 Renovar escenas de e
 - **Dos conjuros con espacio por turno (BG3)**: interruptor del DM en el menú de colores de la mesa, activado por defecto. Si se apaga, se aplica la regla 2024 (un solo conjuro con espacio por turno). Se sincroniza con la campaña.
 - **firestore.rules**: los jugadores no pueden poner PG fuera de rango (actual entre 0 y el máximo, temporales entre 0 y 500) ni hacer tiradas secretas. **Hay que publicar las reglas en la consola de Firebase.**
 - **Rendimiento 3D**: los objetos de atrezzo comparten materiales en lugar de crear uno por pieza.
+
+## Hito 94 — Fase 1: seguridad de Firebase
+
+- **Imágenes (P-01)**: cada imagen guarda quién la subió. Cualquier miembro puede subir imágenes nuevas, pero solo el máster puede cambiar o borrar las que ya existen.
+- **Mundo (H-01)**: el documento de un mundo solo lo leen sus miembros y quien tiene invitación con su correo. Si alguien sin invitación abre el enlace, se le dice que la pida.
+- **Fichas ocultas (H-04)**: los jugadores solo reciben las fichas visibles (`hidden == false`); las ocultas no llegan a su navegador. Al abrir el mundo, el máster añade el campo a las fichas antiguas que no lo tienen.
+- **Hay que publicar `firestore.rules` en la consola de Firebase.** Después, el máster debe abrir cada mundo una vez para que las fichas antiguas sigan viéndose.
