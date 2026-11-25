@@ -468,6 +468,18 @@ function condTag(conds) {
 /**
  * opts: { model(), dm, canMove(t), mutate(label, fn), decorate(t), hpOf(t), onSelect(id), charOf(t), setAmbient(key) }
  */
+/** Hito 109: la pieza 3D sola (sin luces, sombras ni etiquetas), para fotografiarla desde arriba en el plano 2D. */
+export async function propModel(k, seed = 0.5) {
+  let obj = null;
+  if (k === "arbol") obj = tree(seed * 1e4); else if (k === "arbusto") obj = bush(seed * 1e4); else if (k === "roca") obj = rock(); else if (k === "trampa") obj = trap();
+  else if (k === "arbolgigante") { obj = tree(seed * 1e4); obj.scale.multiplyScalar(1.9); }
+  else if (k === "hoguera") obj = campfire();
+  else if (PROC[k]) { obj = PROC[k](fire); if (PROC_BIG.includes(k)) obj.scale.multiplyScalar(1.35); if (PROC_TINY.includes(k)) obj.scale.multiplyScalar(1.6); }
+  else if (PROP3D[k] && !PROP3D[k][2]) { const [path, scale] = PROP3D[k]; const gl = await load(path); if (!gl) return null; obj = gl.scene.clone(true); obj.scale.setScalar(scale); }
+  return obj;
+}
+export const PROP_CELL = CELL;
+
 export function createBoard3D(host, opts) {
   host.classList.add("board", "board3d");
   // Los controles de cámara y ambiente pueden ir fuera del tablero (en la barra superior de la mesa)
@@ -806,6 +818,7 @@ export function createBoard3D(host, opts) {
       const x = cx(p.c), z = cz(p.r);
       let obj = null;
       if (p.k === "arbol") obj = tree(Math.abs(Math.sin(p.c * 12.9898 + p.r * 78.233) * 43758.5453) % 1 * 1e4); else if (p.k === "arbusto") obj = bush(Math.abs(Math.sin(p.c * 39.3468 + p.r * 11.135) * 24634.6345) % 1 * 1e4); else if (p.k === "roca") obj = rock(); else if (p.k === "trampa") obj = trap();
+      else if (p.k === "arbolgigante") { obj = tree(Math.abs(Math.sin(p.c * 21.7 + p.r * 5.3) * 9631.7) % 1 * 1e4); obj.scale.multiplyScalar(1.9); } // Hito 109: el roble milenario es un árbol de verdad, no el cono viejo
       else if (p.k === "hoguera") obj = campfire();
       else if (PROC[p.k]) { obj = PROC[p.k](fire); if (!["telarana"].includes(p.k)) obj.rotation.y = (p.rot || 0) * Math.PI / 2; if (PROC_BIG.includes(p.k)) obj.scale.multiplyScalar(1.35); if (PROC_TINY.includes(p.k)) obj.scale.multiplyScalar(1.6); }
       if (obj && PROC[p.k] && (PROPS[p.k] || {}).wall) { // Hito 97b: piezas de pared hechas por código (farol, carteles)

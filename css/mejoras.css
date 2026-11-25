@@ -260,3 +260,14 @@ details.sess p{margin-top:8px}
 .board foreignObject.glow2d canvas.flick{animation:flick2d 2.4s infinite}
 @keyframes flick2d{0%{opacity:.9}12%{opacity:.78}20%{opacity:.95}33%{opacity:.82}47%{opacity:1}60%{opacity:.86}71%{opacity:.94}85%{opacity:.8}100%{opacity:.9}}
 .boardzoom [data-luz][aria-pressed="true"]{background:rgba(214,170,78,.25);border-color:var(--oro)}
+/* Hito 109: plano 2D — piezas vistas desde arriba, sombra de las fichas y «Ver como jugador» */
+.boardsvg .prop.art{filter:none}
+.boardsvg .prop.art .part{pointer-events:none}
+.boardsvg .prop.art.hid .part{opacity:.55}
+.boardsvg .prop.art:hover .pbg,.boardsvg .prop.art.sel .pbg{fill:rgba(255,240,210,.06)}
+.boardsvg .tok .tsh{fill:url(#tshg);pointer-events:none}
+.boardsvg .tok.down .tsh{opacity:.5}
+.boardzoom [data-pv][aria-pressed="true"]{background:#6a4fb0;color:#fff;box-shadow:0 0 0 2px #c8a0ff}
+.pview .boardsvg{box-shadow:inset 0 0 0 3px rgba(200,160,255,.55)}
+.boardsvg .prop.art .covbadge{opacity:0;transition:opacity .15s}
+.boardsvg .prop.art:hover .covbadge,.boardsvg .prop.art.sel .covbadge,.boardsvg.editing .prop.art .covbadge{opacity:.9}

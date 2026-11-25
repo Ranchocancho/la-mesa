@@ -124,3 +124,21 @@ export function lightCanvases(grid, tokens, P, { dm = false } = {}) {
 }
 export const lightSig = (grid, tokens, dm) => [grid.cols, grid.rows, grid.ambient, grid.light, dm, JSON.stringify(grid.terrain || {}).length, JSON.stringify((grid.props || []).map(p => [p.k, p.c, p.r, p.open])), JSON.stringify(tokens.filter(t => t.light).map(t => [t.c, t.r, t.light, t.hidden]))].join("|");
 function hexA(h, a) { const n = parseInt(h.slice(1), 16); return `rgba(${n >> 16},${(n >> 8) & 255},${n & 255},${a})`; }
+
+/** Hito 109: sombras de la línea de visión, como en Foundry. Dentro de lo que se ve, lo que queda tapado por un muro
+ *  desde todos los ojos se vela con un borde nítido (la niebla por casillas sola deja esquinas «a cuadros»). */
+export function sightShade(grid, vis, P = 16) {
+  const eyes = (vis.eyes || []).filter(e => !e.blind); if (!eyes.length) return null;
+  const W = grid.cols * P, H = grid.rows * P, segs = blockers(grid), rad = Math.max(grid.cols, grid.rows) * 1.5;
+  const cv = document.createElement("canvas"); cv.width = W; cv.height = H; const g = cv.getContext("2d");
+  g.fillStyle = "rgba(9,10,17,.6)"; g.fillRect(0, 0, W, H);
+  g.globalCompositeOperation = "destination-out"; g.fillStyle = "#000";
+  for (const e of eyes) { const poly = visPoly(e.c + 0.5, e.r + 0.5, rad, segs); g.beginPath(); poly.forEach(([x, y], i) => i ? g.lineTo(x * P, y * P) : g.moveTo(x * P, y * P)); g.closePath(); g.fill(); }
+  // solo dentro de las casillas que se ven (fuera ya está la niebla)
+  const m = document.createElement("canvas"); m.width = W; m.height = H; const mg = m.getContext("2d"); mg.fillStyle = "#fff";
+  vis.forEach(k => { const [c, r] = k.split(",").map(Number); mg.fillRect(c * P - 1, r * P - 1, P + 2, P + 2); });
+  g.globalCompositeOperation = "destination-in"; g.drawImage(m, 0, 0);
+  const out = document.createElement("canvas"); out.width = W; out.height = H; const o = out.getContext("2d");
+  try { o.filter = `blur(${Math.max(1, Math.round(P * 0.08))}px)`; } catch (e) { /* nada */ } o.drawImage(cv, 0, 0);
+  return out;
+}

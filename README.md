@@ -1186,3 +1186,12 @@ Cada pieza del catálogo se ha fotografiado sola en la mesa 3D y se han rehecho 
 - **Botón 💡**: en la partida, la luz está encendida por defecto; en el editor, apagada (para pintar con todo a la vista). Cada uno lo cambia con 💡, y se recuerda. El máster ve la oscuridad más suave que los jugadores, para no perderse en su propio mapa.
 - El farol de pared alumbra como una lámpara (SRD).
 - En la partida ya no se dibujan las rayas de terreno difícil (siguen en el editor).
+
+## Hito 109
+Plano 2D, segunda parte del trabajo inspirado en Foundry:
+- **Objetos vistos desde arriba**: cada pieza del plano es una foto cenital de la misma pieza 3D de la mesa (luz de arriba a la izquierda y sombra proyectada), como los recortes de Forgotten Adventures. Se hacen una vez por sesión; mientras tanto se ve el icono. Las piezas de pared (antorchas, estandartes) siguen con icono.
+- Los escudos de cobertura sobre los objetos solo aparecen al pasar el ratón, al seleccionarlos o en el editor.
+- **Árbol gigante**: ahora es un árbol de verdad (el mismo de los demás, 1,9 veces más grande) también en 3D.
+- **Sombra bajo las fichas**.
+- **Línea de visión nítida**: dentro de la niebla, lo que tapa un muro desde todos los personajes queda en sombra con borde limpio (antes, esquinas a cuadros).
+- **👁 Ver como jugador** (máster, en Partida): niebla, oscuridad y objetos o criaturas ocultos tal como los ven los jugadores; el marco se tiñe de violeta mientras está activo.

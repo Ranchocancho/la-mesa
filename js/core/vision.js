@@ -107,7 +107,7 @@ export function computeVision(grid, tokens, characters) {
     }
     if (best > 0) { vis.add(k); if (best === 1) dim.add(k); }
   }
-  vis.dim = dim;
+  vis.dim = dim; vis.eyes = eyes; // Hito 109: los ojos, para recortar la niebla del 2D con su línea de visión
   return vis;
 }
 

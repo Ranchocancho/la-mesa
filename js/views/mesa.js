@@ -185,7 +185,7 @@ export function mountTactical(host, opts = {}) {
     targeting: () => targeting(),
     onTemplate: cell => placeTemplate(cell),
     rollColor: r => { const t = S().tokens.find(x => x.id === r.tok), c = t && charOf(S(), t); const u = S().users.find(x => x.id === r.who); return (c && c.color) || (u && u.role !== "player" ? "#6a3fb0" : (u && u.color) || "#8a2be2"); },
-    fogState: () => { const s = S(); if (isDM(s) || !visionOn(s.board)) return null; const vis = computeVision(s.board, s.tokens, s.characters); return { vis, exp: explored((s.board.scene || "mesa") + "#" + floorIdx(s.board), vis) }; },
+    fogState: (o) => { const s = S(); if ((isDM(s) && !(o && o.asPlayer)) || !visionOn(s.board)) return null; const vis = computeVision(s.board, s.tokens, s.characters); return { vis, exp: explored((s.board.scene || "mesa") + "#" + floorIdx(s.board), vis) }; },
     setAmbient: k => store.commit("board", st => { st.board.ambient = k; })
   };
   const use3d = () => want3d && !opts.edit;

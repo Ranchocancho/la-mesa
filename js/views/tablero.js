@@ -6,7 +6,8 @@ import { chipText, templateCells, templateOk } from "../core/objetivo.js";
 const ELEVS = [-6, -4.5, -3, -1.5, 0, 1.5, 3, 4.5, 6, 9, 12];
 const hlColor = v => v > 0 ? `hsl(38 ${40 + v * 4}% ${55 + v * 2}%)` : v < 0 ? `hsl(220 25% ${40 + v * 3}%)` : "#777";
 import { fogCanvas, fogSig } from "./niebla.js";
-let fogCache = { sig: "", url: "" };
+import { spriteFor } from "./cenital2d.js";
+let fogCache = { sig: "", url: "" }, shadeCache = { sig: "", url: "" };
 import { getImage } from "../core/images.js";
 import { esc } from "../core/ui.js";
 import { estado } from "../data/estados.js";
@@ -14,7 +15,7 @@ import { store } from "../core/store.js";
 import { leftOf } from "../core/duraciones.js";
 import { TERRAIN, TERRAIN_CATS, PROPS, PROP_CATS, REGIONS, inRegion, isDoor, isWallT, propVisible } from "../data/mapas.js";
 import { terrainURL } from "./texturas.js";
-import { floorCanvas, floorSig, lightCanvases, lightSig } from "./plano2d.js";
+import { sightShade, floorCanvas, floorSig, lightCanvases, lightSig } from "./plano2d.js";
 import { generateDungeon, generateRegion, addRelief } from "../core/generador.js";
 import { sound } from "../core/sonido.js";
 import { pathTo, moveHint } from "../core/movimiento.js";
@@ -22,6 +23,7 @@ import { RES_TEXT, RES_COLOR } from "../core/golpes.js";
 import { impactOf } from "../core/impactos.js";
 import { hazardEdges, HAZ_COLOR, HAZ_TEXT, coverOf, COVER_TEXT, trapState, TRAP_LOOK } from "../core/marcas.js";
 export { TERRAIN, PROPS };
+const WALLISH = new Set(["antorcha", "estandarte"]); // cuelgan de la pared: de arriba no se leen
 
 const T = 44, S = T / 2; // lado de la casilla en el plano 2D
 const T_ = T; // (alias: dentro de las funciones de apuntar, T es la información de objetivo)
@@ -52,7 +54,7 @@ export function createBoard(host, opts) {
   host.classList.add("board");
   host.innerHTML = `<svg class="boardsvg" aria-label="Tablero"><defs></defs><g class="world"></g><g class="ruler"></g><g class="fxl"></g></svg><div class="bvig" aria-hidden="true"></div>
     ${opts.edit ? `<div class="mapeditor" role="toolbar" aria-label="Editor de mapas"></div>` : ""}
-    <div class="boardzoom"><button data-z="1.25" aria-label="Acercar">+</button><button data-z="0.8" aria-label="Alejar">−</button><button data-z="fit" aria-label="Encajar">⤢</button><button data-luz aria-pressed="false" title="Luz y sombras (como en Foundry): oscuridad de la escena, luces que se cortan en los muros" aria-label="Luz">💡</button>${opts.edit ? "" : `<button data-ruler aria-pressed="false" title="Medir distancias: arrastra de una casilla a otra" aria-label="Regla">📏</button>`}</div>
+    <div class="boardzoom"><button data-z="1.25" aria-label="Acercar">+</button><button data-z="0.8" aria-label="Alejar">−</button><button data-z="fit" aria-label="Encajar">⤢</button><button data-luz aria-pressed="false" title="Luz y sombras (como en Foundry): oscuridad de la escena, luces que se cortan en los muros" aria-label="Luz">💡</button>${opts.dm && !opts.edit ? `<button data-pv aria-pressed="false" title="Ver como jugador: niebla, luz y lo oculto tal como lo ven los jugadores">👁</button>` : ""}${opts.edit ? "" : `<button data-ruler aria-pressed="false" title="Medir distancias: arrastra de una casilla a otra" aria-label="Regla">📏</button>`}</div>
     <div class="dragtip" hidden></div>`;
   const svg = host.querySelector("svg"), world = svg.querySelector(".world"), defs = svg.querySelector("defs"), tip = host.querySelector(".dragtip");
   const fxl = svg.querySelector(".fxl"), rulerG = svg.querySelector(".ruler");
@@ -178,14 +180,16 @@ export function createBoard(host, opts) {
     const fk = floorSig(grid) + "|" + P;
     if (fk !== floorKey) { floorKey = fk; const c = floorCanvas(grid, P); FLOOR.cv.width = c.width; FLOOR.cv.height = c.height; FLOOR.cv.getContext("2d").drawImage(c, 0, 0); }
     [FLOOR, DARKL, GLOWL].forEach(L => { L.fo.setAttribute("x", 4); L.fo.setAttribute("y", 4); L.fo.setAttribute("width", grid.cols * T); L.fo.setAttribute("height", grid.rows * T); });
-    const on = LUZ(), lk = on ? lightSig(grid, tokens, opts.dm) : "off";
+    const DMV = opts.dm && !PV.on, on = LUZ(), lk = on ? lightSig(grid, tokens, DMV) : "off";
     if (lk !== lightKey) {
-      lightKey = lk; const Lc = on ? lightCanvases(grid, tokens, 16, { dm: opts.dm && !opts.asPlayer }) : null;
+      lightKey = lk; const Lc = on ? lightCanvases(grid, tokens, 16, { dm: DMV && !opts.asPlayer }) : null;
       [[DARKL, Lc && Lc.dark], [GLOWL, Lc && Lc.glow]].forEach(([L, c]) => { if (c) { L.cv.width = c.width; L.cv.height = c.height; L.cv.getContext("2d").drawImage(c, 0, 0); L.fo.style.display = ""; } else L.fo.style.display = "none"; });
       GLOWL.cv.classList.toggle("flick", !!(Lc && Lc.flicker));
     }
   }
 
+  const PV = createBoard.PV = createBoard.PV || { on: false };
+  { const pb = host.querySelector("[data-pv]"); if (pb) { pb.setAttribute("aria-pressed", PV.on); host.classList.toggle("pview", PV.on); pb.onclick = () => { PV.on = !PV.on; pb.setAttribute("aria-pressed", PV.on); host.classList.toggle("pview", PV.on); lightKey = "?"; render(); }; } }
   { const lb = host.querySelector("[data-luz]"); if (lb) { lb.setAttribute("aria-pressed", LUZ()); lb.onclick = () => { const on = !LUZ(); try { localStorage.setItem("lamesa:luz2d" + (opts.edit ? ":ed" : ""), on ? "1" : "0"); } catch (e) {} lb.setAttribute("aria-pressed", on); lightKey = "?"; render(); }; } }
   /* ---------- Dibujo ---------- */
   const usedPatterns = new Set();
@@ -200,12 +204,14 @@ export function createBoard(host, opts) {
     <linearGradient id="rsh-s" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#000" stop-opacity=".55"/><stop offset="1" stop-color="#000" stop-opacity="0"/></linearGradient>
     <linearGradient id="rsh-e" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#000" stop-opacity=".55"/><stop offset="1" stop-color="#000" stop-opacity="0"/></linearGradient>
     <linearGradient id="rsh-w" x1="1" y1="0" x2="0" y2="0"><stop offset="0" stop-color="#000" stop-opacity=".55"/><stop offset="1" stop-color="#000" stop-opacity="0"/></linearGradient>
+    <radialGradient id="tshg"><stop offset=".55" stop-color="#000" stop-opacity=".55"/><stop offset="1" stop-color="#000" stop-opacity="0"/></radialGradient>
     <filter id="wsh" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="2" stdDeviation="2.5" flood-color="#000" flood-opacity=".75"/></filter>`);
 
   function render() {
     if (drag && (drag.token || drag.prop)) return; // no redibujar a mitad de un arrastre
     const { grid, tokens } = opts.model();
     if (!vb) fit();
+    const DMV = opts.dm && !PV.on; // Hito 109: el máster puede mirar como un jugador
     const t = grid.terrain || {}, wallAt = (c, r) => c < 0 || r < 0 || c >= grid.cols || r >= grid.rows ? false : isWallT(t[key(c, r)]);
     let cells = "", walls = "", dif = "";
     paintPlano(grid, tokens);
@@ -225,11 +231,15 @@ export function createBoard(host, opts) {
     }
     const relief = reliefSvg(grid, wallAt, opts.edit && E.tool === "height");
     const grid2 = `<path class="gridl" d="${Array.from({ length: grid.cols + 1 }, (_, c) => `M${4 + c * T},4v${grid.rows * T}`).join("")}${Array.from({ length: grid.rows + 1 }, (_, r) => `M4,${4 + r * T}h${grid.cols * T}`).join("")}"/>`;
-    const props = (grid.props || []).filter(p => propVisible(p, opts.dm)).map(p => propSvg(p, grid, wallAt)).join("");
-    const fog = opts.fogState ? opts.fogState() : null;
+    const props = (grid.props || []).filter(p => propVisible(p, DMV)).map(p => propSvg(p, grid, wallAt, DMV)).join("");
+    const fog = opts.fogState ? opts.fogState({ asPlayer: opts.dm && PV.on }) : null;
     let fogSvg = "";
     if (fog) { const sg = fogSig(fog.vis, fog.exp, grid.cols, grid.rows); if (sg !== fogCache.sig) fogCache = { sig: sg, url: fogCanvas(grid.cols, grid.rows, fog.vis, fog.exp).toDataURL("image/png") };
-      fogSvg = `<image href="${fogCache.url}" x="4" y="4" width="${grid.cols * T}" height="${grid.rows * T}" preserveAspectRatio="none" style="pointer-events:none"/>`; }
+      fogSvg = `<image href="${fogCache.url}" x="4" y="4" width="${grid.cols * T}" height="${grid.rows * T}" preserveAspectRatio="none" style="pointer-events:none"/>`;
+      // Hito 109: sombra nítida de la línea de visión dentro de lo que se ve
+      const sk = fogCache.sig + "|" + (fog.vis.eyes || []).map(e => e.c + "," + e.r).join(";") + "|" + floorSig(grid) + JSON.stringify((grid.props || []).filter(isDoor).map(p => p.open));
+      if (sk !== shadeCache.sig) { const c = sightShade(grid, fog.vis, 16); shadeCache = { sig: sk, url: c ? c.toDataURL("image/png") : "" }; }
+      if (shadeCache.url) fogSvg += `<image href="${shadeCache.url}" x="4" y="4" width="${grid.cols * T}" height="${grid.rows * T}" preserveAspectRatio="none" style="pointer-events:none"/>`; }
     host.dataset.amb = grid.ambient || "interior";
     // Daño y curación: el número sale flotando sobre la ficha (todos lo ven)
     tokens.forEach(k => { const hp = opts.hpOf(k); if (!hp) return; const was = lastHp.get(k.id); lastHp.set(k.id, hp.cur);
@@ -243,16 +253,17 @@ export function createBoard(host, opts) {
         } else hitFx.set(k.id, { cls: "healfx", rx: 0, ry: 0, until: Date.now() + 700 });
       } });
     hpPrimed = true;
-    const toks = tokens.filter(k => (opts.dm || !k.hidden) && (!fog || k.kind === "pc" || tokenSeen(k, fog.vis))).map(k => {
+    const toks = tokens.filter(k => (DMV || !k.hidden) && (!fog || k.kind === "pc" || tokenSeen(k, fog.vis))).map(k => {
       const dk = { name: k.name, color: k.color, ...(opts.decorate ? opts.decorate(k) : {}) };
       const [x, y] = center(k.c, k.r), rad = S * 0.8 * (k.size || 1), hp = opts.hpOf(k), down = hp && hp.cur <= 0;
       const img = dk.portrait && imgCache.get(dk.portrait);
       if (dk.portrait && !imgCache.has(dk.portrait)) { imgCache.set(dk.portrait, null); getImage(dk.portrait).then(u => { imgCache.set(dk.portrait, u); render(); }); }
       const ring = k.kind === "pc" ? "#d6aa4e" : k.kind === "npc" ? "#7d8fe0" : "#b33a2e";
       const raw = hp ? Math.max(0, Math.min(1, hp.cur / Math.max(1, hp.max))) : 1;
-      const pct = opts.dm || k.kind === "pc" ? raw : raw > 0.75 ? 1 : raw > 0.5 ? 0.7 : raw > 0.25 ? 0.45 : raw > 0 ? 0.18 : 0; // a los enemigos se les ve "a ojo"
+      const pct = DMV || k.kind === "pc" ? raw : raw > 0.75 ? 1 : raw > 0.5 ? 0.7 : raw > 0.25 ? 0.45 : raw > 0 ? 0.18 : 0; // a los enemigos se les ve "a ojo"
       return `<g class="tok ${down ? "down" : ""} ${k.hidden ? "hid" : ""} ${selected === k.id ? "sel" : ""} ${opts.canMove(k) ? "mov" : ""} ${(shakeUntil.get(k.id) || 0) > Date.now() ? "shake" : ""} ${(f => f && f.until > Date.now() ? f.cls : "")(hitFx.get(k.id))}" data-tok="${k.id}" transform="translate(${x},${y})"${(f => f && f.until > Date.now() ? ` style="--rx:${f.rx.toFixed(1)}px;--ry:${f.ry.toFixed(1)}px"` : "")(hitFx.get(k.id))}>
         <clipPath id="cp-${k.id}"><circle r="${rad - 2}"/></clipPath>
+        <ellipse class="tsh" cx="${rad * .14}" cy="${rad * .22}" rx="${rad * 1.08}" ry="${rad * 1.04}"/>
         <circle r="${rad + 3}" class="halo"/>
 
         <circle r="${rad}" fill="${dk.color || "#777"}" stroke="${ring}" stroke-width="3"/>
@@ -269,7 +280,7 @@ export function createBoard(host, opts) {
     const start = mkp ? `${zr ? `<rect class="deployz" x="${mkp[0] - S - zr * T}" y="${mkp[1] - S - zr * T}" width="${(2 * zr + 1) * T}" height="${(2 * zr + 1) * T}" rx="8"/>` : ""}<g class="startmk" transform="translate(${mkp[0]},${mkp[1]})"><polygon points="${corners(0, 0, S * 0.92)}"/><text y="6">⚑</text></g>` : "";
     const aim = opts.aim && opts.aim(), A = aim && tokens.find(t => t.id === aim.from), B = aim && tokens.find(t => t.id === aim.to);
     let aimSvg = "";
-    if (A && B && (opts.dm || !B.hidden)) { const [x0, y0] = center(A.c, A.r), [x1, y1] = center(B.c, B.r); aimSvg = `<line x1="${x0}" y1="${y0}" x2="${x1}" y2="${y1}" stroke="${aim.color}" stroke-width="3" stroke-dasharray="8 5"/><text x="${(x0 + x1) / 2}" y="${(y0 + y1) / 2 - 8}" class="aimtxt" fill="${aim.color}">${esc(aim.label)}</text>`; }
+    if (A && B && (DMV || !B.hidden)) { const [x0, y0] = center(A.c, A.r), [x1, y1] = center(B.c, B.r); aimSvg = `<line x1="${x0}" y1="${y0}" x2="${x1}" y2="${y1}" stroke="${aim.color}" stroke-width="3" stroke-dasharray="8 5"/><text x="${(x0 + x1) / 2}" y="${(y0 + y1) / 2 - 8}" class="aimtxt" fill="${aim.color}">${esc(aim.label)}</text>`; }
     // Alcance del movimiento de la ficha que tiene el turno
     const R = selected && opts.reach ? opts.reach(selected) : null; let reach = "";
     if (R) { R.cells.forEach((v, k) => { if (!v.cost || v.occ) return; const [c, r] = k.split(",").map(Number), [x, y] = center(c, r); reach += `<rect x="${x - S + 2}" y="${y - S + 2}" width="${T - 4}" height="${T - 4}" rx="4" class="rch ${v.dash ? "dash" : v.dif ? "dif" : ""}"/>`; });
@@ -298,7 +309,8 @@ export function createBoard(host, opts) {
       const d = [`M${x - a},${y - a}h${a * 2}`, `M${x + a},${y - a}v${a * 2}`, `M${x - a},${y + a}h${a * 2}`, `M${x - a},${y - a}v${a * 2}`][e.side];
       return `<path d="${d}" class="hz hz-${e.kind}" style="stroke:${HAZ_COLOR[e.kind]}"><title>${esc(HAZ_TEXT[e.kind])}</title></path>`; }).join("")}</g>`;
   }
-  function propSvg(p, grid, wallAt) {
+  let artT = 0; const artReady = () => { clearTimeout(artT); artT = setTimeout(() => render(), 60); };
+  function propSvg(p, grid, wallAt, DMV = opts.dm) {
     const v = PROPS[p.k] || { i: "?", n: p.k }, [x, y] = center(p.c, p.r), hid = p.hidden ?? v.hidden, sel = selProp === p.id ? " sel" : "";
     if (v.door) {
       const horiz = wallAt(p.c - 1, p.r) || wallAt(p.c + 1, p.r), rot = horiz ? 0 : 90;
@@ -307,7 +319,11 @@ export function createBoard(host, opts) {
     }
     const ts = trapState(p), cov = coverOf(p), TL = ts && TRAP_LOOK[ts];
     const tip = [p.label, ts && TL.text, cov && COVER_TEXT[cov]].filter(Boolean).join(" · ");
-    return `<g class="prop c-${v.cat}${hid ? " hid" : ""}${sel}${v.block ? " block" : ""}${ts ? " trap-" + ts : ""}" data-prop="${p.id}" transform="translate(${x},${y})"><circle r="${S * .78}" class="pbg"/>${ts ? `<circle r="${S * .9}" class="trapring" style="stroke:${TL.color}"/>` : ""}<text y="${S * .32}" transform="rotate(${(p.rot || 0) * 90})">${v.i}</text>${ts ? `<g class="trapbadge" transform="translate(${S * .62},${-S * .62})"><circle r="8" style="fill:${TL.color}"/><text y="3.5">${TL.icon}</text></g>` : ""}${cov ? `<g class="covbadge" transform="translate(${-S * .62},${-S * .62})"><path d="M0,-7 L6,-4.5 L5,3 L0,7 L-5,3 L-6,-4.5 Z"/><path class="covfill" d="${cov === "3q" ? "M0,-7 L6,-4.5 L5,3 L0,7 L-5,3 L-5.5,0 L0,0 Z" : "M0,-7 L0,7 L-5,3 L-6,-4.5 Z"}"/></g>` : ""}${tip ? `<title>${esc(tip)}</title>` : ""}</g>`;
+    // Hito 109: la pieza vista desde arriba (foto de la pieza 3D); el icono queda para las de pared y mientras carga
+    const art = !v.wall && !WALLISH.has(p.k) && !(ts === "oculta" && !DMV) ? spriteFor(p, artReady) : null;
+    const pic = art ? (() => { const w = art.span * T; return `<image class="part" href="${art.url}" x="${art.ox * T - w / 2}" y="${art.oy * T - w / 2}" width="${w}" height="${w}" transform="rotate(${(p.rot || 0) * 90})"/>`; })()
+      : `<text y="${S * .32}" transform="rotate(${(p.rot || 0) * 90})">${v.i}</text>`;
+    return `<g class="prop c-${v.cat}${hid ? " hid" : ""}${sel}${v.block ? " block" : ""}${ts ? " trap-" + ts : ""}${art ? " art" : ""}" data-prop="${p.id}" transform="translate(${x},${y})"><circle r="${S * .78}" class="pbg"/>${ts ? `<circle r="${S * .9}" class="trapring" style="stroke:${TL.color}"/>` : ""}${pic}${ts ? `<g class="trapbadge" transform="translate(${S * .62},${-S * .62})"><circle r="8" style="fill:${TL.color}"/><text y="3.5">${TL.icon}</text></g>` : ""}${cov ? `<g class="covbadge" transform="translate(${-S * .62},${-S * .62})"><path d="M0,-7 L6,-4.5 L5,3 L0,7 L-5,3 L-6,-4.5 Z"/><path class="covfill" d="${cov === "3q" ? "M0,-7 L6,-4.5 L5,3 L0,7 L-5,3 L-5.5,0 L0,0 Z" : "M0,-7 L0,7 L-5,3 L-6,-4.5 Z"}"/></g>` : ""}${tip ? `<title>${esc(tip)}</title>` : ""}</g>`;
   }
   /** Vista previa de lo que se va a pintar o trazar. */
   function ghost() {
