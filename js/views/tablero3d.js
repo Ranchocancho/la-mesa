@@ -82,9 +82,9 @@ function contactMat() {
 const CONTACT_GEO = (() => { const g = new THREE.PlaneGeometry(1, 1); g.rotateX(-Math.PI / 2); return g; })();
 function contactShadow(size) { const m = new THREE.Mesh(CONTACT_GEO, contactMat()); m.scale.set(size, 1, size); m.position.y = 0.03; m.renderOrder = 1; m.raycast = () => {}; m.userData.keep = true; return m; }
 // objetos planos o colgados que no llevan sombra de contacto
-const FLATP = new Set(["circulo", "piedrasrio", "cadenas", "letrero", "trampaoculta", "aguja", "dardos", "red", "techo", "foso", "carta", "mapa", "llave", "pasaje", "nota", "interes", "telarana", "nenufares", "flores", "tumbaabierta", "grieta"]);
+const FLATP = new Set(["losarota", "rejilla", "raices", "circulo", "piedrasrio", "cadenas", "letrero", "trampaoculta", "aguja", "dardos", "red", "techo", "foso", "carta", "mapa", "llave", "pasaje", "nota", "interes", "telarana", "nenufares", "flores", "tumbaabierta", "grieta"]);
 // piezas naturales: cada copia algo distinta (tamaño, giro, inclinación)
-const NATURAL = new Set(["arbol", "arbusto", "roca", "penasco", "tocon", "arbolmuerto", "setas", "cristales", "pinonevado", "manglar", "arbolgigante", "monticulo", "juncos", "raices", "huesos"]);
+const NATURAL = new Set(["toconpodrido", "arbol", "arbusto", "roca", "penasco", "tocon", "arbolmuerto", "setas", "cristales", "pinonevado", "manglar", "arbolgigante", "monticulo", "juncos", "raices", "huesos"]);
 // terreno → color del polvo al pisar
 const DUST = { nieve: "#eef2f6", rocanevada: "#e0e6ee", hielo: "#d8eef8", hielofino: "#d8eef8", barro: "#5a4430", hierba: "#8aa060", hierbalta: "#8aa060", musgo: "#6a8a50", hojarasca: "#b07a3a", arena: "#d8c49a", ceniza: "#6a6664", volcanica: "#5a5250", agua: "#bfe0f0", aguaprof: "#bfe0f0" };
 const fringeMat = k => { if (!FRINGE.has(k)) FRINGE.set(k, fringeMaterial(terrainMat(k), k)); return FRINGE.get(k); };
@@ -216,6 +216,23 @@ let GLOW = null;
 
 // ---------- Elementos procedurales ----------
 const mat = (color, extra = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.9, flatShading: true, ...extra });
+/* Hito 97b (fase 4): variantes por familia. El mismo objeto cuenta otra historia según dónde está: con musgo en la
+   cueva, la costa o el bosque húmedo; con hollín junto al volcán; con escarcha en la nieve. Solo en una parte de las piezas
+   (decidido por la casilla) y nunca en lo que brilla o es transparente. */
+const WEATHER = { cueva: ["moss", 0x4e7a34, 0.22], costa: ["moss", 0x50703a, 0.18], exterior: ["moss", 0x5a7a3a, 0.1], volcan: ["soot", 0x1a1412, 0.35], nieve: ["frost", 0xdde8f2, 0.3] };
+const WMATS = new Map();
+function weather(obj, env, p) {
+  const W = WEATHER[env]; if (!W || !obj) return;
+  const h = Math.abs(Math.sin(p.c * 91.7 + p.r * 17.3) * 43758.5453) % 1; if (h > 0.6) return;
+  const k = W[2] * (0.6 + h);
+  obj.traverse(o => {
+    if (!o.isMesh || Array.isArray(o.material) || !o.material || !o.material.color || o.material.transparent) return;
+    const m0 = o.material; if (m0.emissive && m0.emissive.getHex() && m0.emissiveIntensity > 0.3) return;
+    const key = m0.uuid + "|" + W[0] + "|" + k.toFixed(2);
+    let m = WMATS.get(key); if (!m) { m = m0.clone(); m.color.lerp(new THREE.Color(W[1]), k); if (W[0] === "frost") m.roughness = Math.min(1, (m.roughness ?? 1) * 0.8); WMATS.set(key, m); }
+    o.material = m;
+  });
+}
 /* Hito 96b: árboles de verdad, no tres conos apilados. Dos especies (pino de pisos irregulares y frondoso de copa
    en racimos), con la geometría algo deformada, color por vértice (oscuro abajo y por dentro, claro arriba, donde da
    la luz) y todo decidido por la casilla: el mismo árbol sale siempre igual. */
@@ -268,7 +285,15 @@ function tree(seed = Math.random() * 1e4) {
   g.scale.setScalar(0.85 + R() * 0.35); g.rotation.y = R() * 6;
   return g;
 }
-function bush() { const m = new THREE.Mesh(new THREE.IcosahedronGeometry(1.1, 0), mat(0x3f5f2a)); m.scale.set(1.2, 0.7, 1.1); m.position.y = 0.6; m.rotation.y = Math.random() * 6; return m; }
+function bush(seed = Math.random() * 1e4) { // Hito 97b: mata de varios racimos con color por vértice (como los árboles)
+  let s0 = Math.floor(seed * 9301 + 49297) % 233280; const R = () => (s0 = (s0 * 9301 + 49297) % 233280) / 233280;
+  const g = new THREE.Group(), M = treeMats(), hue = 0.25 + R() * 0.06, lo = new THREE.Color().setHSL(hue, 0.55, 0.035), hi = new THREE.Color().setHSL(hue - 0.02, 0.55, 0.12);
+  const n = 3 + Math.floor(R() * 3);
+  for (let i = 0; i < n; i++) { const a = i / n * 6.28 + R(), d = i ? 0.45 + R() * 0.35 : 0, sz = i ? 0.55 + R() * 0.3 : 0.8;
+    const b = new THREE.Mesh(shade(new THREE.IcosahedronGeometry(sz, 1), lo, hi, R, 0.14, -0.05), M.leaf); b.position.set(Math.cos(a) * d, sz * 0.7, Math.sin(a) * d); b.scale.y = 0.75; b.castShadow = true; g.add(b); }
+  if (R() < 0.4) for (let i = 0; i < 4; i++) { const f = new THREE.Mesh(new THREE.IcosahedronGeometry(0.08, 0), mat([0xf0e6d8, 0xe8b0c8, 0xf0c840][Math.floor(R() * 3)])); const a = R() * 6.28; f.position.set(Math.cos(a) * 0.7, 0.9 + R() * 0.4, Math.sin(a) * 0.7); g.add(f); }
+  g.rotation.y = R() * 6; return g;
+}
 function rock() { const m = new THREE.Mesh(new THREE.DodecahedronGeometry(1.2, 0), mat(0x77736c)); m.scale.set(1.1, 0.75 + Math.random() * 0.3, 0.9); m.position.y = 0.55; m.rotation.set(Math.random(), Math.random() * 6, Math.random() * 0.3); return m; }
 function trap() {
   const g = new THREE.Group(), plate = new THREE.Mesh(new THREE.BoxGeometry(3, 0.12, 3), mat(0x3a3530)); plate.position.y = 0.06; g.add(plate);
@@ -762,13 +787,18 @@ export function createBoard3D(host, opts) {
       }
     }
     // Escenografía
+    const envNow = envKindOf(g);
     for (const p of g.props || []) { try {
       if (!propVisible(p, opts.dm)) continue;
       const x = cx(p.c), z = cz(p.r);
       let obj = null;
-      if (p.k === "arbol") obj = tree(Math.abs(Math.sin(p.c * 12.9898 + p.r * 78.233) * 43758.5453) % 1 * 1e4); else if (p.k === "arbusto") obj = bush(); else if (p.k === "roca") obj = rock(); else if (p.k === "trampa") obj = trap();
+      if (p.k === "arbol") obj = tree(Math.abs(Math.sin(p.c * 12.9898 + p.r * 78.233) * 43758.5453) % 1 * 1e4); else if (p.k === "arbusto") obj = bush(Math.abs(Math.sin(p.c * 39.3468 + p.r * 11.135) * 24634.6345) % 1 * 1e4); else if (p.k === "roca") obj = rock(); else if (p.k === "trampa") obj = trap();
       else if (p.k === "hoguera") obj = campfire();
       else if (PROC[p.k]) { obj = PROC[p.k](fire); if (!["telarana"].includes(p.k)) obj.rotation.y = (p.rot || 0) * Math.PI / 2; if (PROC_BIG.includes(p.k)) obj.scale.multiplyScalar(1.35); }
+      if (obj && PROC[p.k] && (PROPS[p.k] || {}).wall) { // Hito 97b: piezas de pared hechas por código (farol, carteles)
+        const dirs = [[0, -1, 0], [1, 0, -Math.PI / 2], [0, 1, Math.PI], [-1, 0, Math.PI / 2]].filter(([dc, dr]) => isWallIn(g, p.c + dc, p.r + dr));
+        const [dc, dr, rot] = dirs[0] || [0, -1, 0]; obj.rotation.set(0, rot, 0); obj.position.set(dc * (CELL / 2 - 0.05), (wh < 1 ? -0.9 : 0), dr * (CELL / 2 - 0.05));
+      }
       else if (PROP3D[p.k]) {
         let [path, scale, how] = PROP3D[p.k];
         // Hito 86: variedad (algunas cajas son el cajón grande) y antorcha de pie cuando no hay pared cerca
@@ -834,7 +864,8 @@ export function createBoard3D(host, opts) {
       }
       // Hito 89: variación en piezas naturales y sombra de contacto bajo los objetos que se apoyan en el suelo
       if (NATURAL.has(p.k)) { const h = (a, b) => Math.abs(Math.sin(p.c * a + p.r * b) * 43758.5453) % 1; const k = 0.85 + h(12.9, 78.2) * 0.3; obj.scale.multiplyScalar(k); obj.rotation.y += h(39.3, 11.1) * Math.PI * 2; obj.rotation.x += (h(7.1, 3.3) - 0.5) * 0.12; obj.rotation.z += (h(5.7, 9.9) - 0.5) * 0.12; }
-      { const pv = PROPS[p.k] || {}; if (!pv.door && !FLATP.has(p.k) && !(PROP3D[p.k] && PROP3D[p.k][2] === "wall") && !ghostly) w.add(contactShadow(CELL * (PROC_BIG.includes(p.k) || pv.block ? 0.95 : 0.62))); }
+      if (!ghostly) weather(obj, envNow, p);
+      { const pv = PROPS[p.k] || {}; if (!pv.door && !pv.wall && !FLATP.has(p.k) && !(PROP3D[p.k] && PROP3D[p.k][2] === "wall") && !ghostly) w.add(contactShadow(CELL * (PROC_BIG.includes(p.k) || pv.block ? 0.95 : 0.62))); }
       // Hito 82: estado de la trampa (anillo + insignia) y cobertura (escudo pequeño)
       const ts = trapState(p), cv = coverOf(p);
       if (ts) {
@@ -869,7 +900,7 @@ export function createBoard3D(host, opts) {
     // Hito 85: detalles repartidos por el suelo (matas, guijarros, hojas, charcos…), iguales para todos
     {
       const busy = new Set((g.props || []).map(p => p.c + "," + p.r));
-      const D = buildDressing({ g, cx, cz, CELL, elevY: (c, r) => elevAt(g, c, r) * YS, density: DENS(), seed: g.scene || g.name || "mesa",
+      const D = buildDressing({ g, cx, cz, CELL, elevY: (c, r) => elevAt(g, c, r) * YS, density: DENS(), seed: g.scene || g.name || "mesa", wallH: 4 * wh, high: QUAL() === "alta",
         skip: (c, r) => { if (isWallIn(g, c, r) || busy.has(c + "," + r)) return true; const t = TERRAIN[(g.terrain || {})[c + "," + r] || "piedra"]; return !t || t.liquid || t.haz === "fall"; } });
       if (D.group.children.length) { grp.add(D.group); shroudable.push(...D.shroud); }
     }

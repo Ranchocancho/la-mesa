@@ -23,6 +23,14 @@ function shaftTex() {
   g.globalCompositeOperation = "destination-out"; g.fillStyle = h; g.fillRect(0, 0, 64, 128);
   return (SHAFT = new THREE.CanvasTexture(c));
 }
+let MOON = null;
+function moonTex() { // una ventana con cruz, con los bordes suaves
+  if (MOON) return MOON;
+  const c = document.createElement("canvas"); c.width = 128; c.height = 192; const g = c.getContext("2d");
+  g.filter = "blur(10px)"; g.fillStyle = "#fff"; g.fillRect(24, 24, 80, 144); g.filter = "none";
+  g.globalCompositeOperation = "destination-out"; g.filter = "blur(2px)"; g.fillRect(60, 18, 8, 156); g.fillRect(18, 88, 92, 8); g.filter = "none";
+  return (MOON = new THREE.CanvasTexture(c));
+}
 const rng = seed => { let s = 0; for (const ch of String(seed)) s = (s * 31 + ch.charCodeAt(0)) >>> 0; s = s || 1; return () => { s ^= s << 13; s >>>= 0; s ^= s >>> 17; s ^= s << 5; s >>>= 0; return s / 4294967296; }; };
 
 /** Monta la atmósfera para la mesa `g` con el ambiente `amb`. Devuelve { group, step(dt), dispose() }. */
@@ -87,11 +95,64 @@ export function buildAtmosphere({ g, cx, cz, CELL, elevY, isWall, amb, high, see
     group.add(trees);
   }
 
+  // 4) Hito 97b (fase 4): vida alrededor de la luz y el fuego, hojas que caen y luz de luna
+  const props = g.props || [], at = p => [cx(p.c), elevY(p.c, p.r), cz(p.r)];
+  const LIGHTS = new Set(["antorcha", "farol", "farolpared", "brasero", "hoguera", "granhoguera", "pilarantorcha", "farolillos"]);
+  const SMOKE = new Set(["brasero", "forja", "hoguera", "granhoguera", "caldero", "cabana", "estatuafuego"]);
+  if (high) {
+    // L4: humo que sube de braseros, forjas y chimeneas
+    props.filter(p => SMOKE.has(p.k)).slice(0, 8).forEach(p => {
+      const [x, y, z] = at(p), top = p.k === "cabana" ? 7 : p.k === "forja" ? 4 : 2.2;
+      for (let i = 0; i < 6; i++) {
+        const sm = new THREE.Sprite(new THREE.SpriteMaterial({ map: puffTex(), color: 0x8a8580, transparent: true, opacity: 0, depthWrite: false, fog: true }));
+        sm.raycast = () => {}; group.add(sm); shroud.push({ obj: sm, c: p.c, r: p.r });
+        let t = i / 6, dx = (R() - 0.5) * 0.6;
+        steps.push(dt => { t += dt * 0.12; if (t > 1) { t -= 1; dx = (R() - 0.5) * 0.6; }
+          const k = t; sm.position.set(x + dx + k * 1.2, y + top + k * 6, z + k * 0.6); const sc = 1.2 + k * 3.2; sm.scale.set(sc, sc, 1);
+          sm.material.opacity = Math.sin(Math.min(1, k * 1.3) * Math.PI) * 0.22; });
+      }
+    });
+    // L3: polillas alrededor de antorchas y faroles (de noche, en penumbra o en interiores)
+    if (amb !== "dia") {
+      const lights = props.filter(p => LIGHTS.has(p.k)).slice(0, 8);
+      if (lights.length) {
+        const n = lights.length * 4, pos = new Float32Array(n * 3), geo = new THREE.BufferGeometry(); geo.setAttribute("position", new THREE.BufferAttribute(pos, 3));
+        const pts = new THREE.Points(geo, new THREE.PointsMaterial({ color: 0xfff0d0, size: 0.12, transparent: true, opacity: 0.85, depthWrite: false }));
+        pts.frustumCulled = false; group.add(pts);
+        const M = lights.flatMap(p => { const [x, y, z] = at(p), hy = p.k === "farol" ? 3.2 : p.k === "hoguera" || p.k === "granhoguera" || p.k === "brasero" ? 1.8 : 2.4; return [0, 1, 2, 3].map(() => ({ x, y: y + hy, z, a: R() * 6, sp: 2 + R() * 2.5, rr: 0.35 + R() * 0.5, ph: R() * 6 })); });
+        let t = 0;
+        steps.push(dt => { t += dt; M.forEach((m, i) => { const a = m.a + t * m.sp; pos[i * 3] = m.x + Math.cos(a) * m.rr + Math.sin(t * 7 + m.ph) * 0.06; pos[i * 3 + 1] = m.y + Math.sin(t * 3 + m.ph) * 0.3; pos[i * 3 + 2] = m.z + Math.sin(a) * m.rr; }); geo.attributes.position.needsUpdate = true; });
+      }
+    }
+    // E5: hojas que caen en el bosque (de día o al atardecer)
+    const trees = props.filter(p => ["arbol", "arbolgigante", "arbolmuerto"].includes(p.k));
+    if (exterior && (trees.length >= 2 || misty.some(([c, r]) => (g.terrain || {})[c + "," + r] === "hojarasca"))) {
+      const N = 36, lg = new THREE.CircleGeometry(0.12, 5); lg.scale(1, 0.6, 1);
+      const im = new THREE.InstancedMesh(lg, new THREE.MeshLambertMaterial({ color: 0xffffff, side: THREE.DoubleSide, fog: true }), N);
+      const cols = [0xb0602a, 0xc8a03a, 0x8a3a24, 0x6a8a3a], L = [], m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), P = new THREE.Vector3(), S = new THREE.Vector3(1, 1, 1);
+      const src = trees.length ? trees : floor.map(([c, r]) => ({ c, r }));
+      const spawn = l => { const p = src[Math.floor(R() * src.length)]; l.x = cx(p.c) + (R() - 0.5) * 3; l.z = cz(p.r) + (R() - 0.5) * 3; l.y = elevY(p.c, p.r) + 4 + R() * 2; l.y0 = elevY(p.c, p.r); l.s = 0.5 + R() * 0.5; l.w = R() * 6; };
+      for (let i = 0; i < N; i++) { const l = {}; spawn(l); l.y -= R() * 4; L.push(l); im.setColorAt(i, new THREE.Color(cols[i % 4])); }
+      im.frustumCulled = false; group.add(im);
+      steps.push(dt => { L.forEach((l, i) => { l.y -= dt * l.s; l.w += dt * 2; l.x += Math.sin(l.w) * dt * 0.5 + dt * 0.25; if (l.y < l.y0 + 0.05) spawn(l);
+        im.setMatrixAt(i, m4.compose(P.set(l.x, l.y, l.z), q.setFromEuler(e.set(Math.sin(l.w) * 1.2, l.w, Math.cos(l.w * 0.7))), S)); }); im.instanceMatrix.needsUpdate = true; });
+    }
+  }
+  // L2: luz de luna por una ventana: una mancha fría en el suelo, sin luces nuevas (casi gratis)
+  if (!exterior && (amb === "noche" || amb === "oscuro" || amb === "penumbra") && floor.length) {
+    const byWall = floor.filter(([c, r]) => isWall(c, r - 1) && !isWall(c, r + 1) && !isWall(c, r + 2));
+    for (let i = 0; i < Math.min(2, byWall.length); i++) {
+      const [c, r] = byWall[Math.floor(R() * byWall.length)];
+      const m = new THREE.Mesh(new THREE.PlaneGeometry(CELL * 1.3, CELL * 2.2), new THREE.MeshBasicMaterial({ map: moonTex(), color: 0x9ab8ff, transparent: true, opacity: amb === "penumbra" ? 0.28 : 0.4, blending: THREE.AdditiveBlending, depthWrite: false }));
+      m.rotation.x = -Math.PI / 2; m.rotation.z = 0.25; m.position.set(cx(c) + 0.6, elevY(c, r) + 0.05, cz(r) + CELL * 0.75); m.raycast = () => {}; m.renderOrder = 2; group.add(m); shroud.push({ obj: m, c, r });
+    }
+  }
+
   group.traverse(o => { o.raycast = () => {}; });
   return {
     group, shroud,
     step: dt => steps.forEach(f => f(dt)),
-    dispose() { group.traverse(o => { if (o.geometry) o.geometry.dispose(); if (o.material && o.material.map !== PUFF && o.material.map !== SHAFT) o.material.dispose(); }); }
+    dispose() { group.traverse(o => { if (o.geometry) o.geometry.dispose(); if (o.material && o.material.map !== PUFF && o.material.map !== SHAFT && o.material.map !== MOON) o.material.dispose(); }); }
   };
 }
 

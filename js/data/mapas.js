@@ -216,6 +216,16 @@ export const PROPS = {
   piedrasrio: { n: "Piedras para cruzar", i: "🪨", cat: "natural", bridge: true, note: "Se cruza el agua sin nadar. Si hay prisa o empujones, el máster puede pedir Destreza (Acrobacias)." },
   farol:      { n: "Farol de calle", i: "🏮", cat: "luz", block: true },
   letrero:    { n: "Letrero colgante", i: "🪧", cat: "mueble" },
+  // Hito 97b (fase 4): piezas nuevas
+  lingotes:   { n: "Lingotes", i: "🧈", cat: "region", reg: ["enano"] },
+  losarota:   { n: "Losa agrietada", i: "🪨", cat: "mazmorra" },
+  rejilla:    { n: "Rejilla de desagüe", i: "▦", cat: "mazmorra" },
+  raices:     { n: "Raíces", i: "🌱", cat: "natural" },
+  toconpodrido:{ n: "Tocón podrido", i: "🍄", cat: "natural" },
+  noray:      { n: "Noray", i: "⚓", cat: "region", reg: ["costa"] },
+  cuerda:     { n: "Cuerda enrollada", i: "🪢", cat: "region", reg: ["costa"] },
+  farolpared: { n: "Farol de pared", i: "🏮", cat: "luz", wall: true },
+  cartel:     { n: "Carteles en la pared", i: "📜", cat: "mueble", wall: true },
   basura:     { n: "Montón de basura", i: "🗑️", cat: "mueble", cover: "half" },
   // Marcadores del máster
   nota:       { n: "Nota del máster", i: "📌", cat: "marca", hidden: true },

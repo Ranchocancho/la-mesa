@@ -92,7 +92,13 @@ Object.assign(PROC, {
   grieta() { const g = new THREE.Group(); const sh = new THREE.Shape([[-0.3, -1.7], [0.3, -0.8], [-0.2, 0], [0.35, 0.8], [-0.1, 1.7], [-0.6, 0.6], [-0.2, -0.2], [-0.7, -1]].map(([x, y]) => new THREE.Vector2(x, y))); const m = M(new THREE.ShapeGeometry(sh), new THREE.MeshBasicMaterial({ color: 0x050403 }), 0, 0.04); m.rotation.x = -Math.PI / 2; g.add(m); return g; },
   // Pantano
   manglar() { const g = new THREE.Group(); for (let i = 0; i < 5; i++) { const a = i / 5 * Math.PI * 2, r = M(cyl(0.06, 0.1, 1.4, 4), mat(0x4a3a24), Math.cos(a) * 0.5, 0.5, Math.sin(a) * 0.5); r.rotation.set(Math.sin(a) * 0.5, 0, -Math.cos(a) * 0.5); g.add(r); } g.add(M(cyl(0.2, 0.3, 2.4, 6), mat(0x4a3a24), 0, 2.2)); const cp = M(new THREE.IcosahedronGeometry(1.4, 0), leaf(0x3a5a2a), 0, 3.8); cp.scale.y = 0.6; g.add(cp); return g; },
-  tronco() { const g = new THREE.Group(); const t = M(cyl(0.45, 0.5, 3.2, 8), mat(0x5a3d22), 0, 0.45); t.rotation.z = Math.PI / 2; t.rotation.y = R() * 3; g.add(t); return g; },
+  tronco() { /* Hito 97b: con musgo encima, corteza y el corte claro en los extremos */
+    const g = new THREE.Group(), w = mat(0x5a3d22), moss = mat(0x4a6a30), cut = mat(0xa8865a), rot = R() * 3;
+    const t = M(cyl(0.45, 0.52, 3.2, 9), w, 0, 0.45); t.rotation.z = Math.PI / 2; g.add(t);
+    [-1.6, 1.6].forEach(x => { const c = M(cyl(0.44, 0.44, 0.04, 9), cut, x, 0.45); c.rotation.z = Math.PI / 2; g.add(c); });
+    for (let i = 0; i < 4; i++) { const m = M(new THREE.SphereGeometry(0.32 + R() * 0.2, 7, 4, 0, Math.PI * 2, 0, Math.PI / 2), moss, -1.1 + i * 0.7 + R() * 0.2, 0.82, (R() - 0.5) * 0.3); m.scale.set(1.3, 0.35, 0.9); g.add(m); }
+    const br = M(cyl(0.05, 0.1, 0.9, 5), w, 0.5, 0.9, 0.3); br.rotation.set(0.6, 0, -0.5); g.add(br);
+    g.rotation.y = rot; return g; },
   cabana() { const g = new THREE.Group(); [[-1.2, -1.2], [1.2, -1.2], [-1.2, 1.2], [1.2, 1.2]].forEach(([x, z]) => g.add(M(cyl(0.12, 0.12, 1.2, 5), darkWood(), x, 0.6, z))); g.add(M(box(3, 1.6, 3), wood(), 0, 2)); const r = M(new THREE.ConeGeometry(2.5, 1.4, 4), mat(0x8a7a4a), 0, 3.5); r.rotation.y = Math.PI / 4; g.add(r); return g; },
   nenufares() { const g = new THREE.Group(); for (let i = 0; i < 6; i++) { const l = M(new THREE.CircleGeometry(0.35, 10), mat(0x3e7a2e), (R() - 0.5) * 2.6, 0.1, (R() - 0.5) * 2.6); l.rotation.x = -Math.PI / 2; g.add(l); if (i % 2) g.add(M(new THREE.SphereGeometry(0.12, 6, 4), mat(0xf0b0c8), l.position.x, 0.18, l.position.z)); } return g; },
   // Volcán
@@ -483,4 +489,49 @@ Object.assign(PROC, {
     for (let i = 0; i < 3; i++) g.add(M(new THREE.SphereGeometry(0.08, 6, 4), mat(0xd8cfb8), (R() - 0.5), 0.1, (R() - 0.5)));
     return g;
   }
+});
+
+// Hito 97b (fase 4): piezas nuevas
+Object.assign(PROC, {
+  lingotes() { const g = new THREE.Group(), gm = mat(0xc89a3a, { metalness: 0.75, roughness: 0.35, emissive: 0x2a1800 }), im = iron();
+    [[3, 0], [2, 1], [1, 2]].forEach(([n, l]) => { for (let i = 0; i < n; i++) g.add(M(box(0.62, 0.2, 0.3), l === 2 ? gm : (i + l) % 2 ? gm : im, (i - (n - 1) / 2) * 0.66, 0.1 + l * 0.2, 0)); });
+    g.rotation.y = R() * 3; return g; },
+  losarota() { const g = new THREE.Group(), st = stone(), dk = darkStone();
+    g.add(M(box(2.6, 0.04, 2.6), dk, 0, 0.02));
+    [[-0.62, -0.6, 0.06, 0.04], [0.65, -0.55, -0.08, 0.1], [-0.55, 0.62, 0.1, -0.05], [0.6, 0.66, 0.02, 0.12]].forEach(([x, z, a, b]) => { const s = M(box(1.15 + R() * 0.12, 0.16, 1.1 + R() * 0.12), st, x, 0.1, z); s.rotation.set(a, R() * 0.2, b); g.add(s); });
+    return g; },
+  rejilla() { const g = new THREE.Group(), im = iron();
+    g.add(M(box(1.9, 0.02, 1.9), mat(0x050404), 0, 0.01)); g.add(M(box(2.1, 0.1, 0.16), im, 0, 0.05, -1)); g.add(M(box(2.1, 0.1, 0.16), im, 0, 0.05, 1)); g.add(M(box(0.16, 0.1, 2.1), im, -1, 0.05, 0)); g.add(M(box(0.16, 0.1, 2.1), im, 1, 0.05, 0));
+    for (let i = -3; i <= 3; i++) g.add(M(box(0.07, 0.07, 1.95), im, i * 0.26, 0.06, 0));
+    return g; },
+  raices() { const g = new THREE.Group(), w = mat(0x4a3420);
+    for (let i = 0; i < 5; i++) { const a = i / 5 * Math.PI * 2 + R() * 0.5, L = 1 + R() * 0.8, pts = [];
+      for (let k = 0; k <= 4; k++) { const d = k / 4 * L; pts.push(new THREE.Vector3(Math.cos(a) * d + (R() - 0.5) * 0.15, 0.35 * Math.sin(k / 4 * Math.PI) + 0.05, Math.sin(a) * d + (R() - 0.5) * 0.15)); }
+      g.add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 10, 0.09 * (1 - i * 0.08), 5), w)); }
+    return g; },
+  toconpodrido() { const g = new THREE.Group(), w = mat(0x4a3420), moss = mat(0x4e6e32), cap = mat(0xb06a3a);
+    g.add(M(new THREE.CylinderGeometry(0.7, 0.95, 0.6, 9), w, 0, 0.3));
+    for (let i = 0; i < 6; i++) { const sp = M(new THREE.ConeGeometry(0.16, 0.35 + R() * 0.3, 4), w, Math.cos(i) * 0.5, 0.75, Math.sin(i) * 0.5); sp.rotation.set((R() - 0.5) * 0.4, 0, (R() - 0.5) * 0.4); g.add(sp); }
+    for (let i = 0; i < 3; i++) { const m = M(new THREE.SphereGeometry(0.3, 7, 4, 0, Math.PI * 2, 0, Math.PI / 2), moss, (R() - 0.5) * 0.9, 0.55, (R() - 0.5) * 0.9); m.scale.set(1.2, 0.4, 1); g.add(m); }
+    for (let i = 0; i < 3; i++) { const a = R() * 6; g.add(M(cyl(0.03, 0.04, 0.2, 5), mat(0xe8dcc0), Math.cos(a) * 1, 0.1, Math.sin(a) * 1)); g.add(M(new THREE.SphereGeometry(0.11, 7, 4, 0, Math.PI * 2, 0, Math.PI / 2), cap, Math.cos(a) * 1, 0.2, Math.sin(a) * 1)); }
+    return g; },
+  noray() { const g = new THREE.Group(), im = iron(), rope = mat(0xb89a6a);
+    g.add(M(cyl(0.32, 0.38, 0.9, 10), im, 0, 0.45)); g.add(M(cyl(0.45, 0.45, 0.14, 10), im, 0, 0.95));
+    const lp = M(new THREE.TorusGeometry(0.4, 0.06, 5, 12), rope, 0, 0.55); lp.rotation.x = Math.PI / 2; g.add(lp);
+    return g; },
+  cuerda() { const g = new THREE.Group(), rope = mat(0xb89a6a);
+    for (let i = 0; i < 4; i++) { const t = M(new THREE.TorusGeometry(0.55 - i * 0.06, 0.08, 5, 16), rope, (R() - 0.5) * 0.05, 0.08 + i * 0.13, 0); t.rotation.x = Math.PI / 2; g.add(t); }
+    const end = M(cyl(0.07, 0.07, 0.9, 5), rope, 0.75, 0.06, 0.2); end.rotation.set(0, 0.6, Math.PI / 2); g.add(end);
+    return g; },
+  // De pared: se construyen pegados a z = 0 y salen hacia +z (la mesa los gira hacia la casilla)
+  farolpared() { const g = new THREE.Group(), im = iron();
+    g.add(M(box(0.3, 0.6, 0.08), im, 0, 2.2, 0.04)); g.add(M(box(0.08, 0.08, 0.7), im, 0, 2.4, 0.4));
+    g.add(M(box(0.42, 0.52, 0.42), glowM(0xffd68a, 0xffa040, 1.6), 0, 2.05, 0.7)); const c = M(new THREE.ConeGeometry(0.36, 0.28, 4), im, 0, 2.45, 0.7); c.rotation.y = Math.PI / 4; g.add(c);
+    g.userData.glow = { color: 0xffb060, power: 0.7, y: 2.05 };
+    return g; },
+  cartel() { const g = new THREE.Group(), dw = darkWood();
+    g.add(M(box(1.6, 1.1, 0.08), dw, 0, 1.7, 0.04));
+    [[-0.38, 1.78, 0xe8dcc0, 0.1], [0.36, 1.66, 0xd8c8a0, -0.08], [0.02, 1.4, 0xf0e6cc, 0.04]].forEach(([x, y, c, r]) => { const p = M(box(0.6, 0.72, 0.02), mat(c), x, y, 0.1); p.rotation.z = r; g.add(p); g.add(M(new THREE.SphereGeometry(0.04, 5, 4), iron(), x, y + 0.32, 0.12)); });
+    g.add(M(box(0.34, 0.06, 0.01), mat(0x7a2a1a), 0.02, 1.52, 0.115));
+    return g; }
 });

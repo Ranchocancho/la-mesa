@@ -1086,3 +1086,32 @@ Para tenerlas en un mundo que ya existe: **Escenas → 🔄 Renovar escenas de e
 - Los árboles ya no son tres conos iguales apilados. Hay dos especies: un **pino** de 4–5 pisos irregulares, algo torcidos, y un **frondoso** con rama a la vista y copa en racimos.
 - Llevan la geometría algo deformada y color por vértice: oscuro abajo y por dentro, claro arriba, donde da la luz.
 - Cada casilla decide la especie, el tamaño, el tono y el giro, así que el mismo árbol sale siempre igual.
+
+## Hito 98 — Fase 4: atrezzo, piezas nuevas y ambientación
+
+**Piezas nuevas** (se pueden colocar a mano y ya salen en las escenas de ejemplo):
+- lingotes, losa agrietada y rejilla de desagüe;
+- raíces y tocón podrido (con musgo y setas);
+- noray y cuerda enrollada;
+- farol de pared y carteles en la pared (estos dos se cuelgan solos del muro más cercano).
+
+El **tronco caído** lleva ahora musgo, corte claro en los extremos y una rama. Los **arbustos** son matas de varios racimos con color por vértice, como los árboles, y a veces con flores.
+
+**Variantes por familia**: según el entorno, parte de los objetos sale con musgo (cueva, costa, exterior), con hollín (volcán) o con escarcha (nieve). Lo decide la casilla y nunca afecta a lo que brilla ni a lo transparente.
+
+**Atrezzo según el sitio** (lo coloca la mesa sola, igual para todos):
+- E1: juncos y piedras mojadas en la orilla.
+- E2: musgo o manchas de humedad al pie de los muros.
+- E3: brasas y ceniza alrededor del fuego.
+- C1: telarañas en las esquinas de mazmorra y cueva.
+- C3: velas y huesos junto a altares y sarcófagos, lingotes y herramientas junto a la forja, flores secas junto a las tumbas.
+- C4: manchas de sangre y de quemado.
+- E6: escenas pocas y separadas: un campamento apagado en exteriores, y un rincón de ritual o restos de una pelea en mazmorras.
+
+**Ambiente**:
+- L2: luz de luna por una ventana en interiores de noche o en penumbra.
+- L3 (calidad alta): polillas alrededor de antorchas y faroles.
+- L4 (calidad alta): humo que sube de braseros, forjas, hogueras y chimeneas.
+- E5 (calidad alta): hojas que caen en el bosque.
+
+Quedan para probar (QUIZÁ): la tensión de combate (E4), las huellas (L1) y las runas que laten al pasar el turno (L5).

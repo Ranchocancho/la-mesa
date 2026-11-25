@@ -1,3 +1,4 @@
+import { TERRAIN } from "./mapas.js";
 import { cloneFloors } from "../core/plantas.js";
 // Escenas tácticas de ejemplo y utilidades para crear escenas nuevas.
 const id = p => p + "-" + Math.random().toString(36).slice(2, 8);
@@ -390,8 +391,25 @@ function pantano() {
 
 /** ex: versión de las escenas de ejemplo (3 = diez escenas, equilibradas para 4 PJ de nivel 5). */
 export const EX_VER = 3;
+function placeFree(sc, k, n) {
+  const T = sc.terrain || {}, W = (c, r) => c < 0 || r < 0 || c >= sc.cols || r >= sc.rows || /muro|vacio|seto/.test(T[c + "," + r] || "") || !!(TERRAIN[T[c + "," + r]] && TERRAIN[T[c + "," + r]].wall);
+  const busy = new Set([...(sc.props || []), ...(sc.tokens || [])].map(p => p.c + "," + p.r)); if (sc.start) busy.add(sc.start.c + "," + sc.start.r);
+  const wantWall = k === "farolpared" || k === "cartel", ok = [];
+  for (let r = 1; r < sc.rows - 1; r++) for (let c = 1; c < sc.cols - 1; c++) {
+    const t = T[c + "," + r] || "piedra"; if (W(c, r) || busy.has(c + "," + r) || /agua|lava|abismo|brasas/.test(t)) continue;
+    const nextToWall = W(c, r - 1) || W(c + 1, r) || W(c, r + 1) || W(c - 1, r);
+    if (wantWall ? nextToWall : !nextToWall) ok.push([c, r]);
+  }
+  if (!ok.length) return;
+  const [c, r] = ok[Math.floor(((n + 1) * 0.6180339887 * 7.3 + k.length * 0.13) % 1 * ok.length)];
+  (sc.props = sc.props || []).push({ id: "x" + k + n + c + r, k, c, r });
+}
 export const exampleScenes = () => {
   const L = [cripta(), cueva(), torre(), taberna(), callejon(), cementerio(), bosque(), forja(), muelle(), pantano()].map(sc => Object.assign(sc, { id: sc.id || id("esc"), ex: EX_VER }));
+  // Hito 97b (fase 4): las piezas nuevas, colocadas en casillas libres (las de pared, junto a un muro)
+  const EXTRA = { "La cripta": ["rejilla", "losarota", "cartel"], "La forja": ["lingotes", "losarota"], "El muelle": ["noray", "noray", "cuerda"], "La cabaña": ["toconpodrido", "raices"],
+    "Emboscada en el callejón": ["farolpared", "cartel"], "Emboscada en el bosque": ["toconpodrido", "raices"], "La cueva": ["raices"] };
+  L.forEach(sc => { const ks = Object.entries(EXTRA).find(([n]) => sc.name.startsWith(n)); if (ks) ks[1].forEach((k, i) => placeFree(sc, k, i)); });
   // La taberna y el callejón se unen por la puerta trasera (pasajes entre escenas)
   const tab = L.find(x => x.name.startsWith("Pelea en la taberna")), cal = L.find(x => x.name.startsWith("Emboscada en el callejón"));
   Object.assign(tab.props.find(p => p.k === "pasaje"), { to: cal.id, toName: cal.name }); Object.assign(cal.props.find(p => p.k === "pasaje"), { to: tab.id, toName: tab.name });
