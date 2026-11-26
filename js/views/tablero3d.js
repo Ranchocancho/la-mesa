@@ -1555,6 +1555,10 @@ export function createBoard3D(host, opts) {
     if (measuring) { setNdc(e); const h = cellAt(); if (h && inside(h)) { measure = { a: h, b: h }; drawRuler(h, h); controls.enabled = false; renderer.domElement.setPointerCapture(e.pointerId); } return; }
     setNdc(e); down = { x: e.clientX, y: e.clientY };
     const id = tokenAt(), t = id && opts.model().tokens.find(k => k.id === id);
+    if (!t && !opts.edit && opts.onDoor) { // Hito 110: las puertas, para todos (el máster las abre sin más; los jugadores, a su lado)
+      const dh = ray.intersectObjects(world.children, true).find(h => h.object.userData.door);
+      if (dh) { const pr = (G.props || []).find(x => x.id === dh.object.userData.door); if (pr) { opts.onDoor(pr); return; } }
+    }
     if (!t && opts.dm) {
       const dh = ray.intersectObjects(world.children, true).find(h => h.object.userData.door);
       if (dh) { const did = dh.object.userData.door; opts.mutate("board", mm => { const pr = (mm.grid.props || []).find(x => x.id === did); if (pr) pr.open = !pr.open; }); sound.play("door"); return; }

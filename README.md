@@ -1195,3 +1195,11 @@ Plano 2D, segunda parte del trabajo inspirado en Foundry:
 - **Sombra bajo las fichas**.
 - **Línea de visión nítida**: dentro de la niebla, lo que tapa un muro desde todos los personajes queda en sombra con borde limpio (antes, esquinas a cuadros).
 - **👁 Ver como jugador** (máster, en Partida): niebla, oscuridad y objetos o criaturas ocultos tal como los ven los jugadores; el marco se tiñe de violeta mientras está activo.
+
+## Hito 110
+Puertas para todos:
+- **Los jugadores abren y cierran puertas** tocándolas (2D o 3D) desde una casilla al lado; en combate, en su turno (interacción gratuita). No se cierra si hay alguien en el umbral.
+- **Cerradas con llave** solo las que lo están: cada puerta tiene su casilla «🔒 Cerrada con llave» en su ficha (editor y partida); por defecto, la «Puerta cerrada con llave» y la rúnica. El candado solo se ve si de verdad está cerrada con llave.
+- Ante una cerrada, menú: **usar la llave** (si alguien del grupo lleva algo con «llave» en el nombre), **forzar la cerradura** (Destreza con herramientas de ladrón, CD 15; rúnica 20) o **echarla abajo** (Atletismo, CD 15; rúnica 25; queda reventada). El **rastrillo** se levanta a pulso (Atletismo CD 20). Forzar o romper en combate gasta la acción. Las tiradas salen en el registro.
+- El máster abre o cierra con un clic (también en 2D) y le sale la ficha de la puerta.
+- Nube: el estado de las puertas va en un campo aparte (`doors`) del documento de la mesa, que es lo único (con el turno) que un jugador puede escribir. **Hay que publicar `firestore.rules`.**

@@ -26,6 +26,8 @@ export function propEditorHTML(p, { live = false, grid = null, sceneId = null } 
   return `<div class="propedit"><h3><span>${v.i}</span>${esc(v.n)}</h3>
     <label class="field">Nombre o nota<input data-pe="label" value="${esc(p.label || "")}" placeholder="${v.cat === "marca" ? "Qué hay aquí, qué pasa…" : "Opcional"}"></label>
     <label class="switch"><input type="checkbox" data-pe-hidden ${p.hidden ?? v.hidden ? "checked" : ""}> Oculto a los jugadores</label>
+    ${v.door ? `<label class="switch"><input type="checkbox" data-pe-locked ${p.locked ?? !!v.lock ? "checked" : ""}> 🔒 Cerrada con llave (los jugadores necesitan la llave o forzarla)</label>
+      ${live ? `<div class="row"><button class="btn small gold" data-pe-door>${p.open ? "🚪 Cerrar" : "🚪 Abrir"}</button>${p.broken ? `<small class="note">Reventada: ya no cierra</small>` : ""}</div>` : ""}` : ""}
     ${v.loot || p.loot != null ? chestHTML(p) : ""}
     ${v.haz === "fall" ? `<label class="field">Altura de la caída (m)<input type="number" min="1" max="120" data-pe-h value="${+p.h || v.h || 3}"></label><p class="note">SRD «Caídas»: ${Math.max(1, Math.min(20, Math.floor((+p.h || v.h || 3) / 3)))}d6 contundente y derribado. La mesa lo tira al entrar.</p>` : ""}
     ${v.haz === "fire" ? `<p class="note">Quien entra empieza a arder (SRD «Fuego»: 1d4 de fuego al principio de cada turno hasta apagarse con una acción).</p>` : ""}
@@ -56,6 +58,8 @@ export function bindPropEditor(el, set, extra = {}) {
   let t = null; const later = fn => { clearTimeout(t); t = setTimeout(fn, 300); };
   $$("[data-pe]", el).forEach(i => i.addEventListener("input", () => later(() => set(p => { p[i.dataset.pe] = i.value; }))));
   const h = $("[data-pe-hidden]", el); if (h) h.onchange = () => set(p => { p.hidden = h.checked; });
+  const lkd = $("[data-pe-locked]", el); if (lkd) lkd.onchange = () => set(p => { p.locked = lkd.checked; if (lkd.checked) p.broken = false; });
+  const dr = $("[data-pe-door]", el); if (dr) dr.onclick = () => set(p => { p.open = !p.open; });
   const hh = $("[data-pe-h]", el); if (hh) hh.addEventListener("input", () => later(() => set(p => { p.h = Math.max(1, Math.min(120, +hh.value || 3)); })));
   const lk = $("[data-pe-link]", el); if (lk) lk.onchange = () => set(p => { const v = lk.value; delete p.toFloor; p.to = null; if (v.startsWith("f:")) p.toFloor = +v.slice(2); else if (v.startsWith("s:")) p.to = v.slice(2); });
   const sr = $("[data-pe-srd]", el); if (sr) sr.onchange = () => set(p => { p.trap = sr.value ? { srd: sr.value } : { dc: 13, save: "des", dmg: "2d10", type: "perforante", detect: 13 }; });

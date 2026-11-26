@@ -20,6 +20,7 @@ import { ESTADOS, estado, etiqueta } from "../data/estados.js";
 import { floatAt } from "./flotantes.js";
 import { diceAnim } from "../core/dados.js";
 import { PROPS } from "../data/mapas.js";
+import { doorClick, doorTry } from "../core/puertas.js";
 import { reachMap, pathTo, moveHint } from "../core/movimiento.js";
 import { propEditorHTML, bindPropEditor } from "./propeditor.js";
 import { triggerTrap, announceLoot } from "../core/hechizos.js";
@@ -167,6 +168,8 @@ export function mountTactical(host, opts = {}) {
       if (hzs.length) onEnter(hzs);
     },
     onProp: p => { selPropId = p.id; sel = null; hudOpen = true; drawHud(); },
+    // Hito 110: las puertas las abre cualquiera a su lado; las cerradas con llave sacan un menú (llave, forzar, romper)
+    onDoor: p => { const o = doorClick(p.id); if (o) doorMenu(o); if (isDM(S()) && !opts.edit) { selPropId = p.id; sel = null; hudOpen = true; drawHud(); } },
     // Hasta dónde puede llegar la ficha que tiene el turno (la suya o, para el máster, cualquiera)
     // Antes de soltar la figura: ¿este camino provoca ataques de oportunidad? (nombres, para avisar como en BG3)
     oaPreview: (id, path) => { const s = S(), t = s.tokens.find(k => k.id === id); if (!t || phase(s) !== "live" || s.board.turn !== id) return []; const hid = unseenFn(s, isDM(s)); return oaThreats(s, t, path).map(x => s.tokens.find(k => k.id === x)).filter(k => k && (isDM(s) || !hid(k))).map(k => nameOf(s, k)); },
@@ -467,6 +470,14 @@ export function mountTactical(host, opts = {}) {
     }
   }
 
+  function doorMenu(o) {
+    $$(".doorpop", host).forEach(x => x.remove());
+    const pop = document.createElement("div"); pop.className = "colpop doorpop";
+    pop.innerHTML = `<b>🔒 ${o.title}</b>${o.note ? `<p class="note">${esc(o.note)}</p>` : ""}${o.live && o.opts.some(x => x.k !== "key") ? `<p class="note">Forzar o romper gasta tu acción.</p>` : ""}
+      <div class="dpopts">${o.opts.map(x => `<button class="btn small${x.k === "key" ? " gold" : ""}" data-dk="${x.k}">${esc(x.txt)}</button>`).join("")}<button class="btn small" data-dk="">Dejarla</button></div>`;
+    $(".tactical", host).appendChild(pop);
+    $$("[data-dk]", pop).forEach(b => b.onclick = () => { pop.remove(); if (b.dataset.dk) doorTry(o, b.dataset.dk); });
+  }
   function propCard(s) {
     if (!selPropId || !isDM(s)) return "";
     const p = (s.board.props || []).find(y => y.id === selPropId); if (!p) { selPropId = null; return ""; }

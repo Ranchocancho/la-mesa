@@ -133,8 +133,8 @@ service cloud.firestore {
       match /board/{b} {
         allow read: if isMember(c);
         allow write: if isEditor(c);
-        // Cualquier jugador puede terminar el turno (pasar al siguiente), sin tocar nada más de la mesa
-        allow update: if isMember(c) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['turn', 'round', 'seq', 'starts', 'from']);
+        // Cualquier jugador puede terminar el turno (pasar al siguiente) y abrir o cerrar puertas (Hito 110), sin tocar nada más de la mesa
+        allow update: if isMember(c) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['turn', 'round', 'seq', 'starts', 'from', 'doors']);
       }
       // Hito 94: los jugadores solo reciben las fichas visibles (piden las de hidden == false)
       match /tokens/{t} {

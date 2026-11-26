@@ -232,7 +232,7 @@ function refresh() {
     scenes: [...cache.scenes.entries()].map(([id, x]) => ({ id, ...x })).sort((a, b) => (a.order || 0) - (b.order || 0)).map(x => strip(x, "order")),
     rolls: [...cache.rolls.entries()].map(([id, x]) => ({ id, ...x })).sort((a, b) => a.at - b.at),
     chronicle: [...cache.chronicle.entries()].map(([id, x]) => ({ id, ...x })).sort((a, b) => a.at - b.at),
-    board: cache.board, tokens: [...cache.tokens.entries()].map(([id, x]) => ({ id, ...x }))
+    board: foldDoors(cache.board), tokens: [...cache.tokens.entries()].map(([id, x]) => ({ id, ...x }))
   };
   last = new Map([...docsOf(state, cloud.isEditor)].map(([k, v]) => [k, JSON.stringify(v)]));
   // Mudanza (Hito 74): los cuadernos que aún están dentro de la ficha (y por tanto los ve todo el grupo) pasan a notes/
@@ -265,7 +265,7 @@ function docsOf(s, dm) {
     out.set("notes/" + id, { owner: ch.owner || null, journal: journal || [], lore: loreNotes || {} }); }); // privadas: solo su jugador y el máster
   (s.scenes || []).forEach((sc, i) => { const { id, ...rest } = sc; out.set("scenes/" + id, { ...rest, order: i }); });
   (s.invites || []).forEach(i => out.set("invites/" + i.email, { role: i.role, at: i.at || 0 }));
-  if (s.board) out.set("board/live", s.board);
+  if (s.board) out.set("board/live", { ...s.board, doors: doorMap(s.board) }); // Hito 110: el estado de las puertas, aparte (los jugadores solo pueden tocar eso)
   (s.chronicle || []).forEach(e => { const { id, ...rest } = e; out.set("chronicle/" + id, rest); });
   (s.rolls || []).forEach(e => { const { id, ...rest } = e; out.set("rolls/" + id, rest); });
   (s.tokens || []).forEach(t => { const { id, ...rest } = t; out.set("tokens/" + id, { ...rest, hidden: !!rest.hidden }); });
@@ -293,6 +293,13 @@ function queuePush(state) {
   queueMicrotask(() => { const st = queued; queued = null; push(st); });
 }
 
+/** Hito 110: puertas → { id: [abierta, con llave, reventada] } y de vuelta. */
+function doorMap(b) { const o = {}; (b.props || []).forEach(p => { if (/^(puerta|rastrillo)/.test(p.k)) o[p.id] = [p.open ? 1 : 0, p.locked == null ? -1 : p.locked ? 1 : 0, p.broken ? 1 : 0]; }); return o; }
+function foldDoors(b) {
+  if (!b || !b.doors) return b;
+  const { doors, ...rest } = b;
+  return { ...rest, props: (rest.props || []).map(p => { const d = doors[p.id]; if (!d) return p; const q = { ...p, open: !!d[0], broken: !!d[2] }; if (d[1] === -1) delete q.locked; else q.locked = !!d[1]; if (!q.broken) delete q.broken; return q; }) };
+}
 function push(state) {
   if (!cloud.cid) return;
   const me = cloud.user.uid;
@@ -300,13 +307,20 @@ function push(state) {
   // El administrador y los másteres guardan todo; un jugador solo puede tocar su propia ficha.
   const lb = last.get("board/live"), lastTurn = lb ? (o => JSON.stringify([o.turn, o.round, o.seq]))(JSON.parse(lb)) : "";
   const owner = cache.campaign && cache.campaign.owner === me;
-  const allowed = (k, v) => k.startsWith("invites/") ? owner : cloud.isEditor || ((k.startsWith("characters/") || k.startsWith("tokens/") || k.startsWith("notes/")) && v && v.owner === me) || (k.startsWith("chronicle/") && v && v.by === me) || (k.startsWith("rolls/") && v && v.who === me) || (k === "board/live" && lastTurn !== JSON.stringify([v.turn, v.round, v.seq]));
+  const lastDoors = lb ? JSON.stringify(JSON.parse(lb).doors || {}) : "{}";
+  const turnMoved = v => lastTurn !== JSON.stringify([v.turn, v.round, v.seq]), doorsMoved = v => lastDoors !== JSON.stringify(v.doors || {});
+  const allowed = (k, v) => k.startsWith("invites/") ? owner : cloud.isEditor || ((k.startsWith("characters/") || k.startsWith("tokens/") || k.startsWith("notes/")) && v && v.owner === me) || (k.startsWith("chronicle/") && v && v.by === me) || (k.startsWith("rolls/") && v && v.who === me) || (k === "board/live" && (turnMoved(v) || doorsMoved(v)));
   const ref = k => k === "C" ? fb.doc(db, "campaigns", cloud.cid) : fb.doc(db, "campaigns", cloud.cid, ...k.split("/"));
   // Firestore admite 500 escrituras por lote: los cambios grandes (restaurar una copia) se parten en varios
   const ops = [], keys = [];
   for (const [k, v] of all) {
     const j = JSON.stringify(v);
-    if (last.get(k) !== j && allowed(k, v)) { ops.push(b => b.set(ref(k), clean(v), k === "C" ? { merge: true } : {})); keys.push(k); }
+    if (last.get(k) !== j && allowed(k, v)) {
+      // Un jugador, en la mesa, solo escribe lo que le dejan las reglas: el turno o las puertas (Hito 110)
+      if (k === "board/live" && !cloud.isEditor) { const part = {}; if (turnMoved(v)) ["turn", "round", "seq", "starts", "from"].forEach(f => { if (v[f] !== undefined) part[f] = v[f]; }); if (doorsMoved(v)) part.doors = v.doors || {};
+        ops.push(b => b.set(ref(k), clean(part), { merge: true })); keys.push(k); continue; }
+      ops.push(b => b.set(ref(k), clean(v), k === "C" ? { merge: true } : {})); keys.push(k);
+    }
   }
   // Un jugador nunca borra fichas de la mesa: si una desaparece es que el máster la ha ocultado (Hito 94)
   for (const [k, j] of last) if (!all.has(k) && allowed(k, JSON.parse(j)) && (cloud.isEditor || !k.startsWith("tokens/"))) { ops.push(b => b.delete(ref(k))); keys.push(k); }

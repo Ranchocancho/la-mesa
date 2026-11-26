@@ -13,7 +13,7 @@ import { esc } from "../core/ui.js";
 import { estado } from "../data/estados.js";
 import { store } from "../core/store.js";
 import { leftOf } from "../core/duraciones.js";
-import { TERRAIN, TERRAIN_CATS, PROPS, PROP_CATS, REGIONS, inRegion, isDoor, isWallT, propVisible } from "../data/mapas.js";
+import { TERRAIN, TERRAIN_CATS, PROPS, PROP_CATS, REGIONS, inRegion, isDoor, doorLocked, isWallT, propVisible } from "../data/mapas.js";
 import { terrainURL } from "./texturas.js";
 import { sightShade, floorCanvas, floorSig, lightCanvases, lightSig } from "./plano2d.js";
 import { generateDungeon, generateRegion, addRelief } from "../core/generador.js";
@@ -315,7 +315,7 @@ export function createBoard(host, opts) {
     if (v.door) {
       const horiz = wallAt(p.c - 1, p.r) || wallAt(p.c + 1, p.r), rot = horiz ? 0 : 90;
       const leaf = p.open ? `<rect x="${-S + 2}" y="-3" width="${T * .42}" height="6" rx="1" transform="rotate(-70 ${-S + 2} 0)" class="dleaf"/>` : v.seeThrough ? `<g class="dbars">${[-14, -7, 0, 7, 14].map(o => `<line x1="${o}" y1="-5" x2="${o}" y2="5"/>`).join("")}<line x1="${-S + 3}" y1="0" x2="${S - 3}" y2="0"/></g>` : `<rect x="${-S + 2}" y="-5" width="${T - 4}" height="10" rx="2" class="dleaf"/>`;
-      return `<g class="prop door${hid ? " hid" : ""}${sel}" data-prop="${p.id}" transform="translate(${x},${y}) rotate(${rot})">${leaf}${v.lock && !p.open ? `<text y="4" class="dlock" transform="rotate(${-rot})">🔒</text>` : ""}${hid ? `<rect x="${-S + 1}" y="-8" width="${T - 2}" height="16" class="hidring"/>` : ""}</g>`;
+      return `<g class="prop door${hid ? " hid" : ""}${sel}" data-prop="${p.id}" transform="translate(${x},${y}) rotate(${rot})">${leaf}${doorLocked(p) ? `<text y="4" class="dlock" transform="rotate(${-rot})">🔒</text>` : ""}${hid ? `<rect x="${-S + 1}" y="-8" width="${T - 2}" height="16" class="hidring"/>` : ""}</g>`;
     }
     const ts = trapState(p), cov = coverOf(p), TL = ts && TRAP_LOOK[ts];
     const tip = [p.label, ts && TL.text, cov && COVER_TEXT[cov]].filter(Boolean).join(" · ");
@@ -553,6 +553,7 @@ export function createBoard(host, opts) {
     if (d.pan) {
       if (!d.moved) {
         const pr = d.cell && inside(d.cell) && propAt(d.cell);
+        if (pr && !opts.edit && isDoor(pr) && opts.onDoor) { opts.onDoor(pr); return; }
         if (pr && !opts.edit && opts.dm && opts.onProp) { opts.onProp(pr); return; }
         select(null); selectProp(null); if (opts.onCell && inside(h)) opts.onCell(h);
       }

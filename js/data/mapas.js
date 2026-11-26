@@ -248,6 +248,8 @@ export const inRegion = (v, reg) => !!(reg && v && (v.reg || []).includes(reg));
 export const PROP_CATS = { region: "Región", mueble: "Mobiliario", luz: "Luz", mazmorra: "Mazmorra", natural: "Naturaleza", puerta: "Puertas", peligro: "Trampas", tesoro: "Tesoro", marca: "Marcas" };
 
 export const isDoor = p => !!(p && PROPS[p.k] && PROPS[p.k].door);
+/** Hito 110: ¿está cerrada con llave? Cada puerta puede tenerla o no (el máster lo cambia); por defecto, según su tipo. */
+export const doorLocked = p => isDoor(p) && !p.open && !p.broken && (p.locked ?? !!PROPS[p.k].lock);
 /** Una puerta cerrada bloquea paso y vista (un rastrillo bloquea el paso, pero deja ver). */
 export const doorBlocksSight = p => isDoor(p) && !p.open && !PROPS[p.k].seeThrough;
 export const isWallT = t => !!(TERRAIN[t] && TERRAIN[t].wall);

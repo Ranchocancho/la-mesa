@@ -271,3 +271,9 @@ details.sess p{margin-top:8px}
 .pview .boardsvg{box-shadow:inset 0 0 0 3px rgba(200,160,255,.55)}
 .boardsvg .prop.art .covbadge{opacity:0;transition:opacity .15s}
 .boardsvg .prop.art:hover .covbadge,.boardsvg .prop.art.sel .covbadge,.boardsvg.editing .prop.art .covbadge{opacity:.9}
+/* Hito 110: menú de la puerta cerrada con llave */
+.doorpop{width:320px}
+.doorpop b{display:block;margin-bottom:6px}
+.doorpop .note{margin:4px 0 8px;font-size:12px}
+.doorpop .dpopts{display:flex;flex-direction:column;gap:6px}
+.doorpop .dpopts .btn{text-align:left;white-space:normal}
